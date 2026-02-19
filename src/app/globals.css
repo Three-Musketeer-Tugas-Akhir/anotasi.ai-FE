@@ -3,12 +3,36 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* ── Teal Brand Palette (matching sidecar project) ──────────── */
+  --color-primary: #027373;
+  --color-primary-light: #04BFAD;
+  --color-primary-dark: #015c5c;
+  --color-accent: #04BFAD;
+
+  /* ── Status Colors ─────────────────────────────────────────── */
+  --color-success: #34a853;
+  --color-warning: #ffc107;
+  --color-danger: #ea4335;
+  --color-info: #17a2b8;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter);
+
+  /* Brand teal palette for Tailwind usage */
+  --color-brand-50: #effefb;
+  --color-brand-100: #c8fff5;
+  --color-brand-200: #91ffeb;
+  --color-brand-300: #52f5de;
+  --color-brand-400: #04BFAD;
+  --color-brand-500: #06a899;
+  --color-brand-600: #027373;
+  --color-brand-700: #015c5c;
+  --color-brand-800: #094a4a;
+  --color-brand-900: #0c3d3d;
 }
 
 body {

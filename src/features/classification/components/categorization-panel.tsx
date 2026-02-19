@@ -21,7 +21,7 @@ export function CategorizationPanel({ video, isPending, onCategorize }: Categori
       {/* Loading overlay */}
       {isPending && (
         <div className="absolute inset-0 bg-white/80 z-10 flex items-center justify-center backdrop-blur-[1px]">
-          <div className="flex items-center gap-2 text-blue-600 font-medium bg-white px-4 py-2 rounded-full shadow-lg border border-blue-100">
+          <div className="flex items-center gap-2 text-teal-600 font-medium bg-white px-4 py-2 rounded-full shadow-lg border border-teal-100">
             <Loader2 className="animate-spin" size={18} />
             Menyimpan...
           </div>
@@ -56,16 +56,16 @@ export function CategorizationPanel({ video, isPending, onCategorize }: Categori
           className={cn(
             'relative group flex items-center p-4 rounded-xl border-2 transition-all duration-200 text-left hover:shadow-md',
             video.status === 'sibi'
-              ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
-              : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50',
+              ? 'border-teal-500 bg-teal-50 ring-1 ring-teal-500'
+              : 'border-gray-200 hover:border-teal-300 hover:bg-teal-50/50',
           )}
         >
           <div
             className={cn(
               'w-12 h-12 rounded-lg flex items-center justify-center mr-4 transition-colors',
               video.status === 'sibi'
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-100 text-gray-500 group-hover:bg-blue-200 group-hover:text-blue-700',
+                ? 'bg-teal-500 text-white'
+                : 'bg-gray-100 text-gray-500 group-hover:bg-teal-200 group-hover:text-teal-700',
             )}
           >
             <Type size={24} />
@@ -82,7 +82,7 @@ export function CategorizationPanel({ video, isPending, onCategorize }: Categori
             </p>
           </div>
           {video.status === 'sibi' && (
-            <div className="absolute top-4 right-4 text-blue-500">
+            <div className="absolute top-4 right-4 text-teal-500">
               <CheckCircle size={20} />
             </div>
           )}

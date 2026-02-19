@@ -34,7 +34,7 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
           href={`https://www.youtube.com/watch?v=${video.youtubeId}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors"
+          className="text-xs text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1 bg-teal-50 px-3 py-1.5 rounded-full hover:bg-teal-100 transition-colors"
         >
           <ExternalLink size={12} />
           Tonton langsung di YouTube

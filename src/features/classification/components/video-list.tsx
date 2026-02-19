@@ -55,7 +55,7 @@ export function VideoList({
             placeholder="Cari judul video..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
         </div>
         <div className="flex gap-2">
@@ -66,7 +66,7 @@ export function VideoList({
               className={cn(
                 'px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors',
                 filter === f.value
-                  ? 'bg-blue-100 text-blue-700'
+                  ? 'bg-teal-100 text-teal-700'
                   : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50',
               )}
             >
@@ -86,7 +86,7 @@ export function VideoList({
               className={cn(
                 'p-4 cursor-pointer hover:bg-gray-50 transition-colors flex gap-3 border-l-4',
                 selectedVideoId === video.id
-                  ? 'bg-blue-50 border-blue-500 hover:bg-blue-50'
+                  ? 'bg-teal-50 border-teal-500 hover:bg-teal-50'
                   : 'border-transparent',
               )}
             >
@@ -115,7 +115,7 @@ export function VideoList({
                   <h4
                     className={cn(
                       'text-sm font-semibold truncate pr-2',
-                      selectedVideoId === video.id ? 'text-blue-700' : 'text-slate-700',
+                      selectedVideoId === video.id ? 'text-teal-700' : 'text-slate-700',
                     )}
                   >
                     {video.title}

@@ -77,7 +77,7 @@ export function ClassificationPage() {
   if (isLoading) {
     return (
       <div className="h-full flex flex-col items-center justify-center bg-gray-50 text-slate-500">
-        <Loader2 className="animate-spin mb-4 text-blue-500" size={48} />
+        <Loader2 className="animate-spin mb-4 text-teal-500" size={48} />
         <p>Memuat playlist video...</p>
       </div>
     );
@@ -92,7 +92,7 @@ export function ClassificationPage() {
         <p className="mb-6 text-slate-600">{(error as Error).message}</p>
         <button
           onClick={() => refetch()}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+          className="px-4 py-2 bg-teal-600 text-white rounded-lg"
         >
           Coba Lagi
         </button>
@@ -117,7 +117,7 @@ export function ClassificationPage() {
             </div>
             <div className="w-48 h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
-                className="h-full bg-blue-500 transition-all duration-500"
+                className="h-full bg-teal-500 transition-all duration-500"
                 style={{ width: `${progress}%` }}
               />
             </div>

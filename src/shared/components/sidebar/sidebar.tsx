@@ -53,13 +53,13 @@ export function Sidebar({ activePath = '/' }: SidebarProps) {
       <div className="p-4 flex items-center justify-between border-b border-slate-700">
         {isOpen ? (
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center font-bold">
+            <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center font-bold">
               A
             </div>
             <span className="font-bold text-lg tracking-tight">Anotasi.ai</span>
           </div>
         ) : (
-          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center font-bold mx-auto">
+          <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center font-bold mx-auto">
             A
           </div>
         )}
@@ -104,7 +104,7 @@ export function Sidebar({ activePath = '/' }: SidebarProps) {
       <div className="p-4 border-t border-slate-700">
         {isOpen && (
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-400 to-purple-500" />
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-teal-400 to-emerald-600" />
             <div>
               <p className="text-sm font-medium">Martin</p>
               <p className="text-xs text-slate-400">Annotator Role</p>
@@ -136,7 +136,7 @@ function NavItem({
       className={cn(
         'flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors mb-1',
         active
-          ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+          ? 'bg-teal-600 text-white shadow-lg shadow-teal-900/20'
           : 'text-slate-300 hover:bg-slate-800 hover:text-white',
       )}
     >
