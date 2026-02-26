@@ -45,7 +45,7 @@ export function VideoList({
   });
 
   return (
-    <div className="w-1/3 min-w-[320px] bg-white border-r border-gray-200 flex flex-col z-10">
+    <div id="tour-video-list" className="w-1/3 min-w-[320px] bg-white border-r border-gray-200 flex flex-col z-10">
       {/* Filter & Search */}
       <div className="p-4 border-b border-gray-100 space-y-3">
         <div className="relative">

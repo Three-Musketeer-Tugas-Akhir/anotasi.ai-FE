@@ -17,7 +17,7 @@ interface CategorizationPanelProps {
  */
 export function CategorizationPanel({ video, isPending, onCategorize }: CategorizationPanelProps) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative overflow-hidden">
+    <div id="tour-categorization-panel" className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative overflow-hidden">
       {/* Loading overlay */}
       {isPending && (
         <div className="absolute inset-0 bg-white/80 z-10 flex items-center justify-center backdrop-blur-[1px]">

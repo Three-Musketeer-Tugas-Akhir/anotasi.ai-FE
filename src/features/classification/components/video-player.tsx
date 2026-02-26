@@ -12,7 +12,7 @@ interface VideoPlayerProps {
  */
 export function VideoPlayer({ video }: VideoPlayerProps) {
   return (
-    <div>
+    <div id="tour-video-player">
       {/* YouTube Player Embed */}
       <div className="bg-black rounded-xl overflow-hidden shadow-lg aspect-video relative mb-3 z-0">
         <iframe

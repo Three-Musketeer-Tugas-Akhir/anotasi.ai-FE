@@ -1,7 +1,5 @@
-'use client';
-
 import { AppLayout } from '@/shared/components/layout/app-layout';
-import { ClassificationPage } from '@/features/classification';
+import { ClassificationPage } from '@/features/classification/components/classification-page';
 
 export default function ClassificationRoute() {
   return (

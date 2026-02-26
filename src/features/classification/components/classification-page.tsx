@@ -1,98 +1,107 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { CheckCircle, Layout, Loader2, AlertCircle } from 'lucide-react';
 import { useVideos, useUpdateVideoStatus } from '@/features/classification/hooks/use-classification';
 import { VideoStatus } from '@/features/classification/types/classification.types';
+import { useTour } from '@/shared/components/tour';
+import { classificationTour } from '../classification.tour';
 import { VideoList } from './video-list';
 import { VideoPlayer } from './video-player';
 import { CategorizationPanel } from './categorization-panel';
 
 /**
- * Classification page orchestrator.
- * Manages local UI state and delegates rendering to decomposed components.
+ * Classification page — main orchestrator.
+ *
+ * Manages local UI state (selected video, filter, search) and delegates
+ * rendering to decomposed child components.
  */
 export function ClassificationPage() {
-  // ── Server State ──────────────────────────────────────────────────
-  const { data: videos = [], isLoading, isError, error, refetch } = useVideos();
+  const { data: videos = [], isLoading, isError, refetch } = useVideos();
+  const { mutate: updateStatus, isPending } = useUpdateVideoStatus();
 
-  // ── Local UI State ────────────────────────────────────────────────
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | VideoStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showToast, setShowToast] = useState(false);
+  const { startTour, activeTour, hasCompletedTour } = useTour();
+
+  // ── Tour Trigger ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isLoading && videos.length > 0 && !activeTour && !hasCompletedTour(classificationTour.id)) {
+      const timer = setTimeout(() => {
+        startTour(classificationTour);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, videos.length, activeTour, hasCompletedTour, startTour]);
 
   // Derive effective selected video — falls back to first video when nothing is selected
   const effectiveSelectedVideoId = selectedVideoId ?? (videos.length > 0 ? videos[0].id : null);
+  const selectedVideo = videos.find((v) => v.id === effectiveSelectedVideoId) ?? null;
 
-  // ── Mutation ──────────────────────────────────────────────────────
-  const mutation = useUpdateVideoStatus((updatedVideo) => {
-    // Show toast
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 1500);
-
-    // Auto-advance to next uncategorized video
-    const currentIndex = videos.findIndex((v) => v.id === updatedVideo.id);
-    const nextVideo = videos.find(
-      (v, idx) => idx > currentIndex && v.status === 'uncategorized',
-    );
-    if (nextVideo) {
-      setSelectedVideoId(nextVideo.id);
-    }
+  // Filtered + searched list
+  const filteredVideos = videos.filter((v) => {
+    const matchesFilter = filter === 'all' || v.status === filter;
+    const matchesSearch =
+      !searchQuery || v.title.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesFilter && matchesSearch;
   });
 
-  // ── Handlers ──────────────────────────────────────────────────────
-  const handleCategorize = useCallback(
-    (status: VideoStatus) => {
-      if (!effectiveSelectedVideoId || mutation.isPending) return;
-      mutation.mutate({ id: effectiveSelectedVideoId, status });
-    },
-    [effectiveSelectedVideoId, mutation],
-  );
+  // Count categorised videos for progress display
+  const categorisedCount = videos.filter(
+    (v) => v.status === 'sibi' || v.status === 'bisindo',
+  ).length;
 
-  // ── Keyboard Shortcuts ────────────────────────────────────────────
+  // Handle keyboard shortcuts (1 = SIBI, 2 = BISINDO)
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handler = (e: KeyboardEvent) => {
+      if (!selectedVideo || isPending) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (mutation.isPending) return;
-
       if (e.key === '1') handleCategorize('sibi');
       if (e.key === '2') handleCategorize('bisindo');
     };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVideo, isPending]);
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleCategorize, mutation.isPending]);
+  // ── Handlers ────────────────────────────────────────────────────────
+  function handleCategorize(status: VideoStatus) {
+    if (!selectedVideo) return;
+    updateStatus(
+      { id: selectedVideo.id, status },
+      {
+        onSuccess: () => {
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 2000);
+          // Auto-advance to next uncategorized video
+          const nextVideo = videos.find(
+            (v) => v.id !== selectedVideo.id && v.status === 'uncategorized',
+          );
+          if (nextVideo) setSelectedVideoId(nextVideo.id);
+        },
+      },
+    );
+  }
 
-  // ── Derived State ─────────────────────────────────────────────────
-  const selectedVideo = videos.find((v) => v.id === effectiveSelectedVideoId);
-
-  const stats = {
-    total: videos.length,
-    completed: videos.filter((v) => v.status !== 'uncategorized').length,
-  };
-  const progress = stats.total > 0 ? (stats.completed / stats.total) * 100 : 0;
-
-  // ── Loading State ─────────────────────────────────────────────────
+  // ── Loading / Error states ─────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="h-full flex flex-col items-center justify-center bg-gray-50 text-slate-500">
-        <Loader2 className="animate-spin mb-4 text-teal-500" size={48} />
-        <p>Memuat playlist video...</p>
+      <div className="flex-1 flex items-center justify-center bg-gray-50">
+        <Loader2 className="animate-spin text-teal-500" size={32} />
       </div>
     );
   }
 
-  // ── Error State ───────────────────────────────────────────────────
   if (isError) {
     return (
-      <div className="h-full flex flex-col items-center justify-center bg-gray-50 text-red-500">
-        <AlertCircle size={64} className="mb-4" />
-        <h2 className="text-xl font-bold text-slate-800">Gagal Memuat Data</h2>
-        <p className="mb-6 text-slate-600">{(error as Error).message}</p>
+      <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 gap-3">
+        <AlertCircle className="text-red-400" size={40} />
+        <p className="text-gray-600">Gagal memuat data video.</p>
         <button
           onClick={() => refetch()}
-          className="px-4 py-2 bg-teal-600 text-white rounded-lg"
+          className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
         >
           Coba Lagi
         </button>
@@ -101,35 +110,38 @@ export function ClassificationPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6 flex-shrink-0">
+    <>
+      {/* Top Progress Bar */}
+      <div className="px-6 py-4 bg-white border-b border-gray-200 flex-shrink-0 flex justify-between items-center">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Klasifikasi Tipe JBI</h1>
-          <p className="text-xs text-slate-500">
+          <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <Layout size={20} className="text-teal-600" />
+            Klasifikasi Tipe JBI
+          </h1>
+          <p className="text-sm text-gray-500">
             Tentukan apakah Juru Bahasa Isyarat menggunakan SIBI atau BISINDO
           </p>
         </div>
-        <div className="flex items-center gap-6">
-          <div className="flex flex-col items-end">
-            <div className="text-xs font-medium text-slate-600 mb-1">
-              Progress: {stats.completed}/{stats.total} Video
-            </div>
-            <div className="w-48 h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-teal-500 transition-all duration-500"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+        <div className="text-right">
+          <p className="text-sm font-medium text-gray-700">
+            Progress: {categorisedCount}/{videos.length} Video
+          </p>
+          <div className="w-48 h-2 bg-gray-200 rounded-full mt-1 overflow-hidden">
+            <div
+              className="h-full bg-teal-500 rounded-full transition-all duration-300"
+              style={{
+                width: `${videos.length > 0 ? (categorisedCount / videos.length) * 100 : 0}%`,
+              }}
+            />
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* Workspace */}
+      {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel: Video List */}
+        {/* Left Panel — Video List */}
         <VideoList
-          videos={videos}
+          videos={filteredVideos}
           selectedVideoId={effectiveSelectedVideoId}
           filter={filter}
           searchQuery={searchQuery}
@@ -138,33 +150,32 @@ export function ClassificationPage() {
           onSearchChange={setSearchQuery}
         />
 
-        {/* Right Panel: Player & Action */}
-        <div className="flex-1 bg-gray-50 flex flex-col overflow-y-auto relative">
+        {/* Right Panel — Player + Categorisation */}
+        <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50">
           {selectedVideo ? (
-            <div className="p-6 max-w-5xl mx-auto w-full">
+            <>
               <VideoPlayer video={selectedVideo} />
               <CategorizationPanel
                 video={selectedVideo}
-                isPending={mutation.isPending}
+                isPending={isPending}
                 onCategorize={handleCategorize}
               />
-            </div>
+            </>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-gray-400">
-              <Layout size={64} className="mb-4 opacity-20" />
-              <p>Pilih video dari daftar di sebelah kiri untuk memulai.</p>
-            </div>
-          )}
-
-          {/* Toast notification */}
-          {showToast && (
-            <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-3 animate-bounce z-50">
-              <CheckCircle className="text-green-400" size={20} />
-              <span className="font-medium">Tersimpan!</span>
+            <div className="flex items-center justify-center h-full text-gray-400">
+              <p>Pilih video dari daftar di samping untuk mulai mengkategorikan.</p>
             </div>
           )}
         </div>
       </div>
-    </div>
+
+      {/* Toast notification */}
+      {showToast && (
+        <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-in slide-in-from-bottom-5 z-50">
+          <CheckCircle size={18} />
+          <span className="text-sm font-medium">Status berhasil diperbarui!</span>
+        </div>
+      )}
+    </>
   );
 }

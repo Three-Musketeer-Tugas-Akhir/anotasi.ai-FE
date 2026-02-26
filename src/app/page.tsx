@@ -1,9 +1,10 @@
-import { redirect } from 'next/navigation';
+import { AppLayout } from '@/shared/components/layout/app-layout';
+import { DashboardPage } from '@/features/dashboard';
 
-/**
- * Root page — redirects to the classification workflow.
- * In the future, this will become the main dashboard.
- */
-export default function HomePage() {
-  redirect('/classification');
+export default function Home() {
+  return (
+    <AppLayout activePath="/">
+      <DashboardPage />
+    </AppLayout>
+  );
 }

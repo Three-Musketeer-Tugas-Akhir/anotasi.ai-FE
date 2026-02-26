@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { QueryProvider } from '@/core/providers/query-provider';
+import { TourProvider, AppTour } from '@/shared/components/tour';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import './globals.css';
 
 const inter = Inter({
@@ -22,7 +24,14 @@ export default function RootLayout({
   return (
     <html lang="id">
       <body className={`${inter.variable} font-sans antialiased`}>
-        <QueryProvider>{children}</QueryProvider>
+        <QueryProvider>
+          <TooltipProvider>
+            <TourProvider>
+              {children}
+              <AppTour />
+            </TourProvider>
+          </TooltipProvider>
+        </QueryProvider>
       </body>
     </html>
   );
