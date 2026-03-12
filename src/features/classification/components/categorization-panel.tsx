@@ -137,7 +137,7 @@ export function CategorizationPanel({ video, isPending, onCategorize }: Categori
         >
           <X size={14} /> Reset Status
         </button>
-        <div className="text-xs text-gray-400">Video ID: {video.youtubeId}</div>
+        <div className="text-xs text-gray-400">Video ID: {video.id}</div>
       </div>
     </div>
   );

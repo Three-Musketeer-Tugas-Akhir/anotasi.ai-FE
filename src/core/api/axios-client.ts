@@ -17,9 +17,11 @@ export const apiClient = axios.create({
 // ── Request Interceptor ──────────────────────────────────────────────
 apiClient.interceptors.request.use(
   (config) => {
-    // Future: attach auth token here
-    // const token = getAuthToken();
-    // if (token) config.headers.Authorization = `Bearer ${token}`;
+    // Attach JWT token from localStorage for authenticated requests
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => Promise.reject(error),

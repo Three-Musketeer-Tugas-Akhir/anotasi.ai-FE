@@ -3,6 +3,9 @@ import { useEffect } from 'react';
 import { Video as VideoIcon, Scissors, FileText, Package, ArrowRight, Clock, CheckCircle2, AlertCircle, Activity } from 'lucide-react';
 import { useTour } from '@/shared/components/tour';
 import { globalSidebarTour } from '@/shared/components/sidebar/sidebar.tour';
+import { useQuery } from '@tanstack/react-query';
+import { auditApi } from '@/features/audit/audit-api';
+import { useAuth } from '@/features/auth';
 
 const metrics = [
   { title: 'Total Video SIBI', value: '1,648', change: '+12 minggu ini', icon: VideoIcon, color: 'text-teal-600', bgColor: 'bg-teal-50', ring: 'ring-teal-100' },
@@ -20,16 +23,11 @@ const pipelineSteps = [
   { label: 'Export Ready', count: 756, done: 756, color: 'bg-emerald-500' },
 ];
 
-const recentActivity = [
-  { time: '2 menit lalu', text: 'CV-1 selesai: "Sidang Kabinet Paripurna.mp4"', type: 'success' as const },
-  { time: '15 menit lalu', text: 'ASR gagal: "Breaking News Gempa.mp4"', type: 'error' as const },
-  { time: '1 jam lalu', text: 'Batch export 120 tuple berhasil di-generate', type: 'success' as const },
-  { time: '2 jam lalu', text: 'Anotasi selesai: 45 kalimat baru oleh Fiona', type: 'info' as const },
-  { time: '3 jam lalu', text: 'Kurasi merge: "Triliun Rupiah" (4 variasi)', type: 'info' as const },
-  { time: '5 jam lalu', text: 'Video baru diklasifikasi: 12 video SIBI', type: 'success' as const },
-];
+// recentActivity mock removed. Using real API data.
 
 export function DashboardPage() {
+  const { user } = useAuth();
+  
   // Sidebar tour: fires only on first-ever Dashboard visit
   const { startTour, activeTour, hasCompletedTour } = useTour();
   useEffect(() => {
@@ -40,6 +38,15 @@ export function DashboardPage() {
       return () => clearTimeout(timer);
     }
   }, [activeTour, hasCompletedTour, startTour]);
+
+  // Fetch Audit Logs
+  const { data: auditResponse, isLoading: isLoadingAudit, isError: isErrorAudit } = useQuery({
+    queryKey: ['audit-logs'],
+    queryFn: () => auditApi.fetchLogs(1, 20),
+    refetchInterval: 30000, // Refetch every 30s for live-like feel
+  });
+
+  const isAdmin = user?.role === 'admin';
 
   return (
     <>
@@ -122,19 +129,51 @@ export function DashboardPage() {
             </div>
             <div className="p-5 flex-1 overflow-y-auto">
               <div className="relative border-l-2 border-slate-100 ml-3 space-y-6">
-                {recentActivity.map((a, i) => (
-                  <div key={i} className="relative pl-6">
-                    <span className="absolute -left-[11px] top-1 bg-white p-0.5 rounded-full">
-                      {a.type === 'success' && <CheckCircle2 size={16} className="text-emerald-500 fill-emerald-50" />}
-                      {a.type === 'error' && <AlertCircle size={16} className="text-red-500 fill-red-50" />}
-                      {a.type === 'info' && <Clock size={16} className="text-blue-500 fill-blue-50" />}
-                    </span>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium text-slate-700 leading-snug">{a.text}</span>
-                      <span className="text-xs text-slate-400 mt-1">{a.time}</span>
-                    </div>
-                  </div>
-                ))}
+                {isLoadingAudit ? (
+                  <div className="text-sm text-slate-500 pl-4">Memuat aktivitas...</div>
+                ) : isErrorAudit ? (
+                  <div className="text-sm text-red-500 pl-4">Gagal memuat log aktivitas.</div>
+                ) : !auditResponse?.data || auditResponse.data.length === 0 ? (
+                  <div className="text-sm text-slate-500 pl-4">Belum ada aktivitas terekam.</div>
+                ) : (
+                  auditResponse.data.map((log) => {
+                    const date = new Date(log.created_at);
+                    const isToday = date.toDateString() === new Date().toDateString();
+                    const timeStr = isToday 
+                      ? date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) 
+                      : date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+                    // Determine icon/color based on action type
+                    const actionGroup = log.action.split('_')[0];
+                    let Icon = Activity;
+                    let color = "text-slate-500 fill-slate-50";
+
+                    if (actionGroup === 'LOGIN' || actionGroup === 'REGISTER') {
+                      Icon = CheckCircle2; color = "text-emerald-500 fill-emerald-50";
+                    } else if (log.action.includes('FAIL') || log.action.includes('ERROR')) {
+                      Icon = AlertCircle; color = "text-red-500 fill-red-50";
+                    } else if (actionGroup === 'PIPELINE' || actionGroup === 'CURATION' || actionGroup === 'ANNOTATION') {
+                      Icon = Clock; color = "text-blue-500 fill-blue-50";
+                    }
+
+                    return (
+                      <div key={log.id} className="relative pl-6">
+                        <span className="absolute -left-[11px] top-1 bg-white p-0.5 rounded-full">
+                          <Icon size={16} className={color} />
+                        </span>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-slate-700 leading-snug">
+                            {isAdmin 
+                              ? <><span className="font-bold">{log.username} ({log.role})</span> {log.detail.toLowerCase()}</>
+                              : log.detail
+                            }
+                          </span>
+                          <span className="text-xs text-slate-400 mt-1">{timeStr} — {log.action}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>

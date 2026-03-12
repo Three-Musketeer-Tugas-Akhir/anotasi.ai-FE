@@ -8,37 +8,29 @@ interface VideoPlayerProps {
 }
 
 /**
- * YouTube video embed player with external link fallback.
+ * Native HTML5 Video Player for MinIO/Storage URLs.
  */
 export function VideoPlayer({ video }: VideoPlayerProps) {
   return (
     <div id="tour-video-player">
-      {/* YouTube Player Embed */}
+      {/* HTML5 Video Player */}
       <div className="bg-black rounded-xl overflow-hidden shadow-lg aspect-video relative mb-3 z-0">
-        <iframe
-          src={`https://www.youtube-nocookie.com/embed/${video.youtubeId}?autoplay=0&rel=0&modestbranding=1`}
-          title={video.title}
+        <video
+          key={video.id} // forces reload when video changes
+          src={video.videoUrl}
+          controls
+          controlsList="nodownload"
           className="absolute inset-0 w-full h-full"
-          frameBorder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-        />
+        >
+          Browser Anda tidak mendukung elemen video.
+        </video>
       </div>
 
-      {/* Fallback & Helper Link */}
+      {/* Helper */}
       <div className="flex justify-between items-center mb-6 px-1">
         <p className="text-xs text-slate-400">
-          Jika player error, kemungkinan video dibatasi oleh pemilik (Copyright).
+          Putar video untuk memeriksa apakah menggunakan SIBI atau BISINDO.
         </p>
-        <a
-          href={`https://www.youtube.com/watch?v=${video.youtubeId}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1 bg-teal-50 px-3 py-1.5 rounded-full hover:bg-teal-100 transition-colors"
-        >
-          <ExternalLink size={12} />
-          Tonton langsung di YouTube
-        </a>
       </div>
     </div>
   );

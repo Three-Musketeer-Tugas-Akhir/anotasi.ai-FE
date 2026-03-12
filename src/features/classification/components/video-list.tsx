@@ -92,16 +92,9 @@ export function VideoList({
             >
               {/* Thumbnail */}
               <div className="w-24 h-16 rounded-md flex-shrink-0 overflow-hidden bg-gray-200 relative group">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`https://img.youtube.com/vi/${video.youtubeId}/mqdefault.jpg`}
-                  alt={video.title}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src =
-                      'https://via.placeholder.com/150?text=No+Img';
-                  }}
-                />
+                <div className="w-full h-full bg-slate-800 flex items-center justify-center text-slate-400">
+                  <PlayCircle size={28} />
+                </div>
                 <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 flex items-center justify-center transition-all">
                   {selectedVideoId === video.id && (
                     <PlayCircle className="text-white opacity-80" size={20} />

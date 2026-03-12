@@ -9,6 +9,7 @@ import { classificationTour } from '../classification.tour';
 import { VideoList } from './video-list';
 import { VideoPlayer } from './video-player';
 import { CategorizationPanel } from './categorization-panel';
+import { VideoUploadModal } from './video-upload-modal';
 
 /**
  * Classification page — main orchestrator.
@@ -24,6 +25,7 @@ export function ClassificationPage() {
   const [filter, setFilter] = useState<'all' | VideoStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showToast, setShowToast] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const { startTour, activeTour, hasCompletedTour } = useTour();
 
   // ── Tour Trigger ──────────────────────────────────────────────────
@@ -118,9 +120,15 @@ export function ClassificationPage() {
             <Layout size={20} className="text-teal-600" />
             Klasifikasi Tipe JBI
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-500 mt-1">
             Tentukan apakah Juru Bahasa Isyarat menggunakan SIBI atau BISINDO
           </p>
+          <button
+            onClick={() => setIsUploadModalOpen(true)}
+            className="mt-3 px-3 py-1.5 text-sm font-medium text-teal-700 bg-teal-100 rounded-md hover:bg-teal-200 transition-colors"
+          >
+            + Upload Video Baru
+          </button>
         </div>
         <div className="text-right">
           <p className="text-sm font-medium text-gray-700">
@@ -176,6 +184,16 @@ export function ClassificationPage() {
           <span className="text-sm font-medium">Status berhasil diperbarui!</span>
         </div>
       )}
+
+      {/* Upload Modal */}
+      <VideoUploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onUploadSuccess={(video) => {
+          refetch(); // Refetch the list to include the newly uploaded video
+          setSelectedVideoId(video.id); // Auto select the new video
+        }}
+      />
     </>
   );
 }

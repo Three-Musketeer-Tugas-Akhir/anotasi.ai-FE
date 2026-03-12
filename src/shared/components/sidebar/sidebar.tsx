@@ -10,6 +10,7 @@ import {
   Search,
   Package,
   Menu,
+  ScrollText,
 } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -30,7 +31,8 @@ const navItems: NavItemConfig[] = [
   { icon: <Cog size={20} />, label: 'Pemrosesan', href: '/pipeline', badge: '3' },
   { icon: <FileText size={20} />, label: 'Deteksi Suara', href: '/asr-review' },
   { icon: <PenTool size={20} />, label: 'Anotasi', href: '/annotation' },
-  { icon: <Search size={20} />, label: 'Standarisasi', href: '/curation' },
+  { icon: <Search size={20} />, label: 'Normalisasi', href: '/curation' },
+  { icon: <ScrollText size={20} />, label: 'Audit Trail', href: '/audit' },
   { icon: <Package size={20} />, label: 'Unduh Dataset', href: '/export' },
 ];
 

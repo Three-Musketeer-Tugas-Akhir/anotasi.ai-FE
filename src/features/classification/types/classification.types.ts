@@ -9,8 +9,8 @@ export type VideoStatus = 'uncategorized' | 'sibi' | 'bisindo';
 /** A video entity from the dataset */
 export interface Video {
   id: string;
-  /** YouTube video ID (e.g. wILYlf-_pv8) */
-  youtubeId: string;
+  /** MinIO or External Video URL */
+  videoUrl: string;
   title: string;
   duration: string;
   date: string;
