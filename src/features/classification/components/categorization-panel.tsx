@@ -2,20 +2,21 @@
 
 import { CheckCircle, Loader2, Type, HandMetal, X } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
-import { Video, VideoStatus } from '@/features/classification/types/classification.types';
+import { ClassificationJob, CategoryStatus } from '@/features/classification/types/classification.types';
 import { StatusBadge } from './status-badge';
 
 interface CategorizationPanelProps {
-  video: Video;
+  job: ClassificationJob;
   isPending: boolean;
-  onCategorize: (status: VideoStatus) => void;
+  onCategorize: (category: 'SIBI' | 'BISINDO') => void;
+  onReset?: () => void;
 }
 
 /**
  * Action panel for selecting SIBI or BISINDO classification.
  * Includes keyboard shortcut hints and a reset button.
  */
-export function CategorizationPanel({ video, isPending, onCategorize }: CategorizationPanelProps) {
+export function CategorizationPanel({ job, isPending, onCategorize, onReset }: CategorizationPanelProps) {
   return (
     <div id="tour-categorization-panel" className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative overflow-hidden">
       {/* Loading overlay */}
@@ -42,7 +43,7 @@ export function CategorizationPanel({ video, isPending, onCategorize }: Categori
             Status Saat Ini
           </span>
           <div className="mt-1">
-            <StatusBadge status={video.status} />
+            <StatusBadge status={job.category} />
           </div>
         </div>
       </div>
@@ -51,11 +52,11 @@ export function CategorizationPanel({ video, isPending, onCategorize }: Categori
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* SIBI Button */}
         <button
-          onClick={() => onCategorize('sibi')}
+          onClick={() => onCategorize('SIBI')}
           disabled={isPending}
           className={cn(
             'relative group flex items-center p-4 rounded-xl border-2 transition-all duration-200 text-left hover:shadow-md',
-            video.status === 'sibi'
+            job.category === 'SIBI'
               ? 'border-teal-500 bg-teal-50 ring-1 ring-teal-500'
               : 'border-gray-200 hover:border-teal-300 hover:bg-teal-50/50',
           )}
@@ -63,7 +64,7 @@ export function CategorizationPanel({ video, isPending, onCategorize }: Categori
           <div
             className={cn(
               'w-12 h-12 rounded-lg flex items-center justify-center mr-4 transition-colors',
-              video.status === 'sibi'
+              job.category === 'SIBI'
                 ? 'bg-teal-500 text-white'
                 : 'bg-gray-100 text-gray-500 group-hover:bg-teal-200 group-hover:text-teal-700',
             )}
@@ -81,7 +82,7 @@ export function CategorizationPanel({ video, isPending, onCategorize }: Categori
               Struktur lisan (S-P-O-K). Biasanya digunakan di TVRI/Berita Formal.
             </p>
           </div>
-          {video.status === 'sibi' && (
+          {job.category === 'SIBI' && (
             <div className="absolute top-4 right-4 text-teal-500">
               <CheckCircle size={20} />
             </div>
@@ -90,11 +91,11 @@ export function CategorizationPanel({ video, isPending, onCategorize }: Categori
 
         {/* BISINDO Button */}
         <button
-          onClick={() => onCategorize('bisindo')}
+          onClick={() => onCategorize('BISINDO')}
           disabled={isPending}
           className={cn(
             'relative group flex items-center p-4 rounded-xl border-2 transition-all duration-200 text-left hover:shadow-md',
-            video.status === 'bisindo'
+            job.category === 'BISINDO'
               ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500'
               : 'border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/50',
           )}
@@ -102,7 +103,7 @@ export function CategorizationPanel({ video, isPending, onCategorize }: Categori
           <div
             className={cn(
               'w-12 h-12 rounded-lg flex items-center justify-center mr-4 transition-colors',
-              video.status === 'bisindo'
+              job.category === 'BISINDO'
                 ? 'bg-emerald-500 text-white'
                 : 'bg-gray-100 text-gray-500 group-hover:bg-emerald-200 group-hover:text-emerald-700',
             )}
@@ -120,7 +121,7 @@ export function CategorizationPanel({ video, isPending, onCategorize }: Categori
               Bahasa alami (Visual Spasial). Ekspresif, sering tanpa imbuhan.
             </p>
           </div>
-          {video.status === 'bisindo' && (
+          {job.category === 'BISINDO' && (
             <div className="absolute top-4 right-4 text-emerald-500">
               <CheckCircle size={20} />
             </div>
@@ -130,14 +131,16 @@ export function CategorizationPanel({ video, isPending, onCategorize }: Categori
 
       {/* Reset & Info */}
       <div className="mt-6 pt-4 border-t border-gray-100 flex justify-between items-center">
-        <button
-          onClick={() => onCategorize('uncategorized')}
-          disabled={isPending}
-          className="text-sm text-gray-500 hover:text-red-500 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors"
-        >
-          <X size={14} /> Reset Status
-        </button>
-        <div className="text-xs text-gray-400">Video ID: {video.id}</div>
+        {onReset && (
+          <button
+            onClick={onReset}
+            disabled={isPending}
+            className="text-sm text-gray-500 hover:text-red-500 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors"
+          >
+            <X size={14} /> Reset Status
+          </button>
+        )}
+        <div className="text-xs text-gray-400">Job ID: {job.job_id}</div>
       </div>
     </div>
   );

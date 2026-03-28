@@ -1,31 +1,29 @@
 'use client';
 
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
 import { Card } from '@/components/ui/card';
-import { AnnotationData } from './properties-panel';
+import { VideoTrimData } from './properties-panel';
 
 interface TimelineEditorProps {
   videoUrl: string;
+  duration: number;
   currentTime: number;
   isPlaying: boolean;
   onTimeUpdate: (time: number) => void;
-  annotations: AnnotationData[];
-  selectedId: string | null;
-  onSelectAnnotation: (id: string | null) => void;
-  onAnnotationChange: (id: string, updates: Partial<AnnotationData>) => void;
+  trimData: VideoTrimData;
+  onTrimChange: (start: number, end: number) => void;
 }
 
 export function TimelineEditor({
   videoUrl,
+  duration,
   currentTime,
   isPlaying,
   onTimeUpdate,
-  annotations,
-  selectedId,
-  onSelectAnnotation,
-  onAnnotationChange
+  trimData,
+  onTrimChange,
 }: TimelineEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurfer = useRef<WaveSurfer | null>(null);
@@ -65,12 +63,7 @@ export function TimelineEditor({
       
       // Region events handling for drag/resize
       wsRegions.current.on('region-updated', (region) => {
-         onAnnotationChange(region.id, { start: region.start, end: region.end });
-      });
-
-      wsRegions.current.on('region-clicked', (region, e) => {
-        e.stopPropagation();
-        onSelectAnnotation(region.id);
+         onTrimChange(region.start, region.end);
       });
     }
 
@@ -107,52 +100,40 @@ export function TimelineEditor({
     }
   }, [currentTime, isReady]);
 
-  // Re-render Regions when annotations change (except during drag to avoid stuttering)
-  // For simplicity here, we clear and re-add if lengths differ, or update existing bounds
+  // Single region for Video Trimmer
   useEffect(() => {
-    if (!wsRegions.current || !isReady) return;
+    if (!wsRegions.current || !isReady || duration === 0) return;
 
-    // A deeper sync logic can be implemented, but for demo:
     wsRegions.current.clearRegions();
 
-    annotations.forEach((ann) => {
-      const isSelected = ann.id === selectedId;
-      wsRegions.current?.addRegion({
-        id: ann.id,
-        start: ann.start,
-        end: ann.end,
-        color: isSelected ? 'rgba(20, 184, 166, 0.4)' : 'rgba(20, 184, 166, 0.2)', // Teal color
-        drag: true,
-        resize: true,
-      });
+    const currentEnd = trimData.end > 0 ? trimData.end : duration;
+    const currentStart = trimData.start >= 0 ? trimData.start : 0;
+
+    wsRegions.current?.addRegion({
+      id: "main-trim",
+      start: currentStart,
+      end: currentEnd,
+      color: 'rgba(20, 184, 166, 0.4)', // Teal color mapping the final cut range
+      drag: true,
+      resize: true,
     });
-  }, [annotations, isReady, selectedId]);
+  }, [trimData.start, trimData.end, isReady, duration]);
 
   return (
     <Card className="flex flex-col border-gray-200 shadow-sm p-4 relative">
       <div className="flex justify-between items-center mb-2">
-        <h3 className="text-sm font-semibold text-gray-800">Timeline Editor</h3>
+        <h3 className="text-sm font-semibold text-gray-800">Visual Trimmer</h3>
         {!isReady && <span className="text-xs text-gray-400">Loading waveform...</span>}
       </div>
       
-      <div 
-        className="w-full relative bg-gray-50 border border-gray-200 rounded-md overflow-hidden cursor-text"
-        onClick={() => onSelectAnnotation(null)}
-      >
+      <div className="w-full relative bg-gray-50 border border-gray-200 rounded-md overflow-hidden">
         <div ref={containerRef} className="w-full relative z-10" />
-        
-        {/* Layer 1: ASR Track (Read-Only reference overlay mock) */}
-        {isReady && wavesurfer.current && (
-           <div className="absolute top-0 left-0 w-full h-[20px] pointer-events-none opacity-50 z-0 border-b border-gray-200">
-             {/* We can render ASR blocks here if needed based on duration layout, but keeping it simple for now */}
-           </div>
-        )}
       </div>
 
       <div className="mt-4 text-xs text-gray-500 flex gap-4">
         <div className="flex items-center gap-1">
-          <div className="w-3 h-3 bg-teal-500/20 border border-teal-500 rounded-sm"></div>
-          <span>Manual SIBI Track (Bisa digeser)</span>
+          <div className="w-3 h-3 bg-teal-500/40 border border-teal-500 rounded-sm"></div>
+          <span>Area video yang akan di-export (Bisa digeser)</span>
         </div>
       </div>
     </Card>

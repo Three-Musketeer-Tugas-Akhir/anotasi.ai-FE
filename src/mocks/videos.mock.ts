@@ -8,7 +8,7 @@ import { Video } from '@/features/classification/types/classification.types';
 export const MOCK_VIDEOS: Video[] = [
   {
     id: 'vid_001',
-    youtubeId: 'wILYlf-_pv8',
+    videoUrl: '/videos/[FULL] Ricuh Eksekusi Rumah di Kelapa Gading iNews Siang 26 02.mp4_000315.mp4',
     title: 'FULL Wapres Gibran Kunjungi Posko Korban Kapal Tenggelam | iNews Siang',
     duration: '1:15:12',
     date: '17 Feb 2026',
@@ -16,7 +16,7 @@ export const MOCK_VIDEOS: Video[] = [
   },
   {
     id: 'vid_002',
-    youtubeId: 'A1k2SUQcoYE',
+    videoUrl: '/videos/[FULL] Ricuh Eksekusi Rumah di Kelapa Gading iNews Siang 26 02.mp4_001139.mp4',
     title: '[FULL] Menteri Maman Pastikan Perjalanan Istrinya ke Eropa | iNews Siang',
     duration: '1:12:22',
     date: '17 Feb 2026',
@@ -24,7 +24,7 @@ export const MOCK_VIDEOS: Video[] = [
   },
   {
     id: 'vid_003',
-    youtubeId: 'D9rST4KNCts',
+    videoUrl: '/videos/[FULL] Ricuh Eksekusi Rumah di Kelapa Gading iNews Siang 26 02.mp4_001522.mp4',
     title: '[FULL] 29 Korban Kapal Tenggelam Masih Hilang | iNews Siang',
     duration: '1:26:53',
     date: '16 Feb 2026',
@@ -32,7 +32,7 @@ export const MOCK_VIDEOS: Video[] = [
   },
   {
     id: 'vid_004',
-    youtubeId: 'xHWmCJhLJPE',
+    videoUrl: '/videos/[FULL] Ricuh Eksekusi Rumah di Kelapa Gading iNews Siang 26 02.mp4_002817.mp4',
     title: '[FULL] KPK Geledah Rumah Mewah Anak Buah Bobby Nasution',
     duration: '1:21:43',
     date: '16 Feb 2026',
@@ -40,7 +40,7 @@ export const MOCK_VIDEOS: Video[] = [
   },
   {
     id: 'vid_005',
-    youtubeId: 'qskREWrnOCA',
+    videoUrl: '/videos/[FULL] Ricuh Eksekusi Rumah di Kelapa Gading iNews Siang 26 02.mp4_004113.mp4',
     title: '[FULL] Paiman Raharjo Bantah Bikin Ijazah Jokowi | iNews Siang',
     duration: '1:20:21',
     date: '15 Feb 2026',
@@ -48,7 +48,7 @@ export const MOCK_VIDEOS: Video[] = [
   },
   {
     id: 'vid_006',
-    youtubeId: 'wk6Qtf9zmP8',
+    videoUrl: '/videos/[FULL] Ricuh Eksekusi Rumah di Kelapa Gading iNews Siang 26 02.mp4_000315.mp4',
     title: 'Berita Siang TVRI - Segmen Khusus Pendidikan Inklusif',
     duration: '14:30',
     date: '15 Feb 2026',
@@ -56,7 +56,7 @@ export const MOCK_VIDEOS: Video[] = [
   },
   {
     id: 'vid_007',
-    youtubeId: 'gU1yvtJNVqA',
+    videoUrl: '/videos/[FULL] Ricuh Eksekusi Rumah di Kelapa Gading iNews Siang 26 02.mp4_001139.mp4',
     title: 'Liputan Khusus: Perkembangan Bahasa Isyarat di Indonesia',
     duration: '08:45',
     date: '14 Feb 2026',
@@ -64,7 +64,7 @@ export const MOCK_VIDEOS: Video[] = [
   },
   {
     id: 'vid_008',
-    youtubeId: 'CazX_ObQEGU',
+    videoUrl: '/videos/[FULL] Ricuh Eksekusi Rumah di Kelapa Gading iNews Siang 26 02.mp4_001522.mp4',
     title: 'Warta Berita Sore - Update Banjir Jakarta',
     duration: '12:10',
     date: '14 Feb 2026',
@@ -72,7 +72,7 @@ export const MOCK_VIDEOS: Video[] = [
   },
   {
     id: 'vid_009',
-    youtubeId: 'tAXqaww6w5g',
+    videoUrl: '/videos/[FULL] Ricuh Eksekusi Rumah di Kelapa Gading iNews Siang 26 02.mp4_002817.mp4',
     title: 'Dialog Interaktif: Disabilitas dan Aksesibilitas',
     duration: '45:00',
     date: '13 Feb 2026',
@@ -80,7 +80,7 @@ export const MOCK_VIDEOS: Video[] = [
   },
   {
     id: 'vid_010',
-    youtubeId: 'RTWZxRFdh2Q',
+    videoUrl: '/videos/[FULL] Ricuh Eksekusi Rumah di Kelapa Gading iNews Siang 26 02.mp4_004113.mp4',
     title: 'Dokumenter Pendek: Komunitas Tuli',
     duration: '10:25',
     date: '13 Feb 2026',

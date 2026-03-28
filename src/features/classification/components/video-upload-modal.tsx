@@ -2,54 +2,46 @@
 
 import { useState } from 'react';
 import { Upload, X, Loader2 } from 'lucide-react';
-import { apiClient } from '@/core/api/axios-client';
-import { ApiResponse } from '@/core/types/api';
-import { Video } from '@/features/classification/types/classification.types';
+import { useUploadJob } from '@/features/classification/hooks/use-classification';
 
 interface VideoUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUploadSuccess: (video: Video) => void;
+  onUploadSuccess: (jobId: string) => void;
 }
 
 export function VideoUploadModal({ isOpen, onClose, onUploadSuccess }: VideoUploadModalProps) {
-  const [title, setTitle] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [category, setCategory] = useState<'' | 'SIBI' | 'BISINDO'>('');
   const [error, setError] = useState<string | null>(null);
+
+  const { mutate: upload, isPending } = useUploadJob((data) => {
+    onUploadSuccess(String(data.id));
+    onClose();
+    setFile(null);
+    setCategory('');
+    setError(null);
+  });
 
   if (!isOpen) return null;
 
-  const handleUpload = async (e: React.FormEvent) => {
+  const handleUpload = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !file) {
-      setError('Title and video file are required.');
+    if (!file) {
+      setError('File video harus dipilih.');
       return;
     }
 
-    setIsUploading(true);
     setError(null);
-
-    try {
-      const formData = new FormData();
-      formData.append('title', title);
-      formData.append('video', file);
-
-      const { data } = await apiClient.post<ApiResponse<Video>>('/videos/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
+    upload(
+      { file, category: category || undefined },
+      {
+        onError: (err: unknown) => {
+          const resp = (err as { response?: { data?: { detail?: string } } })?.response;
+          setError(resp?.data?.detail || 'Terjadi kesalahan saat mengunggah.');
         },
-      });
-
-      onUploadSuccess(data.data);
-      onClose();
-      setTitle('');
-      setFile(null);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'An error occurred during upload.');
-    } finally {
-      setIsUploading(false);
-    }
+      },
+    );
   };
 
   return (
@@ -62,7 +54,7 @@ export function VideoUploadModal({ isOpen, onClose, onUploadSuccess }: VideoUplo
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 p-1 rounded-md hover:bg-gray-100 transition-colors"
-            disabled={isUploading}
+            disabled={isPending}
           >
             <X size={20} />
           </button>
@@ -75,18 +67,30 @@ export function VideoUploadModal({ isOpen, onClose, onUploadSuccess }: VideoUplo
             </div>
           )}
 
+          {/* Category selector */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Judul Video</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Contoh: Berita TVRI 12 Maret"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-sm"
-              disabled={isUploading}
-            />
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Kategori (opsional)
+            </label>
+            <div className="flex gap-2">
+              {(['', 'SIBI', 'BISINDO'] as const).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setCategory(opt)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
+                    category === opt
+                      ? 'bg-teal-100 text-teal-700 border-teal-300'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {opt || 'Belum Diketahui'}
+                </button>
+              ))}
+            </div>
           </div>
 
+          {/* File picker */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">File Video</label>
             <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-teal-400 transition-colors bg-gray-50">
@@ -102,14 +106,14 @@ export function VideoUploadModal({ isOpen, onClose, onUploadSuccess }: VideoUplo
                       id="file-upload"
                       name="file-upload"
                       type="file"
-                      accept="video/mp4,video/webm"
+                      accept="video/mp4,video/webm,video/x-matroska,video/quicktime,video/avi"
                       className="sr-only"
                       onChange={(e) => setFile(e.target.files?.[0] || null)}
-                      disabled={isUploading}
+                      disabled={isPending}
                     />
                   </label>
                 </div>
-                <p className="text-xs text-gray-500">MP4, WebM up to 500MB</p>
+                <p className="text-xs text-gray-500">MP4, WebM, MKV, MOV, AVI</p>
                 {file && (
                   <p className="text-sm font-medium text-teal-700 mt-2 truncate max-w-[200px] mx-auto">
                     {file.name}
@@ -123,18 +127,18 @@ export function VideoUploadModal({ isOpen, onClose, onUploadSuccess }: VideoUplo
             <button
               type="button"
               onClick={onClose}
-              disabled={isUploading}
+              disabled={isPending}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
             >
               Batal
             </button>
             <button
               type="submit"
-              disabled={isUploading || !title || !file}
+              disabled={isPending || !file}
               className="px-4 py-2 text-sm font-medium text-white bg-teal-600 border border-transparent rounded-lg hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              {isUploading && <Loader2 size={16} className="animate-spin" />}
-              {isUploading ? 'Mengunggah...' : 'Unggah Video'}
+              {isPending && <Loader2 size={16} className="animate-spin" />}
+              {isPending ? 'Mengunggah...' : 'Unggah Video'}
             </button>
           </div>
         </form>

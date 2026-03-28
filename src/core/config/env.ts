@@ -4,7 +4,7 @@
  */
 export const env = {
   /** Base URL for the backend API */
-  API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1',
+  API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://152.118.31.36:8000/api/v1',
 
   /** Current environment */
   NODE_ENV: process.env.NODE_ENV || 'development',

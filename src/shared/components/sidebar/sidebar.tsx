@@ -11,10 +11,13 @@ import {
   Package,
   Menu,
   ScrollText,
+  Users,
+  Server,
 } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/features/auth';
 
 /** Navigation item config */
 export interface NavItemConfig {
@@ -36,6 +39,12 @@ const navItems: NavItemConfig[] = [
   { icon: <Package size={20} />, label: 'Unduh Dataset', href: '/export' },
 ];
 
+/** Admin-only navigation items */
+const adminNavItems: NavItemConfig[] = [
+  { icon: <Users size={20} />, label: 'Kelola User', href: '/admin/users' },
+  { icon: <Server size={20} />, label: 'Sistem', href: '/admin/system' },
+];
+
 interface SidebarProps {
   /** Currently active route path */
   activePath?: string;
@@ -44,9 +53,12 @@ interface SidebarProps {
 /**
  * App sidebar navigation.
  * Collapsible with branding and nav items. Shadcn Tooltip for collapsed labels.
+ * Admin section shown only for admin role.
  */
 export function Sidebar({ activePath = '/' }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(true);
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
 
   return (
     <aside
@@ -93,6 +105,28 @@ export function Sidebar({ activePath = '/' }: SidebarProps) {
             href={item.href}
           />
         ))}
+
+        {/* Admin Section */}
+        {isAdmin && (
+          <>
+            <div className="my-3 border-t border-slate-700/50" />
+            {isOpen && (
+              <p className="px-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1">
+                Admin
+              </p>
+            )}
+            {adminNavItems.map((item) => (
+              <NavItem
+                key={item.href}
+                icon={item.icon}
+                label={item.label}
+                isOpen={isOpen}
+                active={activePath === item.href}
+                href={item.href}
+              />
+            ))}
+          </>
+        )}
       </nav>
 
       {/* Collapse toggle when collapsed */}
@@ -163,3 +197,4 @@ function NavItem({
 
   return content;
 }
+

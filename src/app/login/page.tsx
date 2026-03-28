@@ -3,20 +3,21 @@
 import { useState, FormEvent } from 'react';
 import { useAuth } from '@/features/auth';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Loader2, LogIn, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
   const { login, error, clearError, isLoading } = useAuth();
   const router = useRouter();
 
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await login({ username, password });
+      await login({ email, password });
       router.push('/');
     } catch {
       // error is already set in auth context
@@ -97,19 +98,18 @@ export default function LoginPage() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Username */}
+              {/* Email */}
               <div className="space-y-1.5">
-                <label htmlFor="username" className="text-sm font-medium text-gray-700">
-                  Username
+                <label htmlFor="email" className="text-sm font-medium text-gray-700">
+                  Email
                 </label>
                 <input
-                  id="username"
-                  type="text"
+                  id="email"
+                  type="email"
                   required
-                  minLength={3}
-                  value={username}
-                  onChange={(e) => { setUsername(e.target.value); clearError(); }}
-                  placeholder="Masukkan username"
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); clearError(); }}
+                  placeholder="Masukkan email"
                   className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                 />
               </div>
@@ -140,6 +140,16 @@ export default function LoginPage() {
                 </div>
               </div>
 
+              {/* Forgot Password Link */}
+              <div className="flex justify-end">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm font-medium text-teal-600 hover:text-teal-700 transition-colors"
+                >
+                  Lupa Password?
+                </Link>
+              </div>
+
               {/* Submit */}
               <button
                 type="submit"
@@ -154,17 +164,6 @@ export default function LoginPage() {
                 {isLoading ? 'Memproses...' : 'Masuk'}
               </button>
             </form>
-
-            {/* Register link */}
-            <p className="text-center text-sm text-gray-500 mt-6">
-              Belum punya akun?{' '}
-              <a
-                href="/register"
-                className="text-teal-600 font-semibold hover:text-teal-700 transition-colors"
-              >
-                Daftar di sini
-              </a>
-            </p>
           </div>
 
           {/* Footer */}

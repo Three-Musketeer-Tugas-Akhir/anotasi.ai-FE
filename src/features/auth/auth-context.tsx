@@ -11,12 +11,13 @@ import {
 } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
-import type { UserInfo, LoginRequest, RegisterRequest } from './types';
+import type { UserInfo, LoginRequest } from './types';
 import { authApi } from './auth-api';
 
 // ── Constants ──────────────────────────────────────────────────────
 
 const TOKEN_KEY = 'auth_token';
+const REFRESH_TOKEN_KEY = 'refresh_token';
 
 // ── Context shape ──────────────────────────────────────────────────
 
@@ -27,7 +28,6 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   login: (data: LoginRequest) => Promise<void>;
-  register: (data: RegisterRequest) => Promise<void>;
   logout: () => void;
   clearError: () => void;
 }
@@ -46,8 +46,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const performLogout = useCallback(() => {
+  const performLogout = useCallback(async (silent = false) => {
+    // Try to revoke refresh token on server
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (refreshToken && !silent) {
+      try {
+        await authApi.logout({ refresh_token: refreshToken });
+      } catch {
+        // Ignore errors during logout — still clear local state
+      }
+    }
+
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
     setToken(null);
     setUser(null);
     setError(null);
@@ -64,12 +75,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (payload?.exp) {
       const expiresInMs = payload.exp * 1000 - Date.now();
       if (expiresInMs <= 0) {
-        performLogout();
+        performLogout(true);
       } else {
         if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
         const maxTimeout = 2147483647; // 24.8 days (setTimeout limit)
         logoutTimerRef.current = setTimeout(() => {
-          performLogout();
+          performLogout(true);
         }, Math.min(expiresInMs, maxTimeout));
       }
     }
@@ -83,10 +94,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Checking if token is already expired before even calling API
+    // Check if token is already expired before calling API
     const payload = parseJwt(stored);
     if (payload?.exp && payload.exp * 1000 <= Date.now()) {
       localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
       setIsLoading(false);
       return;
     }
@@ -102,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         // Token is invalid/expired on the server — clear
-        performLogout();
+        performLogout(true);
       })
       .finally(() => {
         setIsLoading(false);
@@ -115,32 +127,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const res = await authApi.login(data);
-      localStorage.setItem(TOKEN_KEY, res.token);
-      setToken(res.token);
-      setUser(res.user);
-      scheduleLogout(res.token);
-      router.push('/');
-    } catch (err: unknown) {
-      const message = extractErrorMessage(err, 'Login gagal. Periksa username dan password.');
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [router, scheduleLogout]);
 
-  const register = useCallback(async (data: RegisterRequest) => {
-    setError(null);
-    setIsLoading(true);
-    try {
-      const res = await authApi.register(data);
-      localStorage.setItem(TOKEN_KEY, res.token);
-      setToken(res.token);
-      setUser(res.user);
-      scheduleLogout(res.token);
+      // Store tokens
+      localStorage.setItem(TOKEN_KEY, res.access_token);
+      localStorage.setItem(REFRESH_TOKEN_KEY, res.refresh_token);
+      setToken(res.access_token);
+      scheduleLogout(res.access_token);
+
+      // Fetch user info from /auth/me
+      const userInfo = await authApi.getMe();
+      setUser(userInfo);
+
       router.push('/');
     } catch (err: unknown) {
-      const message = extractErrorMessage(err, 'Registrasi gagal. Coba lagi.');
+      const message = extractErrorMessage(err, 'Login gagal. Periksa email dan password.');
       setError(message);
       throw err;
     } finally {
@@ -160,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isLoading) return;
 
-    const publicPaths = ['/login', '/register'];
+    const publicPaths = ['/login', '/forgot-password', '/reset-password', '/verify-email'];
     const isPublic = publicPaths.includes(pathname);
 
     if (!isAuthenticated && !isPublic) {
@@ -178,11 +178,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       error,
       login,
-      register,
       logout,
       clearError,
     }),
-    [user, token, isAuthenticated, isLoading, login, register, logout, clearError],
+    [user, token, isAuthenticated, isLoading, error, login, logout, clearError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -202,7 +201,8 @@ export function useAuth(): AuthState {
 
 function extractErrorMessage(err: unknown, fallback: string): string {
   if (typeof err === 'object' && err !== null && 'response' in err) {
-    const resp = (err as { response?: { data?: { error?: string } } }).response;
+    const resp = (err as { response?: { data?: { detail?: string; error?: string } } }).response;
+    if (resp?.data?.detail) return resp.data.detail;
     if (resp?.data?.error) return resp.data.error;
   }
   return fallback;
@@ -219,7 +219,7 @@ function parseJwt(token: string) {
         .join('')
     );
     return JSON.parse(jsonPayload);
-  } catch (error) {
+  } catch {
     return null;
   }
 }

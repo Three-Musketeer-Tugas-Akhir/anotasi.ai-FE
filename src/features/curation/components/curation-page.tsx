@@ -1,23 +1,10 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import React from 'react';
 import {
   Search,
+  CheckCircle,
   CheckCircle2,
   AlertTriangle,
   ArrowLeft,
@@ -53,7 +40,6 @@ const MOCK_SLANG_DICTIONARY: SlangEntry[] = [
   { slang: 'biar', standard: 'agar' },
   { slang: 'kalo', standard: 'kalau' },
   { slang: 'trus', standard: 'terus' },
-  { slang: 'udah', standard: 'sudah' },
   { slang: 'nggak', standard: 'tidak' },
   { slang: 'denger', standard: 'dengar' },
   { slang: 'ngomong', standard: 'bicara' },
@@ -69,7 +55,7 @@ const createSegments = (
     isEdited: false,
   }));
 
-const MOCK_VIDEOS: CurationVideo[] = [
+const INITIAL_MOCK_VIDEOS: CurationVideo[] = [
   {
     id: 'cv-1',
     filename: '0_[FULL] 29 Korban Kapal Tenggelam.mp4',
@@ -120,57 +106,31 @@ const MOCK_VIDEOS: CurationVideo[] = [
   },
 ];
 
-// ── Status helpers ─────────────────────────────────────────────────
-
-const STATUS_CONFIG: Record<CurationStatus, { label: string; color: string; icon: React.ReactNode }> = {
-  ANNOTATED: {
-    label: 'Perlu Kurasi',
-    color: 'bg-amber-50 text-amber-700 border-amber-200',
-    icon: <AlertTriangle size={12} />,
-  },
-  NORMALIZING: {
-    label: 'Memproses...',
-    color: 'bg-blue-50 text-blue-700 border-blue-200',
-    icon: <Loader2 size={12} className="animate-spin" />,
-  },
-  NORMALIZED: {
-    label: 'Sudah Dinormalisasi',
-    color: 'bg-teal-50 text-teal-700 border-teal-200',
-    icon: <Wand2 size={12} />,
-  },
-  READY_TO_EXPORT: {
-    label: 'Siap Export',
-    color: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    icon: <CheckCircle2 size={12} />,
-  },
-};
-
-function StatusBadge({ status }: { status: CurationStatus }) {
-  const cfg = STATUS_CONFIG[status];
+function CurationStatusBadge({ status }: { status: CurationStatus }) {
+  const configs: Record<CurationStatus, { label: string; color: string; icon: React.ReactNode }> = {
+    ANNOTATED: { label: 'Perlu Kurasi', color: 'bg-amber-50 text-amber-700 border-amber-200', icon: <AlertTriangle size={12} /> },
+    NORMALIZING: { label: 'Memproses...', color: 'bg-teal-50 text-teal-700 border-teal-200', icon: <Loader2 size={12} className="animate-spin" /> },
+    NORMALIZED: { label: 'Sudah Dinormalisasi', color: 'bg-teal-100 text-teal-800 border-teal-300', icon: <Wand2 size={12} /> },
+    READY_TO_EXPORT: { label: 'Siap Export', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: <CheckCircle2 size={12} /> },
+  };
+  const cfg = configs[status];
+  
   return (
-    <Badge variant="outline" className={`${cfg.color} gap-1`}>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] uppercase tracking-wider font-bold border shadow-sm ${cfg.color}`}>
       {cfg.icon} {cfg.label}
-    </Badge>
+    </span>
   );
 }
 
-// ── Main Component ─────────────────────────────────────────────────
-
 export function CurationPage() {
-  const [videos, setVideos] = useState<CurationVideo[]>(MOCK_VIDEOS);
+  const [videos, setVideos] = useState<CurationVideo[]>(INITIAL_MOCK_VIDEOS);
   const [search, setSearch] = useState('');
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const [dictOpen, setDictOpen] = useState(true);
   const [normalizing, setNormalizing] = useState(false);
 
   const activeVideo = videos.find((v) => v.id === activeVideoId) ?? null;
-
-  const filtered = videos.filter(
-    (v) =>
-      !search ||
-      v.filename.toLowerCase().includes(search.toLowerCase()) ||
-      v.source.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = videos.filter(v => !search || v.filename.toLowerCase().includes(search.toLowerCase()) || v.source.toLowerCase().includes(search.toLowerCase()));
 
   const counts = {
     needsCuration: videos.filter((v) => v.status === 'ANNOTATED' || v.status === 'NORMALIZING').length,
@@ -178,63 +138,30 @@ export function CurationPage() {
     approved: videos.filter((v) => v.status === 'READY_TO_EXPORT').length,
   };
 
-  // ── Handlers ───────────────────────────────────────────────────
+  const handleNormalize = useCallback(async (videoId: string) => {
+    setNormalizing(true);
+    setVideos(prev => prev.map(v => (v.id === videoId ? { ...v, status: 'NORMALIZING' } : v)));
+    
+    const targetVideo = videos.find(v => v.id === videoId);
+    if (!targetVideo) { setNormalizing(false); return; }
 
-  const handleNormalize = useCallback(
-    async (videoId: string) => {
-      setNormalizing(true);
-      // Update status to NORMALIZING
-      setVideos((prev) =>
-        prev.map((v) => (v.id === videoId ? { ...v, status: 'NORMALIZING' as CurationStatus } : v)),
-      );
+    try {
+      // Intentionally using the API logic that was built
+      const normalizedItems = await curationApi.normalizeSegments(targetVideo.segments);
+      setVideos(prev => prev.map(v => v.id === videoId ? { ...v, status: 'NORMALIZED', segments: normalizedItems } : v));
+    } catch (err) {
+      setVideos(prev => prev.map(v => v.id === videoId ? { ...v, status: 'ANNOTATED' } : v));
+    } finally {
+      setNormalizing(false);
+    }
+  }, [videos]);
 
-      const targetVideo = videos.find((v) => v.id === videoId);
-      if (!targetVideo) {
-        setNormalizing(false);
-        return;
-      }
-
-      try {
-        const normalizedItems = await curationApi.normalizeSegments(targetVideo.segments);
-        setVideos((prev) =>
-          prev.map((v) => {
-            if (v.id !== videoId) return v;
-            return {
-              ...v,
-              status: 'NORMALIZED' as CurationStatus,
-              segments: normalizedItems,
-            };
-          }),
-        );
-      } catch (err) {
-        console.error("Failed to normalize", err);
-        // revert status on error
-        setVideos((prev) =>
-          prev.map((v) => (v.id === videoId ? { ...v, status: 'ANNOTATED' as CurationStatus } : v)),
-        );
-      } finally {
-        setNormalizing(false);
-      }
-    },
-    [videos],
-  );
-
-  const handleSegmentEdit = useCallback(
-    (videoId: string, segmentId: string, newText: string) => {
-      setVideos((prev) =>
-        prev.map((v) => {
-          if (v.id !== videoId) return v;
-          return {
-            ...v,
-            segments: v.segments.map((seg) =>
-              seg.id === segmentId ? { ...seg, normalizedText: newText, isEdited: true } : seg,
-            ),
-          };
-        }),
-      );
-    },
-    [],
-  );
+  const handleSegmentEdit = useCallback((videoId: string, segmentId: string, newText: string) => {
+    setVideos(prev => prev.map(v => {
+      if (v.id !== videoId) return v;
+      return { ...v, segments: v.segments.map(seg => seg.id === segmentId ? { ...seg, normalizedText: newText, isEdited: true } : seg) };
+    }));
+  }, []);
 
   const handleApprove = useCallback(async (videoId: string) => {
     try {
@@ -251,399 +178,263 @@ export function CurationPage() {
   }, []);
 
   const handleApproveAll = useCallback(() => {
-    setVideos((prev) =>
-      prev.map((v) =>
-        v.status === 'NORMALIZED' ? { ...v, status: 'READY_TO_EXPORT' as CurationStatus } : v,
-      ),
-    );
+    setVideos(prev => prev.map(v => v.status === 'NORMALIZED' ? { ...v, status: 'READY_TO_EXPORT' } : v));
   }, []);
 
-  // ── Render ─────────────────────────────────────────────────────
-
-  if (activeVideo) {
+  // --- Curation ListView ---
+  if (!activeVideo) {
     return (
-      <WorkspaceView
-        video={activeVideo}
-        normalizing={normalizing}
-        dictOpen={dictOpen}
-        onToggleDict={() => setDictOpen((o) => !o)}
-        onBack={() => setActiveVideoId(null)}
-        onNormalize={() => handleNormalize(activeVideo.id)}
-        onSegmentEdit={(segId, text) => handleSegmentEdit(activeVideo.id, segId, text)}
-        onApprove={() => handleApprove(activeVideo.id)}
-      />
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:p-8 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+              <CheckCircle className="text-teal-600" size={24} />
+              Curation Hub
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">Normalisasi teks transkripsi sebelum di-export sebagai dataset final.</p>
+          </div>
+          <div className="flex gap-2 items-center flex-wrap">
+            <div className="bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
+              <AlertTriangle size={14} /> {counts.needsCuration} Perlu Kurasi
+            </div>
+            <div className="bg-teal-50 text-teal-700 border border-teal-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
+              <Wand2 size={14} /> {counts.normalized} Normalized
+            </div>
+            <div className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
+              <CheckCircle2 size={14} /> {counts.approved} Approved
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              placeholder="Cari video atau sumber..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm transition-all"
+            />
+          </div>
+          <div className="ml-auto">
+            {counts.normalized > 0 && (
+              <button onClick={handleApproveAll} className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-lg font-semibold text-sm shadow-sm transition-colors">
+                <ShieldCheck size={16} /> Approve All ({counts.normalized})
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+            <h2 className="text-base font-bold text-slate-800">Video untuk Kurasi ({filtered.length})</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-center w-12">#</th>
+                  <th className="px-6 py-3">Video</th>
+                  <th className="px-6 py-3 w-32">Sumber</th>
+                  <th className="px-6 py-3 w-28 text-center">Segmen</th>
+                  <th className="px-6 py-3 w-48 text-center">Status</th>
+                  <th className="px-6 py-3 w-56 text-center">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {filtered.map((v, i) => (
+                  <tr key={v.id} className={`hover:bg-slate-50 transition-colors ${v.status === 'READY_TO_EXPORT' ? 'bg-emerald-50/30' : v.status === 'NORMALIZED' ? 'bg-teal-50/20' : ''}`}>
+                    <td className="px-6 py-4 text-center text-slate-400 font-medium">{i + 1}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <FileText size={16} className="text-slate-400 flex-shrink-0" />
+                        <span className="font-semibold text-slate-700 truncate max-w-[300px]">{v.filename}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4"><span className="bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-1 rounded text-xs font-semibold">{v.source}</span></td>
+                    <td className="px-6 py-4 text-center font-mono text-slate-600">{v.segmentCount}</td>
+                    <td className="px-6 py-4 text-center"><CurationStatusBadge status={v.status} /></td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        {v.status === 'ANNOTATED' && (
+                          <>
+                            <button onClick={() => handleNormalize(v.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-teal-700 border border-teal-200 rounded-md hover:bg-teal-50 transition-colors">
+                              <Wand2 size={14} /> Auto-Norm
+                            </button>
+                            <button onClick={() => setActiveVideoId(v.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-teal-600 text-white rounded-md hover:bg-teal-700 shadow-sm transition-colors">
+                              <Pencil size={14} /> Kurasi
+                            </button>
+                          </>
+                        )}
+                        {v.status === 'NORMALIZED' && (
+                          <button onClick={() => setActiveVideoId(v.id)} className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-teal-600 text-white rounded-md hover:bg-teal-700 shadow-sm transition-colors w-full justify-center">
+                            <Pencil size={14} /> Review & Approve
+                          </button>
+                        )}
+                        {v.status === 'READY_TO_EXPORT' && (
+                          <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-md w-full justify-center">
+                            <CheckCircle2 size={14} /> Approved
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium">Tidak ada video yang cocok dengan pencarian.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     );
   }
 
-  return <DashboardView
-    videos={filtered}
-    search={search}
-    counts={counts}
-    onSearch={setSearch}
-    onSelect={setActiveVideoId}
-    onNormalize={handleNormalize}
-    onApproveAll={handleApproveAll}
-  />;
-}
-
-// ── Dashboard View ─────────────────────────────────────────────────
-
-function DashboardView({
-  videos,
-  search,
-  counts,
-  onSearch,
-  onSelect,
-  onNormalize,
-  onApproveAll,
-}: {
-  videos: CurationVideo[];
-  search: string;
-  counts: { needsCuration: number; normalized: number; approved: number };
-  onSearch: (v: string) => void;
-  onSelect: (id: string) => void;
-  onNormalize: (id: string) => Promise<void>;
-  onApproveAll: () => void;
-}) {
-  return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Search size={24} className="text-teal-600" />
-            Curation Hub
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Normalisasi teks transkripsi sebelum di-export sebagai dataset final.
-          </p>
-        </div>
-        <div className="flex gap-2 items-center">
-          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 gap-1">
-            <AlertTriangle size={12} /> {counts.needsCuration} Perlu Kurasi
-          </Badge>
-          <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200 gap-1">
-            <Wand2 size={12} /> {counts.normalized} Normalized
-          </Badge>
-          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1">
-            <CheckCircle2 size={12} /> {counts.approved} Approved
-          </Badge>
-        </div>
-      </div>
-
-      {/* Search + Actions */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-          <Input
-            placeholder="Cari video atau sumber..."
-            value={search}
-            onChange={(e) => onSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <div className="ml-auto flex gap-2">
-          {counts.normalized > 0 && (
-            <Button
-              onClick={onApproveAll}
-              className="bg-emerald-600 hover:bg-emerald-700 gap-1.5"
-            >
-              <ShieldCheck size={16} />
-              Approve All ({counts.normalized})
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Videos Table */}
-      <Card className="border-gray-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold text-gray-800">
-            Video untuk Kurasi ({videos.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-gray-50/50">
-                <TableHead className="w-12 text-center">#</TableHead>
-                <TableHead>Video</TableHead>
-                <TableHead className="w-28">Sumber</TableHead>
-                <TableHead className="w-28 text-center">Segmen</TableHead>
-                <TableHead className="w-44 text-center">Status</TableHead>
-                <TableHead className="w-52 text-center">Aksi</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {videos.map((v, i) => (
-                <TableRow
-                  key={v.id}
-                  className={
-                    v.status === 'READY_TO_EXPORT'
-                      ? 'bg-emerald-50/30'
-                      : v.status === 'NORMALIZED'
-                        ? 'bg-teal-50/20'
-                        : ''
-                  }
-                >
-                  <TableCell className="text-center text-gray-400 text-xs">{i + 1}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <FileText size={16} className="text-gray-400 flex-shrink-0" />
-                      <span className="font-medium text-gray-800 text-sm truncate max-w-[300px]">
-                        {v.filename}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">{v.source}</Badge>
-                  </TableCell>
-                  <TableCell className="text-center text-sm text-gray-600">
-                    {v.segmentCount}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <StatusBadge status={v.status} />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      {v.status === 'ANNOTATED' && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => onNormalize(v.id)}
-                            className="h-8 text-xs gap-1 border-teal-200 text-teal-700 hover:bg-teal-50"
-                          >
-                            <Wand2 size={12} /> Auto-Normalize
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => onSelect(v.id)}
-                            className="bg-teal-600 hover:bg-teal-700 h-8 text-xs gap-1"
-                          >
-                            <Pencil size={12} /> Kurasi
-                          </Button>
-                        </>
-                      )}
-                      {v.status === 'NORMALIZED' && (
-                        <Button
-                          size="sm"
-                          onClick={() => onSelect(v.id)}
-                          className="bg-teal-600 hover:bg-teal-700 h-8 text-xs gap-1"
-                        >
-                          <Pencil size={12} /> Review & Approve
-                        </Button>
-                      )}
-                      {v.status === 'READY_TO_EXPORT' && (
-                        <Badge variant="outline" className="bg-emerald-50 text-emerald-600 border-emerald-200 gap-1">
-                          <CheckCircle2 size={12} /> Approved
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {videos.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-gray-400">
-                    Tidak ada video yang cocok dengan pencarian.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// ── Workspace View ─────────────────────────────────────────────────
-
-function WorkspaceView({
-  video,
-  normalizing,
-  dictOpen,
-  onToggleDict,
-  onBack,
-  onNormalize,
-  onSegmentEdit,
-  onApprove,
-}: {
-  video: CurationVideo;
-  normalizing: boolean;
-  dictOpen: boolean;
-  onToggleDict: () => void;
-  onBack: () => void;
-  onNormalize: () => void;
-  onSegmentEdit: (segId: string, text: string) => void;
-  onApprove: () => void;
-}) {
-  const hasNormalized = video.segments.some((s) => s.normalizedText.length > 0);
-  const isApproved = video.status === 'READY_TO_EXPORT';
+  // --- Curation Workspace View ---
+  const hasNormalized = activeVideo.segments.some((s) => s.normalizedText.length > 0);
+  const isApproved = activeVideo.status === 'READY_TO_EXPORT';
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Top Bar */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={onBack} className="gap-1 text-gray-600">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white shadow-sm z-10 flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <button onClick={() => setActiveVideoId(null)} className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors">
             <ArrowLeft size={16} /> Kembali
-          </Button>
-          <Separator orientation="vertical" className="h-6" />
+          </button>
+          <div className="w-px h-6 bg-slate-200"></div>
           <div>
-            <h2 className="font-semibold text-gray-900 text-sm">{video.filename}</h2>
-            <p className="text-xs text-gray-500">{video.source} · {video.segmentCount} segmen</p>
+            <h2 className="font-bold text-slate-800 text-base">{activeVideo.filename}</h2>
+            <p className="text-[11px] font-medium text-slate-500">{activeVideo.source} • {activeVideo.segmentCount} segmen</p>
           </div>
-          <StatusBadge status={video.status} />
+          <div className="ml-2"><CurationStatusBadge status={activeVideo.status} /></div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {!isApproved && (
-            <Button
-              onClick={onNormalize}
+            <button
+              onClick={() => handleNormalize(activeVideo.id)}
               disabled={normalizing}
-              variant="outline"
-              className="gap-1.5 border-teal-200 text-teal-700 hover:bg-teal-50"
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-bold border rounded-lg transition-all ${normalizing ? 'text-slate-400 border-slate-200 bg-slate-50 cursor-not-allowed' : 'text-teal-700 border-teal-200 bg-white hover:bg-teal-50 shadow-sm'}`}
             >
-              {normalizing ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <Wand2 size={16} />
-              )}
+              {normalizing ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
               {normalizing ? 'Memproses...' : 'Auto-Normalize'}
-            </Button>
+            </button>
           )}
           {hasNormalized && !isApproved && (
-            <Button
-              onClick={onApprove}
-              className="bg-emerald-600 hover:bg-emerald-700 gap-1.5"
-            >
-              <ShieldCheck size={16} /> Approve
-            </Button>
+            <button onClick={() => handleApprove(activeVideo.id)} className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white px-5 py-2 rounded-lg font-bold text-sm shadow-sm transition-colors">
+              <ShieldCheck size={18} /> Approve
+            </button>
           )}
         </div>
       </div>
 
-      {/* Content: Comparison + Dictionary */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Main Comparison Panel */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <Card className="border-gray-200 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold text-gray-800 flex items-center gap-2">
+      <div className="flex-1 flex overflow-hidden bg-slate-100/50">
+        {/* Left: Editor Table */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                 <FileText size={18} className="text-teal-600" />
-                Perbandingan Teks — Before &amp; After
-              </CardTitle>
-              <p className="text-xs text-gray-500 mt-1">
-                Kolom &quot;After&quot; bisa diedit manual jika hasil normalisasi bot kurang tepat.
-              </p>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-gray-50/50">
-                    <TableHead className="w-12 text-center">#</TableHead>
-                    <TableHead className="w-[45%]">
-                      <span className="flex items-center gap-1.5 text-amber-700">
-                        <FileText size={14} /> Before (Teks Asli)
-                      </span>
-                    </TableHead>
-                    <TableHead className="w-8 text-center"></TableHead>
-                    <TableHead className="w-[45%]">
-                      <span className="flex items-center gap-1.5 text-teal-700">
-                        <Wand2 size={14} /> After (Hasil Normalisasi)
-                      </span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {video.segments.map((seg, i) => (
-                    <TableRow key={seg.id} className={seg.isEdited ? 'bg-blue-50/30' : ''}>
-                      <TableCell className="text-center text-gray-400 text-xs align-top pt-4">
-                        {i + 1}
-                      </TableCell>
-                      <TableCell className="align-top py-3">
-                        <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-3 text-sm text-gray-700 leading-relaxed">
+                Perbandingan Teks — Before & After
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">Kolom "After" bisa diedit manual jika hasil normalisasi bot kurang tepat.</p>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold uppercase tracking-wider">
+                    <th className="px-4 py-3 text-center w-12 text-slate-400">#</th>
+                    <th className="px-4 py-3 w-[45%]">
+                      <span className="flex items-center gap-1.5 text-amber-700"><FileText size={14} /> Before (Teks Asli)</span>
+                    </th>
+                    <th className="px-2 py-3 w-8 text-center"></th>
+                    <th className="px-4 py-3 w-[45%]">
+                      <span className="flex items-center gap-1.5 text-teal-700"><Wand2 size={14} /> After (Hasil Normalisasi)</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {activeVideo.segments.map((seg, i) => (
+                    <tr key={seg.id} className={seg.isEdited ? 'bg-teal-50/20' : ''}>
+                      <td className="px-4 py-5 text-center text-slate-400 font-mono align-top">{i + 1}</td>
+                      <td className="px-4 py-5 align-top">
+                        <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-3.5 text-sm text-slate-700 leading-relaxed">
                           {seg.originalText}
                         </div>
-                      </TableCell>
-                      <TableCell className="text-center align-top pt-4">
-                        <ArrowRight size={16} className="text-gray-300 mx-auto" />
-                      </TableCell>
-                      <TableCell className="align-top py-3">
+                      </td>
+                      <td className="px-2 py-5 text-center align-top pt-8">
+                        <ArrowRight size={18} className="text-slate-300 mx-auto" />
+                      </td>
+                      <td className="px-4 py-5 align-top">
                         {hasNormalized ? (
                           <div className="relative">
-                            <Textarea
+                            <textarea
                               value={seg.normalizedText}
-                              onChange={(e) => onSegmentEdit(seg.id, e.target.value)}
+                              onChange={(e) => handleSegmentEdit(activeVideo.id, seg.id, e.target.value)}
                               disabled={isApproved}
-                              className={`min-h-[60px] text-sm leading-relaxed resize-none ${
+                              className={`w-full min-h-[72px] p-3.5 text-sm leading-relaxed rounded-lg resize-none outline-none transition-all border ${
                                 seg.isEdited
-                                  ? 'border-blue-300 bg-blue-50/30 focus:border-blue-400'
-                                  : 'border-teal-200 bg-teal-50/30 focus:border-teal-400'
-                              } ${isApproved ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                  ? 'border-teal-400 bg-teal-50/50 focus:ring-2 focus:ring-teal-500/30'
+                                  : 'border-slate-200 bg-slate-50 focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-500/20'
+                              } ${isApproved ? 'opacity-70 cursor-not-allowed bg-slate-100 text-slate-500' : 'text-slate-800'}`}
                             />
                             {seg.isEdited && (
-                              <Badge
-                                variant="outline"
-                                className="absolute -top-2 -right-2 bg-blue-100 text-blue-700 border-blue-200 text-[10px] px-1.5"
-                              >
+                              <span className="absolute -top-2.5 -right-2 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm">
                                 Diedit Manual
-                              </Badge>
+                              </span>
                             )}
                           </div>
                         ) : (
-                          <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-sm text-gray-400 italic">
-                            Klik &quot;Auto-Normalize&quot; untuk memproses...
+                          <div className="bg-slate-50 border border-slate-200 border-dashed rounded-lg p-3.5 text-sm text-slate-400 italic flex items-center justify-center h-[72px]">
+                            Klik "Auto-Normalize" untuk memproses...
                           </div>
                         )}
-                      </TableCell>
-                    </TableRow>
+                      </td>
+                    </tr>
                   ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
-        {/* Slang Dictionary Sidebar */}
-        <div
-          className={`border-l border-gray-200 bg-gray-50/50 transition-all duration-300 flex flex-col ${
-            dictOpen ? 'w-80' : 'w-12'
-          }`}
-        >
+        {/* Right: Slang Dictionary Sidebar */}
+        <div className={`border-l border-slate-200 bg-white transition-all duration-300 flex flex-col flex-shrink-0 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.02)] ${dictOpen ? 'w-[320px]' : 'w-14'}`}>
           <button
-            onClick={onToggleDict}
-            className="flex items-center gap-2 px-3 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors border-b border-gray-200"
+            onClick={() => setDictOpen(!dictOpen)}
+            className="flex items-center gap-3 px-4 py-4 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors border-b border-slate-100 outline-none"
           >
-            <BookOpen size={16} className="text-teal-600 flex-shrink-0" />
-            {dictOpen && <span className="flex-1 text-left">Kamus Slang → Baku</span>}
-            {dictOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            <BookOpen size={18} className="text-teal-600 flex-shrink-0" />
+            {dictOpen && <span className="flex-1 text-left whitespace-nowrap">Kamus Slang → Baku</span>}
+            {dictOpen ? <ChevronDown size={16} className="text-slate-400"/> : <ChevronUp size={16} className="text-slate-400 mx-auto"/>}
           </button>
 
           {dictOpen && (
-            <ScrollArea className="flex-1">
-              <div className="p-3 space-y-1">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-slate-50/50">
+              <div className="space-y-1.5">
                 {MOCK_SLANG_DICTIONARY.map((entry) => (
-                  <div
-                    key={entry.slang}
-                    className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-gray-100 text-xs"
-                  >
-                    <span className="text-red-600 font-mono line-through">{entry.slang}</span>
-                    <ArrowRight size={12} className="text-gray-300 mx-2 flex-shrink-0" />
-                    <span className="text-emerald-700 font-mono font-semibold">{entry.standard}</span>
+                  <div key={entry.slang} className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-slate-200 text-xs shadow-sm">
+                    <span className="text-amber-600 font-mono font-medium line-through decoration-amber-600/40">{entry.slang}</span>
+                    <ArrowRight size={12} className="text-slate-300 mx-2 flex-shrink-0" />
+                    <span className="text-teal-700 font-mono font-bold">{entry.standard}</span>
                   </div>
                 ))}
               </div>
-              <div className="p-3 pt-0">
-                <p className="text-[10px] text-gray-400 text-center">
-                  Pencocokan menggunakan &quot;\bword\b&quot; (exact word boundary)
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                <p className="text-[10px] text-blue-700 font-medium leading-relaxed">
+                  <span className="font-bold block mb-1 text-blue-800">Info Bot:</span>
+                  Normalisasi menggunakan pola Regex <code>\bword\b</code> (exact boundary) agar tidak mengubah kata di dalam kata lain.
                 </p>
               </div>
-            </ScrollArea>
+            </div>
           )}
         </div>
       </div>
     </div>
   );
 }
+

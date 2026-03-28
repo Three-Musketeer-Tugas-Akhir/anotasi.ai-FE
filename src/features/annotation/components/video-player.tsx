@@ -20,6 +20,10 @@ interface VideoPlayerProps {
   playbackRate: number;
   onPlaybackRateChange: (rate: number) => void;
   onDurationChange: (duration: number) => void;
+  onAddPrev?: () => void;
+  onAddNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
 }
 
 export function VideoPlayer({
@@ -31,6 +35,10 @@ export function VideoPlayer({
   playbackRate,
   onPlaybackRateChange,
   onDurationChange,
+  onAddPrev,
+  onAddNext,
+  hasPrev = true,
+  hasNext = true,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -61,6 +69,29 @@ export function VideoPlayer({
 
   return (
     <Card className="flex flex-col overflow-hidden border-gray-200 shadow-sm h-full max-h-[400px]">
+      {/* Top Action Bar for Video Context */}
+      <div className="bg-gray-50 p-2 flex justify-between items-center border-b border-gray-200 shrink-0">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={onAddPrev} 
+          disabled={!hasPrev}
+          className="text-xs text-gray-600 h-8"
+        >
+          + Tambah Video Sebelumnya
+        </Button>
+        <span className="text-xs font-semibold text-gray-500">Video Chunk Utama</span>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={onAddNext} 
+          disabled={!hasNext}
+          className="text-xs text-gray-600 h-8"
+        >
+          + Tambah Video Selanjutnya
+        </Button>
+      </div>
+
       <div className="bg-black relative flex-1 flex items-center justify-center">
         <video
           ref={videoRef}

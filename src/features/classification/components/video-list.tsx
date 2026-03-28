@@ -2,45 +2,45 @@
 
 import { Search, Clock, PlayCircle } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
-import { Video, VideoStatus } from '@/features/classification/types/classification.types';
+import { ClassificationJob, CategoryStatus } from '@/features/classification/types/classification.types';
 import { StatusBadge } from './status-badge';
 
-const FILTER_OPTIONS = [
-  { value: 'all' as const, label: 'Semua' },
-  { value: 'uncategorized' as const, label: 'Uncategorized' },
-  { value: 'sibi' as const, label: 'SIBI' },
-  { value: 'bisindo' as const, label: 'BISINDO' },
+const FILTER_OPTIONS: { value: 'all' | CategoryStatus; label: string }[] = [
+  { value: 'all', label: 'Semua' },
+  { value: 'uncategorized', label: 'Uncategorized' },
+  { value: 'SIBI', label: 'SIBI' },
+  { value: 'BISINDO', label: 'BISINDO' },
 ];
 
-type FilterValue = 'all' | VideoStatus;
+type FilterValue = 'all' | CategoryStatus;
 
 interface VideoListProps {
-  videos: Video[];
-  selectedVideoId: string | null;
+  jobs: ClassificationJob[];
+  selectedJobId: string | null;
   filter: FilterValue;
   searchQuery: string;
-  onSelectVideo: (id: string) => void;
+  onSelectJob: (id: string) => void;
   onFilterChange: (filter: FilterValue) => void;
   onSearchChange: (query: string) => void;
 }
 
 /**
- * Filterable video list panel (left side of the classification workspace).
+ * Filterable job list panel (left side of the classification workspace).
  */
 export function VideoList({
-  videos,
-  selectedVideoId,
+  jobs,
+  selectedJobId,
   filter,
   searchQuery,
-  onSelectVideo,
+  onSelectJob,
   onFilterChange,
   onSearchChange,
 }: VideoListProps) {
-  // Filter videos
-  const filteredVideos = videos.filter((v) => {
-    const matchesFilter = filter === 'all' || v.status === filter;
+  // Filter jobs
+  const filteredJobs = jobs.filter((j) => {
+    const matchesFilter = filter === 'all' || j.category === filter;
     const matchesSearch =
-      !searchQuery || v.title.toLowerCase().includes(searchQuery.toLowerCase());
+      !searchQuery || (j.video_title || '').toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
   });
 
@@ -79,13 +79,13 @@ export function VideoList({
       {/* List */}
       <div className="flex-1 overflow-y-auto">
         <div className="divide-y divide-gray-100">
-          {filteredVideos.map((video) => (
+          {filteredJobs.map((job) => (
             <div
-              key={video.id}
-              onClick={() => onSelectVideo(video.id)}
+              key={job.job_id}
+              onClick={() => onSelectJob(job.job_id)}
               className={cn(
                 'p-4 cursor-pointer hover:bg-gray-50 transition-colors flex gap-3 border-l-4',
-                selectedVideoId === video.id
+                selectedJobId === job.job_id
                   ? 'bg-teal-50 border-teal-500 hover:bg-teal-50'
                   : 'border-transparent',
               )}
@@ -96,7 +96,7 @@ export function VideoList({
                   <PlayCircle size={28} />
                 </div>
                 <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 flex items-center justify-center transition-all">
-                  {selectedVideoId === video.id && (
+                  {selectedJobId === job.job_id && (
                     <PlayCircle className="text-white opacity-80" size={20} />
                   )}
                 </div>
@@ -108,27 +108,36 @@ export function VideoList({
                   <h4
                     className={cn(
                       'text-sm font-semibold truncate pr-2',
-                      selectedVideoId === video.id ? 'text-teal-700' : 'text-slate-700',
+                      selectedJobId === job.job_id ? 'text-teal-700' : 'text-slate-700',
                     )}
                   >
-                    {video.title}
+                    {job.video_title || 'Untitled Video'}
                   </h4>
                 </div>
                 <div className="flex items-center gap-2 mb-2">
-                  <StatusBadge status={video.status} />
+                  <StatusBadge status={job.category} />
+                  {/* Job status badge for processing state */}
+                  {job.status !== 'READY_FOR_ANNOTATION' && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-600 border border-blue-200">
+                      {job.status}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 text-xs text-gray-400">
                   <span className="flex items-center gap-1">
-                    <Clock size={10} /> {video.duration}
+                    <Clock size={10} />
+                    {new Date(job.created_at).toLocaleDateString('id-ID', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
                   </span>
-                  <span>•</span>
-                  <span>{video.date}</span>
                 </div>
               </div>
             </div>
           ))}
 
-          {filteredVideos.length === 0 && (
+          {filteredJobs.length === 0 && (
             <div className="p-8 text-center text-gray-400 text-sm">
               Tidak ada video yang cocok dengan filter.
             </div>

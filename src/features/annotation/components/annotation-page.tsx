@@ -1,46 +1,62 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { PenTool } from 'lucide-react';
 import { VideoPlayer } from './video-player';
 import { TimelineEditor } from './timeline-editor';
-import { PropertiesPanel, AnnotationData } from './properties-panel';
+import { PropertiesPanel, VideoTrimData } from './properties-panel';
 import { ActionBar } from './action-bar';
 
-// Initial Mock Data
-const MOCK_ANNOTATIONS: AnnotationData[] = [
-  { id: '1', start: 0.5, end: 4.0, asrText: 'Nah di situ langsung saya', sibiText: 'NAH DI-SITU LANGSUNG SAYA', issue: 'none', comment: '' },
-  { id: '2', start: 4.5, end: 8.0, asrText: 'dikeroyok pak', sibiText: 'DI-KEROYOK PAK', issue: 'none', comment: '' },
-];
+// Initial Mock Data representing the active Chunk's context
+const MOCK_TRIM_DATA: VideoTrimData = {
+  start: 0, 
+  end: 0, // will be set to video duration dynamically initially
+  asrText: 'Nah di situ langsung saya', 
+  sibiText: 'NAH DI-SITU LANGSUNG SAYA', 
+  alignment: 'nah -> NAH\ndi situ -> DI-SITU\nlangsung -> LANGSUNG\nsaya -> SAYA',
+  issue: 'none', 
+  comment: ''
+};
 
 export function AnnotationPage() {
-  const [annotations, setAnnotations] = useState<AnnotationData[]>(MOCK_ANNOTATIONS);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [trimData, setTrimData] = useState<VideoTrimData>(MOCK_TRIM_DATA);
+  const [videoUrl, setVideoUrl] = useState('/videos/[FULL] Ricuh Eksekusi Rumah di Kelapa Gading iNews Siang 26 02.mp4_000315.mp4');
   
   // Video State
-  const [videoUrl] = useState('/videos/[FULL] Ricuh Eksekusi Rumah di Kelapa Gading iNews Siang 26 02.mp4_000315.mp4');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [duration, setDuration] = useState(0);
 
-  const selectedAnnotation = annotations.find(a => a.id === selectedId) || null;
+  const handleTrimDataChange = (updates: Partial<VideoTrimData>) => {
+    setTrimData(prev => ({ ...prev, ...updates }));
+  };
 
-  const handleAnnotationChange = useCallback((id: string, updates: Partial<AnnotationData>) => {
-    setAnnotations(prev => prev.map(ann => ann.id === id ? { ...ann, ...updates } : ann));
-  }, []);
+  const handleTrimChange = (start: number, end: number) => {
+    setTrimData(prev => ({ ...prev, start, end }));
+  };
+
+  const handleAddPrev = () => {
+    alert("Simulasi Integrasi Backend: Me-request video N-1 dan menggabungnya (prepend) ke player saat ini...");
+  };
+
+  const handleAddNext = () => {
+    alert("Simulasi Integrasi Backend: Me-request video N+1 dan menggabungnya (append) ke player saat ini...");
+  };
 
   const handleSave = () => {
-    console.log('Saved Annotations:', annotations);
-    alert('Anotasi berhasil disimpan!');
+    console.log('Saved Final Block:', trimData);
+    alert('Anotasi dan perintah pemotongan video (Trim) berhasil disimpan!');
   };
 
   const handlePreview = () => {
+    // Jump to the start of the trim and play
+    setCurrentTime(trimData.start);
     setIsPlaying(true);
   };
 
   const handleFinish = () => {
-    if (confirm('Selesaikan anotasi untuk video ini?')) {
+    if (confirm('Selesaikan anotasi untuk video ini dan lanjutkan ke kalimat ASR berikutnya?')) {
       alert('Selesai!');
     }
   };
@@ -55,7 +71,7 @@ export function AnnotationPage() {
             Workspace Anotasi
           </h1>
           <p className="text-xs text-gray-500 mt-1">
-            Sesuaikan blok anotasi pada timeline dengan gerakan video.
+            Geser pemotong timeline agar durasi video pas dengan SIBI Sentence. Tambahkan video sebelumnya/selanjutnya jika gerakan terpotong.
           </p>
         </div>
       </div>
@@ -74,18 +90,21 @@ export function AnnotationPage() {
               playbackRate={playbackRate}
               onPlaybackRateChange={setPlaybackRate}
               onDurationChange={setDuration}
+              onAddPrev={handleAddPrev}
+              onAddNext={handleAddNext}
+              hasPrev={true}
+              hasNext={true}
             />
           </div>
           <div className="flex-[2] min-h-[200px]">
             <TimelineEditor
               videoUrl={videoUrl}
+              duration={duration}
               currentTime={currentTime}
               isPlaying={isPlaying}
               onTimeUpdate={setCurrentTime}
-              annotations={annotations}
-              selectedId={selectedId}
-              onSelectAnnotation={setSelectedId}
-              onAnnotationChange={handleAnnotationChange}
+              trimData={trimData}
+              onTrimChange={handleTrimChange}
             />
           </div>
         </div>
@@ -93,8 +112,8 @@ export function AnnotationPage() {
         {/* Right Column: Properties Panel */}
         <div className="flex-[1] min-w-[300px] overflow-hidden">
           <PropertiesPanel
-            selectedAnnotation={selectedAnnotation}
-            onChange={handleAnnotationChange}
+            data={trimData}
+            onChange={handleTrimDataChange}
           />
         </div>
       </div>

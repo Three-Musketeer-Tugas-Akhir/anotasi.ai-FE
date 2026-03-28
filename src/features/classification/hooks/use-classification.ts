@@ -1,43 +1,59 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { classificationRepository } from '@/features/classification/api/classification.repository';
-import { VideoStatus } from '@/features/classification/types/classification.types';
+import type { JobListParams, JobListResponse } from '@/features/classification/types/classification.types';
 
 // ── Query Keys ───────────────────────────────────────────────────────
-// Centralised query keys prevent typo bugs and make invalidation explicit.
 export const classificationKeys = {
   all: ['classification'] as const,
-  videos: () => [...classificationKeys.all, 'videos'] as const,
+  jobs: (params?: JobListParams) => [...classificationKeys.all, 'jobs', params] as const,
 };
 
 // ── Queries ──────────────────────────────────────────────────────────
 
 /**
- * Fetch all videos for the classification workflow.
+ * Fetch jobs for classification workflow.
+ * Supports filter params (status, category, limit, offset).
  */
-export function useVideos() {
-  return useQuery({
-    queryKey: classificationKeys.videos(),
-    queryFn: classificationRepository.getVideos,
+export function useJobs(params?: JobListParams) {
+  return useQuery<JobListResponse>({
+    queryKey: classificationKeys.jobs(params),
+    queryFn: () => classificationRepository.getJobs(params),
   });
 }
 
 // ── Mutations ────────────────────────────────────────────────────────
 
 /**
- * Update a video's JBI classification status.
- * Automatically invalidates the video list on success.
- *
- * @param onSuccess — optional callback after mutation succeeds (e.g. auto-advance)
+ * Update a job's sign language category (SIBI / BISINDO).
+ * Automatically invalidates the job list on success.
  */
-export function useUpdateVideoStatus(onSuccess?: (data: ReturnType<typeof classificationRepository.updateVideoStatus> extends Promise<infer T> ? T : never) => void) {
+export function useUpdateCategory(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: VideoStatus }) =>
-      classificationRepository.updateVideoStatus(id, status),
+    mutationFn: ({ jobId, category }: { jobId: string; category: 'SIBI' | 'BISINDO' }) =>
+      classificationRepository.updateCategory(jobId, category),
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: classificationKeys.all });
+      onSuccess?.();
+    },
+  });
+}
+
+/**
+ * Upload a new video file to create a processing job.
+ * Invalidates job list on success.
+ */
+export function useUploadJob(onSuccess?: (data: ReturnType<typeof classificationRepository.uploadVideo> extends Promise<infer T> ? T : never) => void) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ file, category }: { file: File; category?: 'SIBI' | 'BISINDO' }) =>
+      classificationRepository.uploadVideo(file, category),
 
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: classificationKeys.videos() });
+      queryClient.invalidateQueries({ queryKey: classificationKeys.all });
       onSuccess?.(data);
     },
   });

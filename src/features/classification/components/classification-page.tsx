@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CheckCircle, Layout, Loader2, AlertCircle } from 'lucide-react';
-import { useVideos, useUpdateVideoStatus } from '@/features/classification/hooks/use-classification';
-import { VideoStatus } from '@/features/classification/types/classification.types';
+import { CheckCircle, Layout, Loader2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useJobs, useUpdateCategory } from '@/features/classification/hooks/use-classification';
+import type { CategoryStatus, JobListParams } from '@/features/classification/types/classification.types';
 import { useTour } from '@/shared/components/tour';
 import { classificationTour } from '../classification.tour';
 import { VideoList } from './video-list';
@@ -11,77 +11,102 @@ import { VideoPlayer } from './video-player';
 import { CategorizationPanel } from './categorization-panel';
 import { VideoUploadModal } from './video-upload-modal';
 
+type FilterValue = 'all' | CategoryStatus;
+
 /**
  * Classification page — main orchestrator.
  *
- * Manages local UI state (selected video, filter, search) and delegates
+ * Manages local UI state (selected job, filter, search, pagination) and delegates
  * rendering to decomposed child components.
  */
 export function ClassificationPage() {
-  const { data: videos = [], isLoading, isError, refetch } = useVideos();
-  const { mutate: updateStatus, isPending } = useUpdateVideoStatus();
-
-  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | VideoStatus>('all');
+  // ── State ────────────────────────────────────────────────────────────
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterValue>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [page, setPage] = useState(0); // offset-based pagination
+  const PAGE_SIZE = 20;
+
+  // ── Build query params ───────────────────────────────────────────────
+  const params: JobListParams = {
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
+  };
+  // Map filter to API category param (only for SIBI/BISINDO, not 'all'/'uncategorized')
+  if (filter === 'SIBI' || filter === 'BISINDO') {
+    params.category = filter;
+  }
+
+  // ── Data fetching ────────────────────────────────────────────────────
+  const { data, isLoading, isError, refetch } = useJobs(params);
+  const jobs = data?.jobs || [];
+  const totalJobs = data?.total || 0;
+  const totalPages = Math.ceil(totalJobs / PAGE_SIZE);
+
+  const { mutate: updateCategory, isPending } = useUpdateCategory();
+
   const { startTour, activeTour, hasCompletedTour } = useTour();
 
   // ── Tour Trigger ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!isLoading && videos.length > 0 && !activeTour && !hasCompletedTour(classificationTour.id)) {
+    if (!isLoading && jobs.length > 0 && !activeTour && !hasCompletedTour(classificationTour.id)) {
       const timer = setTimeout(() => {
         startTour(classificationTour);
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [isLoading, videos.length, activeTour, hasCompletedTour, startTour]);
+  }, [isLoading, jobs.length, activeTour, hasCompletedTour, startTour]);
 
-  // Derive effective selected video — falls back to first video when nothing is selected
-  const effectiveSelectedVideoId = selectedVideoId ?? (videos.length > 0 ? videos[0].id : null);
-  const selectedVideo = videos.find((v) => v.id === effectiveSelectedVideoId) ?? null;
+  // Derive effective selected job — falls back to first job when nothing is selected
+  const effectiveSelectedJobId = selectedJobId ?? (jobs.length > 0 ? jobs[0].job_id : null);
+  const selectedJob = jobs.find((j) => j.job_id === effectiveSelectedJobId) ?? null;
 
-  // Filtered + searched list
-  const filteredVideos = videos.filter((v) => {
-    const matchesFilter = filter === 'all' || v.status === filter;
+  // Filtered + searched list (client-side search; API handles category filter)
+  const filteredJobs = jobs.filter((j) => {
+    // For 'uncategorized' filter, do client-side filtering since API doesn't support null category filter
+    const matchesFilter =
+      filter === 'all' || filter === 'SIBI' || filter === 'BISINDO'
+        ? true
+        : j.category === 'uncategorized';
     const matchesSearch =
-      !searchQuery || v.title.toLowerCase().includes(searchQuery.toLowerCase());
+      !searchQuery || (j.video_title || '').toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
   });
 
-  // Count categorised videos for progress display
-  const categorisedCount = videos.filter(
-    (v) => v.status === 'sibi' || v.status === 'bisindo',
+  // Count categorised jobs for progress display
+  const categorisedCount = jobs.filter(
+    (j) => j.category === 'SIBI' || j.category === 'BISINDO',
   ).length;
 
   // Handle keyboard shortcuts (1 = SIBI, 2 = BISINDO)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!selectedVideo || isPending) return;
+      if (!selectedJob || isPending) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === '1') handleCategorize('sibi');
-      if (e.key === '2') handleCategorize('bisindo');
+      if (e.key === '1') handleCategorize('SIBI');
+      if (e.key === '2') handleCategorize('BISINDO');
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedVideo, isPending]);
+  }, [selectedJob, isPending]);
 
   // ── Handlers ────────────────────────────────────────────────────────
-  function handleCategorize(status: VideoStatus) {
-    if (!selectedVideo) return;
-    updateStatus(
-      { id: selectedVideo.id, status },
+  function handleCategorize(category: 'SIBI' | 'BISINDO') {
+    if (!selectedJob) return;
+    updateCategory(
+      { jobId: selectedJob.job_id, category },
       {
         onSuccess: () => {
           setShowToast(true);
           setTimeout(() => setShowToast(false), 2000);
-          // Auto-advance to next uncategorized video
-          const nextVideo = videos.find(
-            (v) => v.id !== selectedVideo.id && v.status === 'uncategorized',
+          // Auto-advance to next uncategorized job
+          const nextJob = jobs.find(
+            (j) => j.job_id !== selectedJob.job_id && j.category === 'uncategorized',
           );
-          if (nextVideo) setSelectedVideoId(nextVideo.id);
+          if (nextJob) setSelectedJobId(nextJob.job_id);
         },
       },
     );
@@ -132,16 +157,38 @@ export function ClassificationPage() {
         </div>
         <div className="text-right">
           <p className="text-sm font-medium text-gray-700">
-            Progress: {categorisedCount}/{videos.length} Video
+            Progress: {categorisedCount}/{totalJobs} Video
           </p>
           <div className="w-48 h-2 bg-gray-200 rounded-full mt-1 overflow-hidden">
             <div
               className="h-full bg-teal-500 rounded-full transition-all duration-300"
               style={{
-                width: `${videos.length > 0 ? (categorisedCount / videos.length) * 100 : 0}%`,
+                width: `${totalJobs > 0 ? (categorisedCount / totalJobs) * 100 : 0}%`,
               }}
             />
           </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-end gap-2 mt-2">
+              <button
+                disabled={page === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                className="p-1 rounded hover:bg-gray-100 disabled:opacity-40 transition-colors"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="text-xs text-gray-500">
+                {page + 1} / {totalPages}
+              </span>
+              <button
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage((p) => p + 1)}
+                className="p-1 rounded hover:bg-gray-100 disabled:opacity-40 transition-colors"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -149,22 +196,22 @@ export function ClassificationPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel — Video List */}
         <VideoList
-          videos={filteredVideos}
-          selectedVideoId={effectiveSelectedVideoId}
+          jobs={filteredJobs}
+          selectedJobId={effectiveSelectedJobId}
           filter={filter}
           searchQuery={searchQuery}
-          onSelectVideo={setSelectedVideoId}
+          onSelectJob={setSelectedJobId}
           onFilterChange={setFilter}
           onSearchChange={setSearchQuery}
         />
 
         {/* Right Panel — Player + Categorisation */}
         <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50">
-          {selectedVideo ? (
+          {selectedJob ? (
             <>
-              <VideoPlayer video={selectedVideo} />
+              <VideoPlayer job={selectedJob} />
               <CategorizationPanel
-                video={selectedVideo}
+                job={selectedJob}
                 isPending={isPending}
                 onCategorize={handleCategorize}
               />
@@ -189,9 +236,9 @@ export function ClassificationPage() {
       <VideoUploadModal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
-        onUploadSuccess={(video) => {
-          refetch(); // Refetch the list to include the newly uploaded video
-          setSelectedVideoId(video.id); // Auto select the new video
+        onUploadSuccess={(jobId) => {
+          refetch();
+          setSelectedJobId(jobId);
         }}
       />
     </>
