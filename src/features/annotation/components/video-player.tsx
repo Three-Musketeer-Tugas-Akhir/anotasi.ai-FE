@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Play, Pause, Settings2 } from 'lucide-react';
+import { Play, Pause, Settings2, Video, Loader2, AlertTriangle } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,10 +20,6 @@ interface VideoPlayerProps {
   playbackRate: number;
   onPlaybackRateChange: (rate: number) => void;
   onDurationChange: (duration: number) => void;
-  onAddPrev?: () => void;
-  onAddNext?: () => void;
-  hasPrev?: boolean;
-  hasNext?: boolean;
 }
 
 export function VideoPlayer({
@@ -35,18 +31,34 @@ export function VideoPlayer({
   playbackRate,
   onPlaybackRateChange,
   onDurationChange,
-  onAddPrev,
-  onAddNext,
-  hasPrev = true,
-  hasNext = true,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+
+  // ── Build the playable video URL ──────────────────────────────
+  // The backend now returns video_url with an embedded streaming token:
+  //   /api/v1/assets/jobs/.../segment.mp4?token=eyJ...
+  // This can be used directly as <video src="..."> because the
+  // Next.js rewrite proxy forwards query params to the backend,
+  // which authenticates via the ?token= parameter.
+  useEffect(() => {
+    if (!src) {
+      setVideoUrl(null);
+      return;
+    }
+
+    // The src from the backend already contains ?token= for auth
+    // Just use it directly — the Next.js rewrite proxies it to backend
+    setVideoUrl(src);
+    setVideoError(null);
+  }, [src]);
 
   // Sync play state
   useEffect(() => {
     if (videoRef.current) {
       if (isPlaying && videoRef.current.paused) {
-        videoRef.current.play();
+        videoRef.current.play().catch(() => {});
       } else if (!isPlaying && !videoRef.current.paused) {
         videoRef.current.pause();
       }
@@ -69,41 +81,42 @@ export function VideoPlayer({
 
   return (
     <Card className="flex flex-col overflow-hidden border-gray-200 shadow-sm h-full max-h-[400px]">
-      {/* Top Action Bar for Video Context */}
-      <div className="bg-gray-50 p-2 flex justify-between items-center border-b border-gray-200 shrink-0">
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={onAddPrev} 
-          disabled={!hasPrev}
-          className="text-xs text-gray-600 h-8"
-        >
-          + Tambah Video Sebelumnya
-        </Button>
-        <span className="text-xs font-semibold text-gray-500">Video Chunk Utama</span>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={onAddNext} 
-          disabled={!hasNext}
-          className="text-xs text-gray-600 h-8"
-        >
-          + Tambah Video Selanjutnya
-        </Button>
+      {/* Video area */}
+      <div className="bg-black relative flex-1 flex items-center justify-center">
+        {videoError ? (
+          <div className="flex flex-col items-center justify-center text-red-400 py-12 px-4 text-center">
+            <AlertTriangle size={28} className="mb-2" />
+            <p className="text-xs">{videoError}</p>
+          </div>
+        ) : videoUrl ? (
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            className="w-full h-full object-contain"
+            onTimeUpdate={(e) => onTimeUpdate(e.currentTarget.currentTime)}
+            onDurationChange={(e) => onDurationChange(e.currentTarget.duration)}
+            onClick={() => onPlayPause(!isPlaying)}
+            onError={() => setVideoError('Gagal memuat video. Coba refresh halaman.')}
+            preload="metadata"
+          >
+            <track kind="captions" />
+          </video>
+        ) : !src ? (
+          <div className="flex flex-col items-center justify-center text-gray-500 py-12">
+            <Video size={32} className="opacity-40 mb-2" />
+            <p className="text-xs">Video belum tersedia</p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center text-gray-400 py-12">
+            <Loader2 size={28} className="animate-spin mb-2" />
+            <p className="text-xs">Memuat video...</p>
+          </div>
+        )}
       </div>
 
-      <div className="bg-black relative flex-1 flex items-center justify-center">
-        <video
-          ref={videoRef}
-          src={src}
-          className="w-full h-full object-contain"
-          onTimeUpdate={(e) => onTimeUpdate(e.currentTarget.currentTime)}
-          onDurationChange={(e) => onDurationChange(e.currentTarget.duration)}
-          onClick={() => onPlayPause(!isPlaying)}
-        />
-      </div>
+      {/* Controls */}
       <div className="bg-gray-50 flex items-center p-2 gap-2 border-t border-gray-200">
-        <Button variant="ghost" size="icon" onClick={() => onPlayPause(!isPlaying)}>
+        <Button variant="ghost" size="icon" onClick={() => onPlayPause(!isPlaying)} disabled={!videoUrl}>
           {isPlaying ? <Pause size={18} /> : <Play size={18} />}
         </Button>
 

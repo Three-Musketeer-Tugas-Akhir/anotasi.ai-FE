@@ -5,6 +5,8 @@ import { cn } from '@/shared/utils/cn';
 import { ClassificationJob, CategoryStatus } from '@/features/classification/types/classification.types';
 import { StatusBadge } from './status-badge';
 
+import { Button } from '@/components/ui/button';
+
 interface CategorizationPanelProps {
   job: ClassificationJob;
   isPending: boolean;
@@ -34,8 +36,8 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
         <div>
           <h2 className="text-lg font-bold text-slate-800">Kategorisasi JBI</h2>
           <p className="text-slate-500 text-sm">
-            Tonton video di atas. Tekan <strong>1</strong> untuk SIBI, <strong>2</strong> untuk
-            BISINDO.
+            Tonton video di atas, lalu klik tombol <strong>SIBI</strong> atau <strong>BISINDO</strong> sesuai
+            tipe bahasa isyarat yang digunakan.
           </p>
         </div>
         <div className="text-right">
@@ -74,12 +76,12 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-slate-800">SIBI</h3>
-              <span className="bg-gray-100 text-gray-500 text-[10px] px-1.5 py-0.5 rounded border border-gray-200">
-                Tekan 1
+              <span className="bg-teal-100 text-teal-600 text-[10px] px-1.5 py-0.5 rounded border border-teal-200">
+                Klik untuk pilih
               </span>
             </div>
             <p className="text-sm text-slate-500 mt-0.5">
-              Struktur lisan (S-P-O-K). Biasanya digunakan di TVRI/Berita Formal.
+              Bahasa isyarat satu tangan yang menyampaikan abjad, angka, dan kata dengan tata bahasa seperti bahasa Indonesia, termasuk awalan dan akhiran.
             </p>
           </div>
           {job.category === 'SIBI' && (
@@ -113,12 +115,12 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-slate-800">BISINDO</h3>
-              <span className="bg-gray-100 text-gray-500 text-[10px] px-1.5 py-0.5 rounded border border-gray-200">
-                Tekan 2
+              <span className="bg-emerald-100 text-emerald-600 text-[10px] px-1.5 py-0.5 rounded border border-emerald-200">
+                Klik untuk pilih
               </span>
             </div>
             <p className="text-sm text-slate-500 mt-0.5">
-              Bahasa alami (Visual Spasial). Ekspresif, sering tanpa imbuhan.
+              Bahasa isyarat dua tangan dengan struktur sederhana, tanpa imbuhan, menggunakan gestur dan ekspresi wajah, dan fleksibel dalam penggunaan.
             </p>
           </div>
           {job.category === 'BISINDO' && (
@@ -132,13 +134,15 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
       {/* Reset & Info */}
       <div className="mt-6 pt-4 border-t border-gray-100 flex justify-between items-center">
         {onReset && (
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onReset}
             disabled={isPending}
-            className="text-sm text-gray-500 hover:text-red-500 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors"
+            className="text-gray-500 hover:text-red-600 hover:bg-red-50 flex items-center gap-1.5"
           >
             <X size={14} /> Reset Status
-          </button>
+          </Button>
         )}
         <div className="text-xs text-gray-400">Job ID: {job.job_id}</div>
       </div>

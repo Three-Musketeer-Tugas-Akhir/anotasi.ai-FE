@@ -12,14 +12,12 @@ interface VideoUploadModalProps {
 
 export function VideoUploadModal({ isOpen, onClose, onUploadSuccess }: VideoUploadModalProps) {
   const [file, setFile] = useState<File | null>(null);
-  const [category, setCategory] = useState<'' | 'SIBI' | 'BISINDO'>('');
   const [error, setError] = useState<string | null>(null);
 
   const { mutate: upload, isPending } = useUploadJob((data) => {
     onUploadSuccess(String(data.id));
     onClose();
     setFile(null);
-    setCategory('');
     setError(null);
   });
 
@@ -34,7 +32,7 @@ export function VideoUploadModal({ isOpen, onClose, onUploadSuccess }: VideoUplo
 
     setError(null);
     upload(
-      { file, category: category || undefined },
+      { file },
       {
         onError: (err: unknown) => {
           const resp = (err as { response?: { data?: { detail?: string } } })?.response;
@@ -67,28 +65,7 @@ export function VideoUploadModal({ isOpen, onClose, onUploadSuccess }: VideoUplo
             </div>
           )}
 
-          {/* Category selector */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Kategori (opsional)
-            </label>
-            <div className="flex gap-2">
-              {(['', 'SIBI', 'BISINDO'] as const).map((opt) => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => setCategory(opt)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
-                    category === opt
-                      ? 'bg-teal-100 text-teal-700 border-teal-300'
-                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  {opt || 'Belum Diketahui'}
-                </button>
-              ))}
-            </div>
-          </div>
+
 
           {/* File picker */}
           <div>

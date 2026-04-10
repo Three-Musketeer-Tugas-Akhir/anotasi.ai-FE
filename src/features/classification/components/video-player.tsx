@@ -1,37 +1,55 @@
-'use client';
-
+import { useEffect, useState } from 'react';
 import { ClassificationJob } from '@/features/classification/types/classification.types';
+import { ZoomIn, ZoomOut } from 'lucide-react';
 
 interface VideoPlayerProps {
   job: ClassificationJob;
 }
 
 /**
- * Native HTML5 Video Player.
+ * Native HTML5 Video Player for the Classification page.
  *
- * For completed jobs (READY_FOR_ANNOTATION) we use the first segment's download URL.
- * For other jobs we show a placeholder since the original video isn't exposed via API.
+ * Uses /proxy-video server-side route to stream the original video
+ * from the backend's /pipeline/jobs/{jobId}/original endpoint with
+ * proper JWT authentication. Caps playback to 1 minute via #t=0,60
+ * to save bandwidth for long videos.
  *
- * NOTE: When jbi-service adds a dedicated video streaming/presigned URL endpoint,
- * simply update the URL construction below.
+ * Features a Zoom JBI button for detailed sign language inspection.
  */
 export function VideoPlayer({ job }: VideoPlayerProps) {
-  // Build video URL — use segment download if job is ready, otherwise no video
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://152.118.31.36:8000/api/v1';
-  const isReady = job.status === 'READY_FOR_ANNOTATION';
-  const videoUrl = isReady ? `${apiBase}/jobs/${job.job_id}/segments/0/download` : null;
+  const [token, setToken] = useState<string>('');
+  const [isMounted, setIsMounted] = useState(false);
+  const [isZoomed, setIsZoomed] = useState<boolean>(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    setToken(localStorage.getItem('auth_token') || '');
+  }, []);
+
+  // Build the video URL using the proxy-video server-side route.
+  // The proxy-video route forwards the JWT token to the backend
+  // and streams the response back with proper Range header support.
+  // #t=0,60 restricts playback to 1 minute max for large files.
+  const videoUrl = isMounted && token
+    ? `/proxy-video?jobId=${job.job_id}&token=${token}#t=0,60`
+    : null;
 
   return (
     <div id="tour-video-player">
-      {/* HTML5 Video Player */}
-      <div className="bg-black rounded-xl overflow-hidden shadow-lg aspect-video relative mb-3 z-0">
+      {/* HTML5 Video Player Container */}
+      <div className="bg-black rounded-xl overflow-hidden shadow-lg aspect-video max-h-[40vh] md:max-h-[45vh] lg:max-h-[50vh] relative mb-3 z-0 flex items-center justify-center group">
+
         {videoUrl ? (
           <video
             key={job.job_id}
             src={videoUrl}
             controls
             controlsList="nodownload"
-            className="absolute inset-0 w-full h-full"
+            preload="auto"
+            className={`absolute inset-0 w-full h-full transition-transform duration-500 ease-in-out ${isZoomed
+              ? 'object-cover origin-[100%_70%] scale-[4]'
+              : 'object-contain object-center'
+              }`}
           >
             Browser Anda tidak mendukung elemen video.
           </video>
@@ -40,37 +58,53 @@ export function VideoPlayer({ job }: VideoPlayerProps) {
             <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="5 3 19 12 5 21 5 3" />
             </svg>
-            <span className="text-sm">
-              {job.status === 'FAILED'
-                ? 'Video gagal diproses'
-                : job.status === 'CANCELLED'
-                  ? 'Job dibatalkan'
-                  : 'Video sedang diproses...'}
-            </span>
-            {job.progress && (
-              <div className="w-48 mt-1">
-                <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-teal-500 rounded-full transition-all"
-                    style={{ width: `${job.progress.percent}%` }}
-                  />
-                </div>
-                <p className="text-xs text-slate-500 mt-1 text-center">
-                  {job.progress.phase} — {job.progress.percent.toFixed(0)}%
-                </p>
-              </div>
-            )}
+            <span className="text-sm">Video tidak tersedia</span>
           </div>
         )}
+
+        {/* Zoom Toggle feature for JBI detection */}
+        <button
+          onClick={() => setIsZoomed(!isZoomed)}
+          className={`absolute top-4 right-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium shadow-md transition-all ${isZoomed
+            ? 'bg-teal-600/90 text-white hover:bg-teal-500'
+            : 'bg-black/60 text-white backdrop-blur-sm hover:bg-black/80'
+            }`}
+          title="Zoom ke arah Juru Bahasa Isyarat"
+        >
+          {isZoomed ? (
+            <>
+              <ZoomOut size={16} />
+              Reset Zoom
+            </>
+          ) : (
+            <>
+              <ZoomIn size={16} />
+              Zoom JBI
+            </>
+          )}
+        </button>
       </div>
 
-      {/* Helper */}
-      <div className="flex justify-between items-center mb-6 px-1">
-        <p className="text-xs text-slate-400">
-          {isReady
-            ? 'Putar video untuk memeriksa apakah menggunakan SIBI atau BISINDO.'
-            : 'Video preview tersedia setelah pemrosesan selesai.'}
+      {/* Helper & Progress */}
+      <div className="flex justify-between items-end mb-6 px-1">
+        <p className="text-xs text-slate-400 max-w-[60%]">
+          Putar video untuk memeriksa apakah menggunakan SIBI atau BISINDO. Menampilkan pratinjau maksimal 1 menit untuk menghemat kuota memori.
         </p>
+
+        {/* Progress Bar from original implementation */}
+        {job.progress && job.status !== 'READY_FOR_ANNOTATION' && job.status !== 'COMPLETED' && (
+          <div className="w-48 text-right">
+            <p className="text-xs text-slate-500 mb-1">
+              Pemrosesan: {job.progress.phase} ({job.progress.percent.toFixed(0)}%)
+            </p>
+            <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden w-full flex justify-end">
+              <div
+                className="h-full bg-teal-500 rounded-full transition-all"
+                style={{ width: `${job.progress.percent}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

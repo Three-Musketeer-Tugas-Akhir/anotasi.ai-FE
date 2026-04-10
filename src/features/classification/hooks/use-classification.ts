@@ -49,8 +49,8 @@ export function useUploadJob(onSuccess?: (data: ReturnType<typeof classification
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ file, category }: { file: File; category?: 'SIBI' | 'BISINDO' }) =>
-      classificationRepository.uploadVideo(file, category),
+    mutationFn: ({ file }: { file: File }) =>
+      classificationRepository.uploadVideo(file),
 
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: classificationKeys.all });

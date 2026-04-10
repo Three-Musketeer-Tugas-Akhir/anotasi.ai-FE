@@ -68,18 +68,16 @@ export const classificationRepository = {
   },
 
   /**
-   * Upload a video to create a new processing job.
-   * POST /jobs (multipart form-data: file + optional category)
+   * Upload a video to create a new processing job via the new pipeline.
+   * POST /pipeline/jobs (multipart form-data: video)
    */
   uploadVideo: async (
     file: File,
-    category?: 'SIBI' | 'BISINDO',
   ): Promise<JobCreateResponse> => {
     const formData = new FormData();
-    formData.append('file', file);
-    if (category) formData.append('category', category);
+    formData.append('video', file);
 
-    const { data } = await apiClient.post<JobCreateResponse>('/jobs', formData, {
+    const { data } = await apiClient.post<JobCreateResponse>('/pipeline/jobs', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return data;

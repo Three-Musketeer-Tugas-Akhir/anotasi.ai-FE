@@ -5,6 +5,8 @@ import { cn } from '@/shared/utils/cn';
 import { ClassificationJob, CategoryStatus } from '@/features/classification/types/classification.types';
 import { StatusBadge } from './status-badge';
 
+import { Input } from '@/components/ui/input';
+
 const FILTER_OPTIONS: { value: 'all' | CategoryStatus; label: string }[] = [
   { value: 'all', label: 'Semua' },
   { value: 'uncategorized', label: 'Uncategorized' },
@@ -49,13 +51,13 @@ export function VideoList({
       {/* Filter & Search */}
       <div className="p-4 border-b border-gray-100 space-y-3">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+          <Input
             type="text"
             placeholder="Cari judul video..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            className="pl-9 bg-gray-50 border-gray-200"
           />
         </div>
         <div className="flex gap-2">

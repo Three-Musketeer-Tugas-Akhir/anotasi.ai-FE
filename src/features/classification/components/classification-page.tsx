@@ -10,6 +10,8 @@ import { VideoList } from './video-list';
 import { VideoPlayer } from './video-player';
 import { CategorizationPanel } from './categorization-panel';
 import { VideoUploadModal } from './video-upload-modal';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 type FilterValue = 'all' | CategoryStatus;
 
@@ -27,6 +29,7 @@ export function ClassificationPage() {
   const [showToast, setShowToast] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [page, setPage] = useState(0); // offset-based pagination
+  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, targetCategory: 'SIBI' | 'BISINDO' | null}>({ isOpen: false, targetCategory: null });
   const PAGE_SIZE = 20;
 
   // ── Build query params ───────────────────────────────────────────────
@@ -96,12 +99,29 @@ export function ClassificationPage() {
   // ── Handlers ────────────────────────────────────────────────────────
   function handleCategorize(category: 'SIBI' | 'BISINDO') {
     if (!selectedJob) return;
+
+    // Show confirmation modal if changing an already categorized job to a different category
+    if (
+      selectedJob.category !== 'uncategorized' &&
+      selectedJob.category !== null &&
+      selectedJob.category !== category
+    ) {
+      setConfirmModal({ isOpen: true, targetCategory: category });
+      return;
+    }
+
+    executeCategorize(category);
+  }
+
+  function executeCategorize(category: 'SIBI' | 'BISINDO') {
+    if (!selectedJob) return;
     updateCategory(
       { jobId: selectedJob.job_id, category },
       {
         onSuccess: () => {
           setShowToast(true);
           setTimeout(() => setShowToast(false), 2000);
+          setConfirmModal({ isOpen: false, targetCategory: null });
           // Auto-advance to next uncategorized job
           const nextJob = jobs.find(
             (j) => j.job_id !== selectedJob.job_id && j.category === 'uncategorized',
@@ -126,12 +146,12 @@ export function ClassificationPage() {
       <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 gap-3">
         <AlertCircle className="text-red-400" size={40} />
         <p className="text-gray-600">Gagal memuat data video.</p>
-        <button
+        <Button
           onClick={() => refetch()}
-          className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          className="bg-teal-600 hover:bg-teal-700 text-white"
         >
           Coba Lagi
-        </button>
+        </Button>
       </div>
     );
   }
@@ -148,12 +168,14 @@ export function ClassificationPage() {
           <p className="text-sm text-gray-500 mt-1">
             Tentukan apakah Juru Bahasa Isyarat menggunakan SIBI atau BISINDO
           </p>
-          <button
+          <Button
             onClick={() => setIsUploadModalOpen(true)}
-            className="mt-3 px-3 py-1.5 text-sm font-medium text-teal-700 bg-teal-100 rounded-md hover:bg-teal-200 transition-colors"
+            size="sm"
+            variant="secondary"
+            className="mt-3 text-teal-700 bg-teal-100 hover:bg-teal-200"
           >
             + Upload Video Baru
-          </button>
+          </Button>
         </div>
         <div className="text-right">
           <p className="text-sm font-medium text-gray-700">
@@ -170,23 +192,27 @@ export function ClassificationPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-end gap-2 mt-2">
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 disabled={page === 0}
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
-                className="p-1 rounded hover:bg-gray-100 disabled:opacity-40 transition-colors"
+                className="h-8 w-8 hover:bg-gray-100 text-gray-600 disabled:opacity-40"
               >
                 <ChevronLeft size={16} />
-              </button>
+              </Button>
               <span className="text-xs text-gray-500">
                 {page + 1} / {totalPages}
               </span>
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 disabled={page >= totalPages - 1}
                 onClick={() => setPage((p) => p + 1)}
-                className="p-1 rounded hover:bg-gray-100 disabled:opacity-40 transition-colors"
+                className="h-8 w-8 hover:bg-gray-100 text-gray-600 disabled:opacity-40"
               >
                 <ChevronRight size={16} />
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -206,7 +232,7 @@ export function ClassificationPage() {
         />
 
         {/* Right Panel — Player + Categorisation */}
-        <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50">
+        <div id="tour-video-area" className="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50 relative z-10">
           {selectedJob ? (
             <>
               <VideoPlayer job={selectedJob} />
@@ -241,6 +267,44 @@ export function ClassificationPage() {
           setSelectedJobId(jobId);
         }}
       />
+
+      {/* Confirmation Modal for changing category */}
+      <Dialog 
+        open={confirmModal.isOpen} 
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setConfirmModal({ isOpen: false, targetCategory: null });
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Konfirmasi Perubahan Klasifikasi</DialogTitle>
+            <DialogDescription>
+              Video ini sebelumnya sudah diklasifikasikan sebagai <strong>{selectedJob?.category}</strong>. 
+              Apakah Anda yakin ingin mengubah klasifikasinya menjadi <strong>{confirmModal.targetCategory}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setConfirmModal({ isOpen: false, targetCategory: null })}
+              disabled={isPending}
+            >
+              Batal
+            </Button>
+            <Button 
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+              onClick={() => {
+                if (confirmModal.targetCategory) {
+                  executeCategorize(confirmModal.targetCategory);
+                }
+              }}
+              disabled={isPending}
+            >
+              {isPending ? 'Menyimpan...' : 'Ya, Ubah Klasifikasi'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

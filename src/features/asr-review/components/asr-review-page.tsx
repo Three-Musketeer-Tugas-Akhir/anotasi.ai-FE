@@ -1,266 +1,331 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { FileText, Volume2, Clock, CheckCircle2, Video as VideoIcon } from 'lucide-react';
-import { useTour } from '@/shared/components/tour';
-import { asrReviewTour } from '../asr-review.tour';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import {
+  Volume2,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Edit3,
+  Flag,
+  Loader2,
+  RefreshCw,
+  Shield,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  Video,
+  Filter,
+} from 'lucide-react';
+import { asrReviewApi } from '../asr-review-api';
+import type { ASRReviewQueueItem } from '../asr-review-types';
+import { ASR_REVIEW_STATUS } from '../asr-review-types';
+import { AsrReviewDetailPanel } from './asr-review-detail-panel';
 
-// ── Types ──────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────
 
-interface Segment {
-  id: string;
-  startTime: number; // seconds
-  endTime: number;
-  text: string;
-}
-
-interface TxtFile {
-  id: string;
-  filename: string;
-  label: string; // short display label
-  segments: Segment[];
-}
-
-// ── Mock Data ──────────────────────────────────────────────────────
-
-const VIDEO_TITLE = '[FULL] 29 Korban Kapal Tenggelam Masih Hilang ｜ iNews Siang';
-const YOUTUBE_ID = 'wILYlf-_pv8';
-
-const MOCK_TXT_FILES: TxtFile[] = [
-  {
-    id: 'txt1',
-    filename: '0_[FULL] 29 Korban Kapal Tenggelam...iNews Siang_0_faster_whisper_medium_segments.txt',
-    label: 'ASR File #1',
-    segments: [
-      { id: 's1', startTime: 0, endTime: 4, text: 'Didorong-dorong saya dikejar sama beberapa orang.' },
-      { id: 's2', startTime: 4, endTime: 6, text: 'Nah, di situ langsung saya dikeroyok, Pak.' },
-      { id: 's3', startTime: 6, endTime: 9.5, text: 'Mereka membawa senjata tajam, tongkat, dan batu.' },
-      { id: 's4', startTime: 9.5, endTime: 13, text: 'Saya berusaha melarikan diri ke arah gang sempit.' },
-      { id: 's5', startTime: 13, endTime: 16.2, text: 'Tetapi dihalang oleh sekelompok pemuda lainnya.' },
-      { id: 's6', startTime: 16.2, endTime: 20, text: 'Akhirnya saya terjatuh dan tidak bisa bangkit lagi.' },
-      { id: 's7', startTime: 20, endTime: 24.5, text: 'Korban dibawa ke rumah sakit terdekat untuk perawatan.' },
-      { id: 's8', startTime: 24.5, endTime: 28, text: 'Polisi langsung mengamankan lokasi kejadian.' },
-    ],
-  },
-  {
-    id: 'txt2',
-    filename: '0_[FULL] 29 Korban Kapal Tenggelam...iNews Siang_1_faster_whisper_medium_segments.txt',
-    label: 'ASR File #2',
-    segments: [
-      { id: 's9', startTime: 28, endTime: 32, text: 'Saksi mata mengatakan kejadian berlangsung sangat cepat.' },
-      { id: 's10', startTime: 32, endTime: 36, text: 'Warga sekitar langsung melaporkan ke pihak kepolisian.' },
-      { id: 's11', startTime: 36, endTime: 40.5, text: 'Ambulans tiba di lokasi sekitar sepuluh menit kemudian.' },
-      { id: 's12', startTime: 40.5, endTime: 45, text: 'Petugas medis segera melakukan pertolongan pertama.' },
-      { id: 's13', startTime: 45, endTime: 49, text: 'Para pelaku berhasil melarikan diri sebelum polisi datang.' },
-    ],
-  },
-  {
-    id: 'txt3',
-    filename: '0_[FULL] 29 Korban Kapal Tenggelam...iNews Siang_2_faster_whisper_medium_segments.txt',
-    label: 'ASR File #3',
-    segments: [
-      { id: 's14', startTime: 49, endTime: 53, text: 'Kapolres menyatakan akan menyelidiki kasus ini secara tuntas.' },
-      { id: 's15', startTime: 53, endTime: 57, text: 'Pihak keluarga korban meminta keadilan dan perlindungan.' },
-      { id: 's16', startTime: 57, endTime: 61, text: 'Masyarakat diimbau untuk tetap tenang dan tidak main hakim sendiri.' },
-      { id: 's17', startTime: 61, endTime: 65, text: 'Polisi telah menyebar tim untuk mencari para pelaku.' },
-      { id: 's18', startTime: 65, endTime: 69, text: 'CCTV di sekitar lokasi sedang diperiksa sebagai barang bukti.' },
-      { id: 's19', startTime: 69, endTime: 73, text: 'Kasus ini menjadi perhatian serius aparat keamanan setempat.' },
-    ],
-  },
-];
-
-// ── Helpers ─────────────────────────────────────────────────────────
-
-function formatTime(seconds: number): string {
+function formatTime(seconds: number | null): string {
+  if (seconds === null || seconds === undefined) return '--:--';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
-  const ms = Math.round((seconds % 1) * 100);
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+function getConfidenceColor(score: number | null): string {
+  if (score === null) return 'bg-gray-400';
+  if (score >= 0.9) return 'bg-emerald-500';
+  if (score >= 0.5) return 'bg-amber-500';
+  return 'bg-red-500';
+}
+
+function getConfidenceLabel(score: number | null): string {
+  if (score === null) return 'N/A';
+  return `${Math.round(score * 100)}%`;
 }
 
 // ── Component ──────────────────────────────────────────────────────
 
 export function AsrReviewPage() {
-  const [activeFileId, setActiveFileId] = useState(MOCK_TXT_FILES[0].id);
-  const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const { startTour, activeTour, hasCompletedTour } = useTour();
+  // ── State ─────────────────────────────────────────────────────
+  const [items, setItems] = useState<ASRReviewQueueItem[]>([]);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [lowConfidenceCount, setLowConfidenceCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [lowConfidenceOnly, setLowConfidenceOnly] = useState(false);
+  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const activeFile = MOCK_TXT_FILES.find((f) => f.id === activeFileId) ?? MOCK_TXT_FILES[0];
-  const activeSegment = activeFile.segments.find((s) => s.id === activeSegmentId);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Tour trigger
+  // ── Fetch Queue ───────────────────────────────────────────────
+
+  const fetchQueue = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const data = await asrReviewApi.getQueue({
+          page,
+          page_size: pageSize,
+          low_confidence_only: lowConfidenceOnly,
+        });
+        setItems(data.items);
+        setTotalItems(data.total);
+        setTotalPages(data.pages);
+        setLowConfidenceCount(data.low_confidence_count);
+        setError(null);
+      } catch (err: unknown) {
+        const msg =
+          (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+          'Gagal memuat antrian review';
+        setError(typeof msg === 'string' ? msg : 'Gagal memuat antrian review');
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [page, pageSize, lowConfidenceOnly],
+  );
+
+  // Load on mount + filter change
   useEffect(() => {
-    if (!activeTour && !hasCompletedTour(asrReviewTour.id)) {
-      const timer = setTimeout(() => {
-        startTour(asrReviewTour);
-      }, 600);
-      return () => clearTimeout(timer);
-    }
-  }, [activeTour, hasCompletedTour, startTour]);
+    fetchQueue();
+  }, [fetchQueue]);
 
-  const handleSegmentClick = (segment: Segment) => {
-    setActiveSegmentId(segment.id);
-    if (iframeRef.current) {
-      const src = `https://www.youtube-nocookie.com/embed/${YOUTUBE_ID}?autoplay=1&start=${Math.floor(segment.startTime)}&rel=0&modestbranding=1`;
-      iframeRef.current.src = src;
+  // Polling every 10s
+  useEffect(() => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(() => fetchQueue(true), 10000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [fetchQueue]);
+
+  // Auto-select first item
+  useEffect(() => {
+    if (items.length > 0 && !selectedReviewId) {
+      setSelectedReviewId(items[0].review_id);
+    }
+  }, [items, selectedReviewId]);
+
+  // ── Handlers ──────────────────────────────────────────────────
+
+  const handleActionCompleted = () => {
+    // Refresh the queue after an action + move to next item
+    fetchQueue(true);
+    const currentIdx = items.findIndex((i) => i.review_id === selectedReviewId);
+    // Try selecting next item
+    if (currentIdx >= 0 && currentIdx < items.length - 1) {
+      setSelectedReviewId(items[currentIdx + 1].review_id);
+    } else if (items.length > 1) {
+      setSelectedReviewId(items[0].review_id);
+    } else {
+      setSelectedReviewId(null);
     }
   };
 
-  return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+  const handleFilterToggle = (checked: boolean) => {
+    setLowConfidenceOnly(checked);
+    setPage(1);
+    setSelectedReviewId(null);
+  };
 
+  // ── Render ────────────────────────────────────────────────────
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 flex-shrink-0 shadow-sm z-10 px-6 py-4">
-        <div className="flex items-center justify-between mb-4">
+      <header className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <Volume2 className="text-teal-600" size={22} />
-              Deteksi Suara (ASR) — Review Workspace
+            <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <Volume2 size={22} className="text-teal-600" />
+              ASR Review Workspace
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Review hasil deteksi suara. Klik segmen untuk melompat ke timestamp video.
+            <p className="text-sm text-gray-500 mt-0.5">
+              Review dan validasi hasil transkripsi otomatis (Whisper ASR)
             </p>
           </div>
-          <div className="bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 shadow-sm">
-            <VideoIcon size={14} />
-            {VIDEO_TITLE}
+          <div className="flex gap-3 items-center">
+            {/* Stats */}
+            <div className="flex gap-2 text-xs">
+              <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">
+                <Clock size={10} className="mr-1" />
+                {totalItems} Pending
+              </Badge>
+              {lowConfidenceCount > 0 && (
+                <Badge variant="outline" className="bg-red-50 text-red-600 border-red-200">
+                  <AlertTriangle size={10} className="mr-1" />
+                  {lowConfidenceCount} Low Confidence
+                </Badge>
+              )}
+            </div>
           </div>
-        </div>
-
-        {/* Bento file cards */}
-        <div id="tour-asr-file-tabs" className="grid grid-cols-3 gap-3">
-          {MOCK_TXT_FILES.map((file) => {
-            const isActive = file.id === activeFileId;
-            return (
-              <button
-                key={file.id}
-                onClick={() => {
-                  setActiveFileId(file.id);
-                  setActiveSegmentId(null);
-                }}
-                className={`text-left rounded-xl border p-3.5 transition-all ${
-                  isActive
-                    ? 'border-teal-400 bg-teal-50 ring-1 ring-teal-200 shadow-sm'
-                    : 'border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-white'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    isActive ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-500'
-                  }`}>
-                    <FileText size={16} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className={`text-sm font-bold ${isActive ? 'text-teal-700' : 'text-gray-700'}`}>{file.label}</p>
-                    <p className="text-[10px] text-gray-400 truncate mt-0.5" title={file.filename}>{file.filename}</p>
-                  </div>
-                  <Badge variant="outline" className={`text-[10px] flex-shrink-0 ${
-                    isActive ? 'bg-teal-600 text-white border-teal-600' : 'bg-gray-200 text-gray-600 border-gray-300'
-                  }`}>
-                    {file.segments.length}
-                  </Badge>
-                </div>
-              </button>
-            );
-          })}
         </div>
       </header>
 
-      {/* Split Workspace: segments (main) + video (secondary) */}
       <div className="flex-1 flex overflow-hidden">
-
-        {/* Left: Segments (the MAIN panel — wider) */}
-        <div id="tour-asr-segments" className="flex-1 bg-white flex flex-col">
-          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 flex-shrink-0">
+        {/* ──── Left: Queue List ──── */}
+        <div className="w-80 min-w-[320px] bg-white border-r border-gray-200 flex flex-col">
+          {/* Filter Bar */}
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <FileText size={14} className="text-teal-600" />
-              <span className="text-sm font-bold text-slate-700">{activeFile.label}</span>
-              <span className="text-xs text-slate-400">— {activeFile.segments.length} segmen</span>
+              <Filter size={12} className="text-gray-400" />
+              <Label htmlFor="low-conf-toggle" className="text-[10px] font-medium text-gray-500 uppercase tracking-wider cursor-pointer">
+                Low Confidence
+              </Label>
+              <Switch
+                id="low-conf-toggle"
+                checked={lowConfidenceOnly}
+                onCheckedChange={handleFilterToggle}
+                className="scale-75"
+              />
             </div>
-            <div className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-1 rounded flex items-center">
-              <CheckCircle2 size={10} className="mr-1" /> READ ONLY
-            </div>
+            <button
+              onClick={() => fetchQueue()}
+              className="p-1 rounded text-gray-400 hover:text-teal-600 hover:bg-gray-100 transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw size={14} />
+            </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="space-y-2.5">
-              {activeFile.segments.map((seg, idx) => {
-                const isActive = seg.id === activeSegmentId;
-                return (
-                  <button
-                    key={seg.id}
-                    onClick={() => handleSegmentClick(seg)}
-                    className={`w-full text-left rounded-xl border p-4 transition-all relative overflow-hidden group ${
-                      isActive
-                        ? 'border-teal-300 bg-teal-50 ring-2 ring-teal-500/20 shadow-sm'
-                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50 hover:shadow-sm'
-                    }`}
-                  >
-                    {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-teal-500" />}
-
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className={`text-[10px] font-mono px-2 py-0.5 rounded border flex items-center font-semibold ${
-                        isActive ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-600 border-slate-300 group-hover:border-slate-400'
-                      }`}>
-                        <Clock size={10} className="mr-1.5 opacity-80" />
-                        {formatTime(seg.startTime)} → {formatTime(seg.endTime)}
-                      </div>
-                      <span className={`text-[10px] font-bold ${isActive ? 'text-teal-500' : 'text-slate-400'}`}>
-                        SEGMEN {idx + 1}
-                      </span>
-                    </div>
-                    <p className={`text-sm leading-relaxed ${
-                      isActive ? 'text-teal-800 font-semibold' : 'text-slate-700 font-medium'
-                    }`}>
-                      {seg.text}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Video Player (secondary — narrower) */}
-        <div id="tour-asr-video" className="w-[420px] flex-shrink-0 border-l border-slate-200 bg-slate-900 flex flex-col">
-          {/* Video iframe */}
-          <div className="aspect-video relative flex-shrink-0">
-            <iframe
-              ref={iframeRef}
-              src={`https://www.youtube-nocookie.com/embed/${YOUTUBE_ID}?autoplay=0&rel=0&modestbranding=1`}
-              title="ASR Review Video"
-              className="absolute inset-0 w-full h-full"
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
-
-          {/* Subtitle display */}
-          <div className="flex-1 bg-slate-900/95 backdrop-blur-md px-5 py-4 border-t border-slate-800 flex flex-col justify-center">
-            {activeSegment ? (
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="bg-teal-500/20 text-teal-300 border border-teal-400/30 text-[10px] font-mono px-2 py-0.5 rounded-md font-bold">
-                    {formatTime(activeSegment.startTime)} → {formatTime(activeSegment.endTime)}
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-medium bg-slate-800 px-2 py-0.5 rounded-md">Segmen Aktif</span>
-                </div>
-                <p className="text-white/95 text-base font-medium leading-relaxed">
-                  &ldquo;{activeSegment.text}&rdquo;
+          {/* Queue Items */}
+          <ScrollArea className="flex-1">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 size={20} className="text-teal-600 animate-spin" />
+              </div>
+            ) : error ? (
+              <div className="p-4 text-center">
+                <AlertTriangle size={20} className="text-red-400 mx-auto mb-2" />
+                <p className="text-xs text-red-600 mb-2">{error}</p>
+                <Button variant="outline" size="sm" onClick={() => fetchQueue()}>
+                  Coba Lagi
+                </Button>
+              </div>
+            ) : items.length === 0 ? (
+              <div className="p-8 text-center">
+                <CheckCircle2 size={32} className="text-emerald-300 mx-auto mb-3" />
+                <p className="text-sm font-medium text-gray-500">
+                  {lowConfidenceOnly ? 'Tidak ada segmen low confidence' : 'Antrian review kosong'}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {lowConfidenceOnly
+                    ? 'Coba matikan filter untuk melihat semua segmen'
+                    : 'Semua segmen telah di-review atau belum ada yang diproses'}
                 </p>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center text-slate-500 text-center">
-                <Volume2 size={20} className="mb-2 opacity-50" />
-                <p className="text-xs font-medium">Klik segmen di panel kiri</p>
-                <p className="text-[10px] text-slate-600 mt-0.5">Video akan meloncat ke timestamp</p>
-              </div>
+              <>
+                {items.map((item) => {
+                  const isSelected = item.review_id === selectedReviewId;
+                  const confColor = getConfidenceColor(item.confidence_score);
+                  return (
+                    <button
+                      key={item.review_id}
+                      onClick={() => setSelectedReviewId(item.review_id)}
+                      className={`block w-full text-left px-4 py-3.5 border-b border-gray-100 transition-all ${
+                        isSelected
+                          ? 'bg-teal-50 border-l-[3px] border-l-teal-500'
+                          : 'hover:bg-gray-50 border-l-[3px] border-l-transparent'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Confidence dot */}
+                        <div className="mt-1.5">
+                          <div className={`w-2.5 h-2.5 rounded-full ${confColor} flex-shrink-0`} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          {/* Filename */}
+                          <p className={`text-xs font-medium truncate ${isSelected ? 'text-teal-800' : 'text-gray-700'}`}>
+                            {item.original_filename}
+                          </p>
+
+                          {/* ASR text preview */}
+                          <p className="text-[11px] text-gray-500 mt-1 line-clamp-2 leading-relaxed">
+                            &ldquo;{item.asr_text}&rdquo;
+                          </p>
+
+                          {/* Meta row */}
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            <span className="text-[10px] font-mono text-gray-400">
+                              {formatTime(item.asr_start)} → {formatTime(item.asr_end)}
+                            </span>
+                            <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${
+                              item.is_low_confidence
+                                ? 'bg-red-50 text-red-600 border-red-200'
+                                : 'bg-gray-50 text-gray-500 border-gray-200'
+                            }`}>
+                              <Shield size={8} className="mr-0.5" />
+                              {getConfidenceLabel(item.confidence_score)}
+                            </Badge>
+                            {item.requires_attention && (
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-amber-50 text-amber-600 border-amber-200">
+                                <AlertTriangle size={8} className="mr-0.5" />
+                                Perhatian
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </>
             )}
-          </div>
+          </ScrollArea>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="px-4 py-2 border-t border-gray-100 flex items-center justify-between">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="h-7 text-xs"
+              >
+                <ChevronLeft size={14} />
+              </Button>
+              <span className="text-[10px] text-gray-400">
+                Hal {page}/{totalPages}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="h-7 text-xs"
+              >
+                <ChevronRight size={14} />
+              </Button>
+            </div>
+          )}
         </div>
+
+        {/* ──── Right: Detail Panel ──── */}
+        {selectedReviewId ? (
+          <AsrReviewDetailPanel
+            key={selectedReviewId}
+            reviewId={selectedReviewId}
+            onActionCompleted={handleActionCompleted}
+          />
+        ) : (
+          <div className="flex-1 flex items-center justify-center bg-gray-50">
+            <div className="text-center">
+              <Volume2 size={48} className="text-gray-300 mx-auto mb-3" />
+              <p className="text-sm text-gray-500">Pilih segmen dari daftar di kiri</p>
+              <p className="text-xs text-gray-400 mt-1">untuk me-review hasil transkripsi ASR</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
