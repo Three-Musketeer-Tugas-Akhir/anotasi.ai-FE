@@ -37,7 +37,7 @@ export function VideoPlayer({ job }: VideoPlayerProps) {
   return (
     <div id="tour-video-player">
       {/* HTML5 Video Player Container */}
-      <div className="bg-black rounded-xl overflow-hidden shadow-lg aspect-video max-h-[40vh] md:max-h-[45vh] lg:max-h-[50vh] relative mb-3 z-0 flex items-center justify-center group">
+      <div className="bg-black rounded-xl overflow-hidden shadow-lg aspect-video max-h-[40vh] md:max-h-[45vh] lg:max-h-[50vh] relative z-0 flex items-center justify-center group">
 
         {videoUrl ? (
           <video
@@ -85,14 +85,9 @@ export function VideoPlayer({ job }: VideoPlayerProps) {
         </button>
       </div>
 
-      {/* Helper & Progress */}
-      <div className="flex justify-between items-end mb-6 px-1">
-        <p className="text-xs text-slate-400 max-w-[60%]">
-          Putar video untuk memeriksa apakah menggunakan SIBI atau BISINDO. Menampilkan pratinjau maksimal 1 menit untuk menghemat kuota memori.
-        </p>
-
-        {/* Progress Bar from original implementation */}
-        {job.progress && job.status !== 'READY_FOR_ANNOTATION' && job.status !== 'COMPLETED' && (
+      {/* Progress */}
+      {job.progress && job.status !== 'READY_FOR_ANNOTATION' && job.status !== 'COMPLETED' && (
+        <div className="flex justify-end mt-2 px-1">
           <div className="w-48 text-right">
             <p className="text-xs text-slate-500 mb-1">
               Pemrosesan: {job.progress.phase} ({job.progress.percent.toFixed(0)}%)
@@ -104,8 +99,8 @@ export function VideoPlayer({ job }: VideoPlayerProps) {
               />
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
