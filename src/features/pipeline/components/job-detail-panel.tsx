@@ -744,7 +744,7 @@ function Stage1Content({
                 seg.bbox_data && seg.bbox_data.x_min != null
                   ? `BBox: ${seg.bbox_data.x_min.toFixed(0)}, ${seg.bbox_data.y_min.toFixed(0)} — ${seg.bbox_data.width.toFixed(0)}×${seg.bbox_data.height.toFixed(0)}`
                   : seg.bbox_data
-                    ? `Deteksi: ${(seg.bbox_data as Record<string, unknown>).frame_count ?? Object.keys(seg.bbox_data).length} data`
+                    ? `Deteksi: ${(seg.bbox_data as unknown as Record<string, unknown>).frame_count ?? Object.keys(seg.bbox_data).length} data`
                     : undefined
               )
             }
