@@ -10,9 +10,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/features/auth';
 import { useRouter } from 'next/navigation';
 import { USER_ROLE_LABELS } from '@/features/auth/types';
+import { useState } from 'react';
 
 /**
  * Top navigation bar with user profile, role badge, and notifications.
@@ -21,6 +31,7 @@ import { USER_ROLE_LABELS } from '@/features/auth/types';
 export function TopBar() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   const initials = user?.email
     ? user.email.substring(0, 2).toUpperCase()
@@ -66,19 +77,39 @@ export function TopBar() {
             </div>
             <ChevronDown size={14} className="text-gray-400" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="w-48 bg-white">
             <DropdownMenuItem onClick={() => router.push('/profile')} className="cursor-pointer">
               <User size={14} className="mr-2" />
               Profil Saya
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="text-red-600 cursor-pointer">
+            <DropdownMenuItem onClick={() => setIsLogoutModalOpen(true)} className="text-red-600 cursor-pointer">
               <LogOut size={14} className="mr-2" />
               Logout
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* Logout Confirmation Modal */}
+      <Dialog open={isLogoutModalOpen} onOpenChange={setIsLogoutModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Konfirmasi Logout</DialogTitle>
+            <DialogDescription>
+              Apakah Anda yakin ingin keluar dari aplikasi? Anda harus login kembali untuk mengakses sistem.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setIsLogoutModalOpen(false)}>
+              Batal
+            </Button>
+            <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={logout}>
+              Ya, Keluar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }
