@@ -12,13 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Combobox } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Package, Download, Loader2, CheckCircle2, FileDown, Calendar, Filter } from 'lucide-react';
@@ -79,18 +73,19 @@ export function ExportPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-500">Sumber</label>
-              <Select value={source} onValueChange={setSource}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih sumber" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Sumber</SelectItem>
-                  <SelectItem value="tvri">TVRI</SelectItem>
-                  <SelectItem value="metrotv">MetroTV</SelectItem>
-                  <SelectItem value="tvone">TVOne</SelectItem>
-                  <SelectItem value="kompastv">KompasTV</SelectItem>
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={[
+                  { value: "all", label: "Semua Sumber" },
+                  { value: "tvri", label: "TVRI" },
+                  { value: "metrotv", label: "MetroTV" },
+                  { value: "tvone", label: "TVOne" },
+                  { value: "kompastv", label: "KompasTV" }
+                ]}
+                value={source || ''}
+                onChange={(v) => setSource(v)}
+                placeholder="Pilih sumber"
+                className="w-full"
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-500 flex items-center gap-1">

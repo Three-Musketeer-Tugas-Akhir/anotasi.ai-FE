@@ -5,13 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Combobox } from '@/components/ui/combobox';
 import {
   Cog,
   Upload,
@@ -205,24 +199,22 @@ export function PipelinePage() {
               Jobs ({totalJobs})
             </p>
             <div className="flex items-center gap-2">
-              <Select
-                value={statusFilter}
-                onValueChange={(v) => { setStatusFilter(v === 'ALL' ? '' : v); setPage(1); }}
-              >
-                <SelectTrigger className="h-7 text-[10px] w-[100px]">
-                  <SelectValue placeholder="Semua" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Semua</SelectItem>
-                  <SelectItem value="QUEUED">Antrian</SelectItem>
-                  <SelectItem value="DETECTING">Deteksi</SelectItem>
-                  <SelectItem value="TRANSCRIBING">ASR</SelectItem>
-                  <SelectItem value="CROPPING">Cropping</SelectItem>
-                  <SelectItem value="READY_FOR_ANNOTATION">Selesai</SelectItem>
-                  <SelectItem value="FAILED">Gagal</SelectItem>
-                  <SelectItem value="CANCELLED">Dibatalkan</SelectItem>
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={[
+                  { value: "ALL", label: "Semua" },
+                  { value: "QUEUED", label: "Antrian" },
+                  { value: "DETECTING", label: "Deteksi" },
+                  { value: "TRANSCRIBING", label: "ASR" },
+                  { value: "CROPPING", label: "Cropping" },
+                  { value: "READY_FOR_ANNOTATION", label: "Selesai" },
+                  { value: "FAILED", label: "Gagal" },
+                  { value: "CANCELLED", label: "Dibatalkan" }
+                ]}
+                value={statusFilter || "ALL"}
+                placeholder="Semua"
+                onChange={(v) => { setStatusFilter(v === 'ALL' ? '' : v); setPage(1); }}
+                className="h-8 text-xs w-[120px]"
+              />
               <button
                 onClick={() => fetchJobs()}
                 className="p-1 rounded text-gray-400 hover:text-teal-600 hover:bg-gray-100 transition-colors"

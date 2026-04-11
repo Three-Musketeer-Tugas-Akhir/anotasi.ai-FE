@@ -12,12 +12,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  SelectValue, // Still keeping it just in case, or removing if not needed. But we'll remove it since we only use Combobox here. Wait, actually I will remove the Select block entirely and insert Combobox.
 } from '@/components/ui/select';
+import { Combobox } from '@/components/ui/combobox';
 import {
   Tooltip,
   TooltipContent,
@@ -472,15 +469,16 @@ export function JobDetailPanel({ jobId, onJobChanged }: JobDetailPanelProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            <Select value={job.category || ''} onValueChange={handleCategoryChange}>
-              <SelectTrigger className="w-[130px] h-8 text-xs">
-                <SelectValue placeholder="Kategori..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="SIBI">SIBI</SelectItem>
-                <SelectItem value="BISINDO">BISINDO</SelectItem>
-              </SelectContent>
-            </Select>
+            <Combobox
+              options={[
+                { value: "SIBI", label: "SIBI" },
+                { value: "BISINDO", label: "BISINDO" }
+              ]}
+              value={job.category || ''}
+              onChange={(value) => handleCategoryChange(value)}
+              placeholder="Kategori..."
+              className="w-[130px] h-8 text-xs"
+            />
 
             {isProcessing && (
               <Tooltip>

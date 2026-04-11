@@ -18,13 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Combobox } from '@/components/ui/combobox';
 import {
   ScrollText,
   ChevronLeft,
@@ -258,46 +252,45 @@ export function AuditPage() {
       <div className="flex items-end gap-3 flex-wrap">
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Aksi</label>
-          <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-48 h-9 text-xs">
-              <SelectValue placeholder="Semua Aksi" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua Aksi</SelectItem>
-              {availableFilters?.actions.map((a) => (
-                <SelectItem key={a.action} value={a.action}>{a.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Combobox
+            options={[
+              { value: "all", label: "Semua Aksi" },
+              ...(availableFilters?.actions.map(a => ({ value: a.action, label: a.label })) || [])
+            ]}
+            value={actionFilter || ''}
+            onChange={(v) => { setActionFilter(v); setPage(1); }}
+            placeholder="Semua Aksi"
+            className="w-48 h-9 text-xs"
+          />
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Resource</label>
-          <Select value={resourceFilter} onValueChange={(v) => { setResourceFilter(v); setPage(1); }}>
-            <SelectTrigger className="w-36 h-9 text-xs">
-              <SelectValue placeholder="Semua" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Semua</SelectItem>
-              {availableFilters?.resource_types.map((rt) => (
-                <SelectItem key={rt} value={rt}>{rt}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Combobox
+            options={[
+              { value: "all", label: "Semua" },
+              ...(availableFilters?.resource_types.map(rt => ({ value: rt, label: rt })) || [])
+            ]}
+            value={resourceFilter || ''}
+            onChange={(v) => { setResourceFilter(v); setPage(1); }}
+            placeholder="Semua"
+            className="w-36 h-9 text-xs"
+          />
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Per Halaman</label>
-          <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
-            <SelectTrigger className="w-24 h-9 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">10</SelectItem>
-              <SelectItem value="20">20</SelectItem>
-              <SelectItem value="50">50</SelectItem>
-            </SelectContent>
-          </Select>
+          <Combobox
+            options={[
+              { value: "10", label: "10" },
+              { value: "20", label: "20" },
+              { value: "50", label: "50" }
+            ]}
+            value={String(pageSize)}
+            onChange={(v) => { setPageSize(Number(v)); setPage(1); }}
+            placeholder="Pilih..."
+            className="w-24 h-9 text-xs"
+          />
         </div>
 
         <Badge variant="outline" className="h-9 px-3 bg-gray-50 text-gray-600 border-gray-200 gap-1">

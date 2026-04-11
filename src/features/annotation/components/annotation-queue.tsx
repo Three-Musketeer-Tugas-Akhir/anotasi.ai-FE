@@ -4,13 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Combobox } from '@/components/ui/combobox';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -208,17 +202,18 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId }: Annotati
         <>
           {/* Filter Bar */}
           <div className="px-3 py-2.5 border-b border-gray-100 flex items-center gap-2">
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-              <SelectTrigger className="h-7 text-[11px] flex-1">
-                <SelectValue placeholder="Filter status..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Status</SelectItem>
-                <SelectItem value="ASSIGNED">Menunggu</SelectItem>
-                <SelectItem value="IN_PROGRESS">Dikerjakan</SelectItem>
-                <SelectItem value="COMPLETED">Selesai</SelectItem>
-              </SelectContent>
-            </Select>
+            <Combobox
+              options={[
+                { value: "all", label: "Semua Status" },
+                { value: "ASSIGNED", label: "Menunggu" },
+                { value: "IN_PROGRESS", label: "Dikerjakan" },
+                { value: "COMPLETED", label: "Selesai" }
+              ]}
+              value={statusFilter || ''}
+              onChange={(v) => { setStatusFilter(v); setPage(1); }}
+              placeholder="Filter status..."
+              className="flex-1 h-8 text-xs bg-white text-slate-700"
+            />
             <button
               onClick={() => fetchQueue()}
               className="p-1.5 rounded text-gray-400 hover:text-teal-600 hover:bg-gray-100 transition-colors"

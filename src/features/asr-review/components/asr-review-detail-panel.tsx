@@ -5,13 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Combobox } from '@/components/ui/combobox';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -486,18 +480,13 @@ export function AsrReviewDetailPanel({ reviewId, onActionCompleted }: AsrReviewD
               <Label htmlFor="flag-reason" className="text-xs text-red-700">
                 Alasan *
               </Label>
-              <Select value={flagReason} onValueChange={(v) => setFlagReason(v as ASRFlagReason)}>
-                <SelectTrigger className="mt-1 text-sm">
-                  <SelectValue placeholder="Pilih alasan..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {FLAG_REASONS.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>
-                      {r.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={FLAG_REASONS.map(r => ({ value: r.value, label: r.label }))}
+                value={flagReason || ''}
+                onChange={(v) => setFlagReason(v as ASRFlagReason)}
+                placeholder="Pilih alasan..."
+                className="mt-1 w-full text-sm"
+              />
             </div>
             <div>
               <Label htmlFor="flag-notes" className="text-xs text-red-700">
