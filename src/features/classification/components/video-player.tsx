@@ -9,10 +9,12 @@ interface VideoPlayerProps {
 /**
  * Native HTML5 Video Player for the Classification page.
  *
- * Uses /proxy-video server-side route to stream the original video
- * from the backend's /pipeline/jobs/{jobId}/original endpoint with
- * proper JWT authentication. Caps playback to 1 minute via #t=0,60
- * to save bandwidth for long videos.
+ * Uses the /api/v1/assets endpoint to stream the original video
+ * directly from MinIO via the backend's Assets API. Authentication
+ * is handled through a ?token= query parameter (JWT) which the
+ * Assets API accepts as an alternative to the Authorization header.
+ *
+ * The MinIO object path follows: jobs/{job_id}/original/{filename}
  *
  * Features a Zoom JBI button for detailed sign language inspection.
  */
@@ -26,12 +28,13 @@ export function VideoPlayer({ job }: VideoPlayerProps) {
     setToken(localStorage.getItem('auth_token') || '');
   }, []);
 
-  // Build the video URL using the proxy-video server-side route.
-  // The proxy-video route forwards the JWT token to the backend
-  // and streams the response back with proper Range header support.
+  // Build the video URL using the Assets API endpoint.
+  // Path: /api/v1/assets/jobs/{job_id}/original/{filename}?token={jwt}
+  // The Next.js rewrite proxy forwards /api/* to the backend,
+  // and the backend authenticates via the ?token= query parameter.
   // #t=0,60 restricts playback to 1 minute max for large files.
-  const videoUrl = isMounted && token
-    ? `/proxy-video?jobId=${job.job_id}&token=${token}#t=0,60`
+  const videoUrl = isMounted && token && job.video_title
+    ? `/api/v1/assets/jobs/${job.job_id}/original/${encodeURIComponent(job.video_title)}?token=${token}#t=0,60`
     : null;
 
   return (
