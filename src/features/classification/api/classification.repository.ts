@@ -21,6 +21,7 @@ interface RawJobStatusResponse {
   error: string | null;
   created_at: string;
   updated_at: string;
+  original_video_url?: string;
 }
 
 interface RawJobListResponse {
@@ -48,7 +49,11 @@ export const classificationRepository = {
    * GET /jobs with optional filters + pagination.
    */
   getJobs: async (params?: JobListParams): Promise<JobListResponse> => {
-    const { data } = await apiClient.get<RawJobListResponse>('/jobs', { params });
+    // Tambahkan timeout panjang karena proses loading daftar mp4 original memakan waktu lama di backend
+    const { data } = await apiClient.get<RawJobListResponse>('/jobs', {
+      params,
+      timeout: 300000 // 5 minutes timeout
+    });
     return {
       ...data,
       jobs: data.jobs.map(mapJob),

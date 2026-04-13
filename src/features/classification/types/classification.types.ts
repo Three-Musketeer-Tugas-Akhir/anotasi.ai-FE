@@ -31,6 +31,7 @@ export interface ClassificationJob {
   error: string | null;
   created_at: string;
   updated_at: string;
+  original_video_url?: string;
 }
 
 /** List response from GET /jobs */
