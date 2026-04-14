@@ -4,6 +4,7 @@ import { QueryProvider } from '@/core/providers/query-provider';
 import { TourProvider, AppTour } from '@/shared/components/tour';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/features/auth';
+import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
 
 const inter = Inter({
@@ -35,6 +36,7 @@ export default function RootLayout({
             </AuthProvider>
           </TooltipProvider>
         </QueryProvider>
+        <Toaster />
       </body>
     </html>
   );

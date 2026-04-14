@@ -25,6 +25,14 @@ import type {
   SlangEntry,
 } from '../types';
 import { curationApi } from '../curation-api';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 // ── Mock Data ─────────────────────────────────────────────────────
 
@@ -230,31 +238,31 @@ export function CurationPage() {
             <h2 className="text-base font-bold text-slate-800">Video untuk Kurasi ({filtered.length})</h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  <th className="px-6 py-3 text-center w-12">#</th>
-                  <th className="px-6 py-3">Video</th>
-                  <th className="px-6 py-3 w-32">Sumber</th>
-                  <th className="px-6 py-3 w-28 text-center">Segmen</th>
-                  <th className="px-6 py-3 w-48 text-center">Status</th>
-                  <th className="px-6 py-3 w-56 text-center">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-sm">
+            <Table className="w-full text-left">
+              <TableHeader>
+                <TableRow className="bg-slate-50 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  <TableHead className="text-center w-12">#</TableHead>
+                  <TableHead>Video</TableHead>
+                  <TableHead className="w-32">Sumber</TableHead>
+                  <TableHead className="w-28 text-center">Segmen</TableHead>
+                  <TableHead className="w-48 text-center">Status</TableHead>
+                  <TableHead className="w-56 text-center">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="text-sm">
                 {filtered.map((v, i) => (
-                  <tr key={v.id} className={`hover:bg-slate-50 transition-colors ${v.status === 'READY_TO_EXPORT' ? 'bg-emerald-50/30' : v.status === 'NORMALIZED' ? 'bg-teal-50/20' : ''}`}>
-                    <td className="px-6 py-4 text-center text-slate-400 font-medium">{i + 1}</td>
-                    <td className="px-6 py-4">
+                  <TableRow key={v.id} className={`transition-colors ${v.status === 'READY_TO_EXPORT' ? 'bg-emerald-50/30' : v.status === 'NORMALIZED' ? 'bg-teal-50/20' : ''}`}>
+                    <TableCell className="text-center text-slate-400 font-medium">{i + 1}</TableCell>
+                    <TableCell>
                       <div className="flex items-center gap-2">
                         <FileText size={16} className="text-slate-400 flex-shrink-0" />
                         <span className="font-semibold text-slate-700 truncate max-w-[300px]">{v.filename}</span>
                       </div>
-                    </td>
-                    <td className="px-6 py-4"><span className="bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-1 rounded text-xs font-semibold">{v.source}</span></td>
-                    <td className="px-6 py-4 text-center font-mono text-slate-600">{v.segmentCount}</td>
-                    <td className="px-6 py-4 text-center"><CurationStatusBadge status={v.status} /></td>
-                    <td className="px-6 py-4 text-center">
+                    </TableCell>
+                    <TableCell><span className="bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-1 rounded text-xs font-semibold">{v.source}</span></TableCell>
+                    <TableCell className="text-center font-mono text-slate-600">{v.segmentCount}</TableCell>
+                    <TableCell className="text-center"><CurationStatusBadge status={v.status} /></TableCell>
+                    <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-2">
                         {v.status === 'ANNOTATED' && (
                           <>
@@ -277,16 +285,16 @@ export function CurationPage() {
                           </span>
                         )}
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
                 {filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium">Tidak ada video yang cocok dengan pencarian.</td>
-                  </tr>
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-slate-400 font-medium py-12">Tidak ada video yang cocok dengan pencarian.</TableCell>
+                  </TableRow>
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       </div>
@@ -344,32 +352,32 @@ export function CurationPage() {
             </div>
             
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold uppercase tracking-wider">
-                    <th className="px-4 py-3 text-center w-12 text-slate-400">#</th>
-                    <th className="px-4 py-3 w-[45%]">
+              <Table className="w-full text-left">
+                <TableHeader>
+                  <TableRow className="bg-slate-50 text-xs font-bold uppercase tracking-wider">
+                    <TableHead className="text-center w-12 text-slate-400">#</TableHead>
+                    <TableHead className="w-[45%]">
                       <span className="flex items-center gap-1.5 text-amber-700"><FileText size={14} /> Before (Teks Asli)</span>
-                    </th>
-                    <th className="px-2 py-3 w-8 text-center"></th>
-                    <th className="px-4 py-3 w-[45%]">
+                    </TableHead>
+                    <TableHead className="w-8 text-center"></TableHead>
+                    <TableHead className="w-[45%]">
                       <span className="flex items-center gap-1.5 text-teal-700"><Wand2 size={14} /> After (Hasil Normalisasi)</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="text-sm">
                   {activeVideo.segments.map((seg, i) => (
-                    <tr key={seg.id} className={seg.isEdited ? 'bg-teal-50/20' : ''}>
-                      <td className="px-4 py-5 text-center text-slate-400 font-mono align-top">{i + 1}</td>
-                      <td className="px-4 py-5 align-top">
+                    <TableRow key={seg.id} className={seg.isEdited ? 'bg-teal-50/20' : ''}>
+                      <TableCell className="text-center text-slate-400 font-mono align-top pt-5">{i + 1}</TableCell>
+                      <TableCell className="align-top">
                         <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-3.5 text-sm text-slate-700 leading-relaxed">
                           {seg.originalText}
                         </div>
-                      </td>
-                      <td className="px-2 py-5 text-center align-top pt-8">
+                      </TableCell>
+                      <TableCell className="text-center align-top pt-8">
                         <ArrowRight size={18} className="text-slate-300 mx-auto" />
-                      </td>
-                      <td className="px-4 py-5 align-top">
+                      </TableCell>
+                      <TableCell className="align-top">
                         {hasNormalized ? (
                           <div className="relative">
                             <textarea
@@ -393,11 +401,11 @@ export function CurationPage() {
                             Klik "Auto-Normalize" untuk memproses...
                           </div>
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
         </div>

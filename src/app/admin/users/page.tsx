@@ -9,6 +9,19 @@ import {
   Users, Plus, ChevronLeft, ChevronRight, Shield, Loader2, UserX, AlertTriangle,
   Search, Filter,
 } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+} from '@/components/ui/pagination';
 
 const ROLES = [
   { value: 'admin', label: 'Admin', color: 'bg-purple-100 text-purple-700 border-purple-200' },
@@ -187,38 +200,38 @@ export default function AdminUsersPage() {
         {/* Table */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Dibuat</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+            <Table className="w-full">
+              <TableHeader>
+                <TableRow className="bg-gray-50 border-b border-gray-200 hover:bg-gray-50">
+                  <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</TableHead>
+                  <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Role</TableHead>
+                  <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</TableHead>
+                  <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Dibuat</TableHead>
+                  <TableHead className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="divide-y divide-gray-100">
                 {loading ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center">
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-12">
                       <Loader2 size={24} className="animate-spin text-teal-600 mx-auto" />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : users.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-sm text-gray-400">
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-12 text-sm text-gray-400">
                       <Search size={32} className="mx-auto mb-2 text-gray-300" />
                       Tidak ada pengguna ditemukan
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   users.map((u) => (
-                    <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-4">
+                    <TableRow key={u.id} className="hover:bg-gray-50/50 transition-colors">
+                      <TableCell className="py-4">
                         <p className="text-sm font-medium text-gray-900">{u.email}</p>
                         <p className="text-xs text-gray-400 font-mono">{u.id.slice(0, 8)}...</p>
-                      </td>
-                      <td className="px-6 py-4">
+                      </TableCell>
+                      <TableCell className="py-4">
                         {changingRole === u.id ? (
                           <Loader2 size={14} className="animate-spin text-teal-600" />
                         ) : (
@@ -233,17 +246,17 @@ export default function AdminUsersPage() {
                             ))}
                           </select>
                         )}
-                      </td>
-                      <td className="px-6 py-4">
+                      </TableCell>
+                      <TableCell className="py-4">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${u.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
                           {u.is_active ? 'Aktif' : 'Non-aktif'}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
+                      </TableCell>
+                      <TableCell className="py-4 text-sm text-gray-500">
                         {new Date(u.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </td>
-                      <td className="px-6 py-4 text-right">
+                      </TableCell>
+                      <TableCell className="py-4 text-right">
                         {u.id !== user?.id && u.is_active && (
                           confirmDeactivate === u.id ? (
                             <div className="flex items-center gap-2 justify-end">
@@ -271,36 +284,42 @@ export default function AdminUsersPage() {
                             </button>
                           )
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
 
           {/* Pagination */}
           {pages > 1 && (
-            <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
               <p className="text-xs text-gray-500">
                 Halaman {page} dari {pages} · {total} pengguna
               </p>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-gray-600 transition-colors"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                <button
-                  onClick={() => setPage((p) => Math.min(pages, p + 1))}
-                  disabled={page >= pages}
-                  className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-gray-600 transition-colors"
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
+              <Pagination className="mx-0 w-auto">
+                <PaginationContent>
+                  <PaginationItem>
+                    <button
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page <= 1}
+                      className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-gray-600 transition-colors"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                  </PaginationItem>
+                  <PaginationItem>
+                    <button
+                      onClick={() => setPage((p) => Math.min(pages, p + 1))}
+                      disabled={page >= pages}
+                      className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-gray-600 transition-colors"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
             </div>
           )}
         </div>

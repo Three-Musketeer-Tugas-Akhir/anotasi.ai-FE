@@ -14,6 +14,14 @@ import {
   Settings, Activity, Save, Loader2, Shield, AlertTriangle, Server,
   Cpu, HardDrive, Clock, BarChart3, XCircle, CheckCircle2,
 } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 export default function AdminSystemPage() {
   const { user } = useAuth();
@@ -251,45 +259,45 @@ export default function AdminSystemPage() {
         {activeTab === 'failed' && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">File</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Stage</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Error</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Retry</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Waktu Gagal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
+              <Table className="w-full">
+                <TableHeader>
+                  <TableRow className="bg-gray-50 border-b border-gray-200">
+                    <TableHead className="text-left text-xs font-semibold text-gray-500 uppercase">File</TableHead>
+                    <TableHead className="text-left text-xs font-semibold text-gray-500 uppercase">Stage</TableHead>
+                    <TableHead className="text-left text-xs font-semibold text-gray-500 uppercase">Error</TableHead>
+                    <TableHead className="text-left text-xs font-semibold text-gray-500 uppercase">Retry</TableHead>
+                    <TableHead className="text-left text-xs font-semibold text-gray-500 uppercase">Waktu Gagal</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="divide-y divide-gray-100">
                   {failedJobs.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-5 py-12 text-center text-sm text-gray-400">
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-sm text-gray-400 py-12">
                         <CheckCircle2 size={32} className="mx-auto mb-2 text-green-300" />
                         Tidak ada job yang gagal
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ) : (
                     failedJobs.map((j) => (
-                      <tr key={j.job_id} className="hover:bg-gray-50/50">
-                        <td className="px-5 py-3 text-sm text-gray-900 max-w-[180px] truncate" title={j.original_filename}>
+                      <TableRow key={j.job_id} className="hover:bg-gray-50/50">
+                        <TableCell className="text-sm text-gray-900 max-w-[180px] truncate py-3" title={j.original_filename}>
                           {j.original_filename}
-                        </td>
-                        <td className="px-5 py-3">
+                        </TableCell>
+                        <TableCell className="py-3">
                           <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-1 rounded capitalize">{j.stage}</span>
-                        </td>
-                        <td className="px-5 py-3 text-sm text-red-600 max-w-[250px] truncate" title={j.error_message}>
+                        </TableCell>
+                        <TableCell className="text-sm text-red-600 max-w-[250px] truncate py-3" title={j.error_message}>
                           {j.error_message}
-                        </td>
-                        <td className="px-5 py-3 text-sm text-gray-500">{j.retry_count}</td>
-                        <td className="px-5 py-3 text-sm text-gray-500">
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-500 py-3">{j.retry_count}</TableCell>
+                        <TableCell className="text-sm text-gray-500 py-3">
                           {j.failed_at ? new Date(j.failed_at).toLocaleString('id-ID') : '-'}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
         )}

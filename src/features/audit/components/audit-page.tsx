@@ -18,6 +18,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+} from '@/components/ui/pagination';
 import { Combobox } from '@/components/ui/combobox';
 import {
   ScrollText,
@@ -401,18 +406,36 @@ export function AuditPage() {
       </Card>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between border-t border-gray-100 pt-4 mt-4">
         <p className="text-xs text-gray-500">
           Halaman {page} dari {pages} ({total} total log)
         </p>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="gap-1 text-xs">
-            <ChevronLeft size={14} /> Sebelumnya
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page >= pages} className="gap-1 text-xs">
-            Selanjutnya <ChevronRight size={14} />
-          </Button>
-        </div>
+        <Pagination className="mx-0 w-auto">
+          <PaginationContent>
+            <PaginationItem>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="gap-1 text-xs"
+              >
+                <ChevronLeft size={14} /> Sebelumnya
+              </Button>
+            </PaginationItem>
+            <PaginationItem>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(pages, p + 1))}
+                disabled={page >= pages}
+                className="gap-1 text-xs"
+              >
+                Selanjutnya <ChevronRight size={14} />
+              </Button>
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
       </div>
 
       {/* Detail Modal */}

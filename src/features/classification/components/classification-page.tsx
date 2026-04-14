@@ -12,6 +12,7 @@ import { CategorizationPanel } from './categorization-panel';
 import { VideoUploadModal } from './video-upload-modal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
 type FilterValue = 'all' | CategoryStatus;
 
@@ -26,7 +27,6 @@ export function ClassificationPage() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterValue>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showToast, setShowToast] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [page, setPage] = useState(0); // offset-based pagination
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, targetCategory: 'SIBI' | 'BISINDO' | null}>({ isOpen: false, targetCategory: null });
@@ -119,8 +119,9 @@ export function ClassificationPage() {
       { jobId: selectedJob.job_id, category },
       {
         onSuccess: () => {
-          setShowToast(true);
-          setTimeout(() => setShowToast(false), 2000);
+          toast("Berhasil Disimpan", {
+            description: `Video telah berhasil diklasifikasikan sebagai ${category}`,
+          });
           setConfirmModal({ isOpen: false, targetCategory: null });
           // Auto-advance to next uncategorized job
           const nextJob = jobs.find(
@@ -249,14 +250,6 @@ export function ClassificationPage() {
           )}
         </div>
       </div>
-
-      {/* Toast notification */}
-      {showToast && (
-        <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-in slide-in-from-bottom-5 z-50">
-          <CheckCircle size={18} />
-          <span className="text-sm font-medium">Status berhasil diperbarui!</span>
-        </div>
-      )}
 
       {/* Upload Modal */}
       <VideoUploadModal
