@@ -24,52 +24,19 @@ export interface CurationSegment {
   isEdited: boolean;
 }
 
-/** A video entering the curation dashboard */
+/** A video entering the curation dashboard (mapped from backend job) */
 export interface CurationVideo {
   id: string;
   filename: string;
   source: string;
+  category: 'SIBI' | 'BISINDO' | null;
   segmentCount: number;
   status: CurationStatus;
   segments: CurationSegment[];
 }
 
-/** Slang dictionary entry (CUR-03) */
+/** Slang dictionary entry (CUR-03) — kept for visual reference in UI */
 export interface SlangEntry {
   slang: string;
   standard: string;
-}
-
-// ── API Payloads ───────────────────────────────────────────────────
-
-/** POST /curation/videos/{id}/normalize */
-export interface NormalizeRequest {
-  videoId: string;
-}
-
-export interface NormalizeResponse {
-  videoId: string;
-  segments: CurationSegment[];
-}
-
-/** PATCH /curation/videos/{id}/segments/{segId} */
-export interface UpdateSegmentRequest {
-  videoId: string;
-  segmentId: string;
-  normalizedText: string;
-}
-
-/** POST /curation/videos/{id}/approve */
-export interface ApproveRequest {
-  videoId: string;
-}
-
-/** POST /curation/videos/approve-all */
-export interface ApproveAllRequest {
-  videoIds: string[];
-}
-
-export interface ApproveResponse {
-  success: boolean;
-  updatedCount: number;
 }

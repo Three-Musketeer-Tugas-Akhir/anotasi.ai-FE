@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import React from 'react';
 import {
   Search,
@@ -17,6 +17,7 @@ import {
   FileText,
   Pencil,
   ArrowRight,
+  RefreshCw,
 } from 'lucide-react';
 import type {
   CurationStatus,
@@ -25,6 +26,7 @@ import type {
   SlangEntry,
 } from '../types';
 import { curationApi } from '../curation-api';
+import { toast } from 'sonner';
 import {
   Table,
   TableBody,
@@ -34,9 +36,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-// ── Mock Data ─────────────────────────────────────────────────────
+// ── Slang Dictionary (visual reference — real normalization is on BE) ──
 
-const MOCK_SLANG_DICTIONARY: SlangEntry[] = [
+const SLANG_DICTIONARY: SlangEntry[] = [
   { slang: 'enggak', standard: 'tidak' },
   { slang: 'udah', standard: 'sudah' },
   { slang: 'gak', standard: 'tidak' },
@@ -53,66 +55,7 @@ const MOCK_SLANG_DICTIONARY: SlangEntry[] = [
   { slang: 'ngomong', standard: 'bicara' },
 ];
 
-const createSegments = (
-  pairs: [string, string][],
-): CurationSegment[] =>
-  pairs.map(([orig, norm], i) => ({
-    id: `seg-${i + 1}`,
-    originalText: orig,
-    normalizedText: norm,
-    isEdited: false,
-  }));
-
-const INITIAL_MOCK_VIDEOS: CurationVideo[] = [
-  {
-    id: 'cv-1',
-    filename: '0_[FULL] 29 Korban Kapal Tenggelam.mp4',
-    source: 'iNews',
-    segmentCount: 4,
-    status: 'ANNOTATED',
-    segments: createSegments([
-      ['Pukul 7 pagi, kapal mulai tenggelam.', ''],
-      ['Korban berjumlah 1, 2, 3, 4, 5, 6, 7 orang.', ''],
-      ['RP 10 titik 00 untuk biaya evakuasi.', ''],
-      ['Enggak ada yang udah siap kayak gitu.', ''],
-    ]),
-  },
-  {
-    id: 'cv-2',
-    filename: 'Sidang Kabinet Paripurna.mp4',
-    source: 'TVRI',
-    segmentCount: 3,
-    status: 'ANNOTATED',
-    segments: createSegments([
-      ['Rapat dimulai Pukul 0.07.00 di Istana.', ''],
-      ['Anggaran sebesar RP 10 titik 00 miliar.', ''],
-      ['Presiden bilang, "Udah enggak bisa ditunda lagi."', ''],
-    ]),
-  },
-  {
-    id: 'cv-3',
-    filename: 'Berita Utama Siang.mp4',
-    source: 'MetroTV',
-    segmentCount: 3,
-    status: 'NORMALIZED',
-    segments: createSegments([
-      ['Cuaca Ekstrem melanda 5 provinsi.', 'cuaca ekstrem melanda 5 provinsi.'],
-      ['Korban berjumlah 1, 2, 3 orang.', 'korban berjumlah 123 orang.'],
-      ['Bantuan senilai RP 10 titik 00 juta.', 'bantuan senilai 10.000 juta rupiah.'],
-    ]),
-  },
-  {
-    id: 'cv-4',
-    filename: 'Breaking News Gempa.mp4',
-    source: 'TVOne',
-    segmentCount: 2,
-    status: 'READY_TO_EXPORT',
-    segments: createSegments([
-      ['gempa berkekuatan 5,6 magnitudo.', 'gempa berkekuatan 5,6 magnitudo.'],
-      ['warga diminta tidak panik.', 'warga diminta tidak panik.'],
-    ]),
-  },
-];
+// ── Status Badge Component ──────────────────────────────────────────
 
 function CurationStatusBadge({ status }: { status: CurationStatus }) {
   const configs: Record<CurationStatus, { label: string; color: string; icon: React.ReactNode }> = {
@@ -130,15 +73,104 @@ function CurationStatusBadge({ status }: { status: CurationStatus }) {
   );
 }
 
+// ── Category Badge Component ────────────────────────────────────────
+
+function CategoryBadge({ category }: { category: string | null }) {
+  if (!category) return <span className="text-xs text-slate-400 italic">—</span>;
+  const color = category === 'SIBI'
+    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+    : 'bg-rose-50 text-rose-700 border-rose-200';
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${color}`}>
+      {category}
+    </span>
+  );
+}
+
+// ── Main Component ──────────────────────────────────────────────────
+
 export function CurationPage() {
-  const [videos, setVideos] = useState<CurationVideo[]>(INITIAL_MOCK_VIDEOS);
+  // ── State ──────────────────────────────────────────────────────────
+  const [videos, setVideos] = useState<CurationVideo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const [dictOpen, setDictOpen] = useState(true);
   const [normalizing, setNormalizing] = useState(false);
 
+  // ── Fetch curatable jobs from backend ──────────────────────────────
+
+  const fetchVideos = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const jobs = await curationApi.getCuratableJobs();
+
+      // Map backend jobs → CurationVideo with empty segments initially.
+      // Segments are loaded when the user opens a video for curation.
+      const mapped: CurationVideo[] = jobs.map((job) => ({
+        id: job.job_id,
+        filename: job.video_title || 'Untitled Video',
+        source: extractSource(job.video_title),
+        category: (job.category === 'SIBI' || job.category === 'BISINDO') ? job.category : null,
+        segmentCount: 0, // Will be updated when segments are loaded
+        status: 'ANNOTATED' as CurationStatus,
+        segments: [],
+      }));
+
+      setVideos(mapped);
+    } catch (err) {
+      console.error('Failed to fetch curatable jobs:', err);
+      setLoadError('Gagal memuat daftar video untuk kurasi. Silakan coba lagi.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchVideos();
+  }, [fetchVideos]);
+
+  // ── Load segments when opening a video ─────────────────────────────
+
+  const loadSegments = useCallback(async (videoId: string) => {
+    const video = videos.find((v) => v.id === videoId);
+    if (!video) return;
+
+    // Only fetch if segments haven't been loaded yet
+    if (video.segments.length > 0) {
+      setActiveVideoId(videoId);
+      return;
+    }
+
+    try {
+      const segments = await curationApi.getJobSegments(videoId);
+      setVideos((prev) =>
+        prev.map((v) =>
+          v.id === videoId
+            ? { ...v, segments, segmentCount: segments.length }
+            : v,
+        ),
+      );
+      setActiveVideoId(videoId);
+    } catch (err) {
+      console.error('Failed to load segments for video:', videoId, err);
+      toast.error('Gagal Memuat Segmen', {
+        description: 'Tidak dapat memuat transkrip segmen untuk video ini.',
+      });
+    }
+  }, [videos]);
+
+  // ── Derived state ──────────────────────────────────────────────────
+
   const activeVideo = videos.find((v) => v.id === activeVideoId) ?? null;
-  const filtered = videos.filter(v => !search || v.filename.toLowerCase().includes(search.toLowerCase()) || v.source.toLowerCase().includes(search.toLowerCase()));
+  const filtered = videos.filter(
+    (v) =>
+      !search ||
+      v.filename.toLowerCase().includes(search.toLowerCase()) ||
+      v.source.toLowerCase().includes(search.toLowerCase()),
+  );
 
   const counts = {
     needsCuration: videos.filter((v) => v.status === 'ANNOTATED' || v.status === 'NORMALIZING').length,
@@ -146,29 +178,64 @@ export function CurationPage() {
     approved: videos.filter((v) => v.status === 'READY_TO_EXPORT').length,
   };
 
+  // ── Handlers ───────────────────────────────────────────────────────
+
   const handleNormalize = useCallback(async (videoId: string) => {
     setNormalizing(true);
-    setVideos(prev => prev.map(v => (v.id === videoId ? { ...v, status: 'NORMALIZING' } : v)));
-    
-    const targetVideo = videos.find(v => v.id === videoId);
+    setVideos((prev) => prev.map((v) => (v.id === videoId ? { ...v, status: 'NORMALIZING' as CurationStatus } : v)));
+
+    const targetVideo = videos.find((v) => v.id === videoId);
     if (!targetVideo) { setNormalizing(false); return; }
 
+    // Make sure segments are loaded
+    let segments = targetVideo.segments;
+    if (segments.length === 0) {
+      try {
+        segments = await curationApi.getJobSegments(videoId);
+      } catch {
+        toast.error('Gagal Memuat Segmen', { description: 'Tidak bisa memuat segmen untuk normalisasi.' });
+        setVideos((prev) => prev.map((v) => (v.id === videoId ? { ...v, status: 'ANNOTATED' as CurationStatus } : v)));
+        setNormalizing(false);
+        return;
+      }
+    }
+
     try {
-      // Intentionally using the API logic that was built
-      const normalizedItems = await curationApi.normalizeSegments(targetVideo.segments);
-      setVideos(prev => prev.map(v => v.id === videoId ? { ...v, status: 'NORMALIZED', segments: normalizedItems } : v));
+      // Pass category for SIBI-specific normalization rules
+      const normalizedItems = await curationApi.normalizeSegments(segments, targetVideo.category);
+      setVideos((prev) =>
+        prev.map((v) =>
+          v.id === videoId
+            ? { ...v, status: 'NORMALIZED' as CurationStatus, segments: normalizedItems, segmentCount: normalizedItems.length }
+            : v,
+        ),
+      );
+      toast('Normalisasi Selesai', {
+        description: `${normalizedItems.length} segmen berhasil dinormalisasi.`,
+      });
     } catch (err) {
-      setVideos(prev => prev.map(v => v.id === videoId ? { ...v, status: 'ANNOTATED' } : v));
+      console.error('Normalization failed:', err);
+      setVideos((prev) => prev.map((v) => (v.id === videoId ? { ...v, status: 'ANNOTATED' as CurationStatus } : v)));
+      toast.error('Normalisasi Gagal', {
+        description: 'Terjadi kesalahan saat memproses normalisasi teks.',
+      });
     } finally {
       setNormalizing(false);
     }
   }, [videos]);
 
   const handleSegmentEdit = useCallback((videoId: string, segmentId: string, newText: string) => {
-    setVideos(prev => prev.map(v => {
-      if (v.id !== videoId) return v;
-      return { ...v, segments: v.segments.map(seg => seg.id === segmentId ? { ...seg, normalizedText: newText, isEdited: true } : seg) };
-    }));
+    setVideos((prev) =>
+      prev.map((v) => {
+        if (v.id !== videoId) return v;
+        return {
+          ...v,
+          segments: v.segments.map((seg) =>
+            seg.id === segmentId ? { ...seg, normalizedText: newText, isEdited: true } : seg,
+          ),
+        };
+      }),
+    );
   }, []);
 
   const handleApprove = useCallback(async (videoId: string) => {
@@ -180,16 +247,49 @@ export function CurationPage() {
         ),
       );
       setActiveVideoId(null);
-    } catch (e) {
-      console.error("Failed to approve video", e);
+      toast('Video Disetujui', {
+        description: 'Dataset telah dikunci dan siap untuk di-export.',
+      });
+    } catch (err) {
+      console.error('Failed to approve video:', err);
+      toast.error('Gagal Menyetujui', {
+        description: 'Terjadi kesalahan saat menyetujui video. Pastikan Anda memiliki akses curator/admin.',
+      });
     }
   }, []);
 
-  const handleApproveAll = useCallback(() => {
-    setVideos(prev => prev.map(v => v.status === 'NORMALIZED' ? { ...v, status: 'READY_TO_EXPORT' } : v));
-  }, []);
+  // ── Loading State ──────────────────────────────────────────────────
 
-  // --- Curation ListView ---
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <Loader2 size={32} className="text-teal-600 animate-spin mx-auto" />
+          <p className="text-sm text-slate-500">Memuat video untuk kurasi...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <AlertTriangle size={32} className="text-red-400 mx-auto" />
+          <p className="text-sm text-slate-600">{loadError}</p>
+          <button
+            onClick={fetchVideos}
+            className="flex items-center gap-2 mx-auto px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors"
+          >
+            <RefreshCw size={14} /> Coba Lagi
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ListView ───────────────────────────────────────────────────────
+
   if (!activeVideo) {
     return (
       <div className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:p-8 space-y-6">
@@ -211,6 +311,13 @@ export function CurationPage() {
             <div className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
               <CheckCircle2 size={14} /> {counts.approved} Approved
             </div>
+            <button
+              onClick={fetchVideos}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+              title="Refresh data"
+            >
+              <RefreshCw size={16} />
+            </button>
           </div>
         </div>
 
@@ -224,86 +331,98 @@ export function CurationPage() {
               className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm transition-all"
             />
           </div>
-          <div className="ml-auto">
-            {counts.normalized > 0 && (
-              <button onClick={handleApproveAll} className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-lg font-semibold text-sm shadow-sm transition-colors">
-                <ShieldCheck size={16} /> Approve All ({counts.normalized})
-              </button>
-            )}
-          </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-            <h2 className="text-base font-bold text-slate-800">Video untuk Kurasi ({filtered.length})</h2>
+        {videos.length === 0 ? (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
+            <CheckCircle2 size={40} className="mx-auto text-slate-300 mb-3" />
+            <h3 className="text-lg font-semibold text-slate-700">Belum Ada Video untuk Kurasi</h3>
+            <p className="text-sm text-slate-500 mt-1">
+              Video akan muncul di sini setelah pipeline selesai dan semua review anotasi disetujui.
+            </p>
           </div>
-          <div className="overflow-x-auto">
-            <Table className="w-full text-left">
-              <TableHeader>
-                <TableRow className="bg-slate-50 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  <TableHead className="text-center w-12">#</TableHead>
-                  <TableHead>Video</TableHead>
-                  <TableHead className="w-32">Sumber</TableHead>
-                  <TableHead className="w-28 text-center">Segmen</TableHead>
-                  <TableHead className="w-48 text-center">Status</TableHead>
-                  <TableHead className="w-56 text-center">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody className="text-sm">
-                {filtered.map((v, i) => (
-                  <TableRow key={v.id} className={`transition-colors ${v.status === 'READY_TO_EXPORT' ? 'bg-emerald-50/30' : v.status === 'NORMALIZED' ? 'bg-teal-50/20' : ''}`}>
-                    <TableCell className="text-center text-slate-400 font-medium">{i + 1}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <FileText size={16} className="text-slate-400 flex-shrink-0" />
-                        <span className="font-semibold text-slate-700 truncate max-w-[300px]">{v.filename}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell><span className="bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-1 rounded text-xs font-semibold">{v.source}</span></TableCell>
-                    <TableCell className="text-center font-mono text-slate-600">{v.segmentCount}</TableCell>
-                    <TableCell className="text-center"><CurationStatusBadge status={v.status} /></TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        {v.status === 'ANNOTATED' && (
-                          <>
-                            <button onClick={() => handleNormalize(v.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-teal-700 border border-teal-200 rounded-md hover:bg-teal-50 transition-colors">
-                              <Wand2 size={14} /> Auto-Norm
-                            </button>
-                            <button onClick={() => setActiveVideoId(v.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-teal-600 text-white rounded-md hover:bg-teal-700 shadow-sm transition-colors">
-                              <Pencil size={14} /> Kurasi
-                            </button>
-                          </>
-                        )}
-                        {v.status === 'NORMALIZED' && (
-                          <button onClick={() => setActiveVideoId(v.id)} className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-teal-600 text-white rounded-md hover:bg-teal-700 shadow-sm transition-colors w-full justify-center">
-                            <Pencil size={14} /> Review & Approve
-                          </button>
-                        )}
-                        {v.status === 'READY_TO_EXPORT' && (
-                          <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-md w-full justify-center">
-                            <CheckCircle2 size={14} /> Approved
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
+        ) : (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="text-base font-bold text-slate-800">Video untuk Kurasi ({filtered.length})</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <Table className="w-full text-left">
+                <TableHeader>
+                  <TableRow className="bg-slate-50 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <TableHead className="text-center w-12">#</TableHead>
+                    <TableHead>Video</TableHead>
+                    <TableHead className="w-32">Kategori</TableHead>
+                    <TableHead className="w-28 text-center">Segmen</TableHead>
+                    <TableHead className="w-48 text-center">Status</TableHead>
+                    <TableHead className="w-56 text-center">Aksi</TableHead>
                   </TableRow>
-                ))}
-                {filtered.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-slate-400 font-medium py-12">Tidak ada video yang cocok dengan pencarian.</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody className="text-sm">
+                  {filtered.map((v, i) => (
+                    <TableRow key={v.id} className={`transition-colors ${v.status === 'READY_TO_EXPORT' ? 'bg-emerald-50/30' : v.status === 'NORMALIZED' ? 'bg-teal-50/20' : ''}`}>
+                      <TableCell className="text-center text-slate-400 font-medium">{i + 1}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <FileText size={16} className="text-slate-400 flex-shrink-0" />
+                          <span className="font-semibold text-slate-700 truncate max-w-[300px]">{v.filename}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell><CategoryBadge category={v.category} /></TableCell>
+                      <TableCell className="text-center font-mono text-slate-600">
+                        {v.segmentCount > 0 ? v.segmentCount : '—'}
+                      </TableCell>
+                      <TableCell className="text-center"><CurationStatusBadge status={v.status} /></TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          {v.status === 'ANNOTATED' && (
+                            <>
+                              <button onClick={() => handleNormalize(v.id)} disabled={normalizing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-teal-700 border border-teal-200 rounded-md hover:bg-teal-50 transition-colors disabled:opacity-50">
+                                <Wand2 size={14} /> Auto-Norm
+                              </button>
+                              <button onClick={() => loadSegments(v.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-teal-600 text-white rounded-md hover:bg-teal-700 shadow-sm transition-colors">
+                                <Pencil size={14} /> Kurasi
+                              </button>
+                            </>
+                          )}
+                          {v.status === 'NORMALIZING' && (
+                            <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-teal-600">
+                              <Loader2 size={14} className="animate-spin" /> Memproses...
+                            </span>
+                          )}
+                          {v.status === 'NORMALIZED' && (
+                            <button onClick={() => loadSegments(v.id)} className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-teal-600 text-white rounded-md hover:bg-teal-700 shadow-sm transition-colors w-full justify-center">
+                              <Pencil size={14} /> Review & Approve
+                            </button>
+                          )}
+                          {v.status === 'READY_TO_EXPORT' && (
+                            <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-md w-full justify-center">
+                              <CheckCircle2 size={14} /> Approved
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filtered.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-slate-400 font-medium py-12">Tidak ada video yang cocok dengan pencarian.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
 
-  // --- Curation Workspace View ---
+  // ── Workspace View ─────────────────────────────────────────────────
+
   const hasNormalized = activeVideo.segments.some((s) => s.normalizedText.length > 0);
   const isApproved = activeVideo.status === 'READY_TO_EXPORT';
+  const emptyNormalizedCount = activeVideo.segments.filter((s) => s.normalizedText === '' && hasNormalized).length;
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
@@ -316,7 +435,10 @@ export function CurationPage() {
           <div className="w-px h-6 bg-slate-200"></div>
           <div>
             <h2 className="font-bold text-slate-800 text-base">{activeVideo.filename}</h2>
-            <p className="text-[11px] font-medium text-slate-500">{activeVideo.source} • {activeVideo.segmentCount} segmen</p>
+            <p className="text-[11px] font-medium text-slate-500">
+              {activeVideo.category && <><CategoryBadge category={activeVideo.category} /> · </>}
+              {activeVideo.segmentCount} segmen
+            </p>
           </div>
           <div className="ml-2"><CurationStatusBadge status={activeVideo.status} /></div>
         </div>
@@ -339,75 +461,101 @@ export function CurationPage() {
         </div>
       </div>
 
+      {/* Empty segments warning */}
+      {emptyNormalizedCount > 0 && hasNormalized && (
+        <div className="mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
+          <AlertTriangle size={14} className="text-amber-600 flex-shrink-0" />
+          <p className="text-xs text-amber-700">
+            <strong>{emptyNormalizedCount} segmen</strong> menghasilkan teks kosong setelah normalisasi (kemungkinan hanya berisi filler words). Anda dapat mengedit manual sebelum approve.
+          </p>
+        </div>
+      )}
+
       <div className="flex-1 flex overflow-hidden bg-slate-100/50">
         {/* Left: Editor Table */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                <FileText size={18} className="text-teal-600" />
-                Perbandingan Teks — Before & After
-              </h2>
-              <p className="text-xs text-slate-500 mt-1">Kolom "After" bisa diedit manual jika hasil normalisasi bot kurang tepat.</p>
+          {activeVideo.segments.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center space-y-3">
+                <Loader2 size={24} className="text-teal-600 animate-spin mx-auto" />
+                <p className="text-sm text-slate-500">Memuat segmen transkrip...</p>
+              </div>
             </div>
-            
-            <div className="overflow-x-auto">
-              <Table className="w-full text-left">
-                <TableHeader>
-                  <TableRow className="bg-slate-50 text-xs font-bold uppercase tracking-wider">
-                    <TableHead className="text-center w-12 text-slate-400">#</TableHead>
-                    <TableHead className="w-[45%]">
-                      <span className="flex items-center gap-1.5 text-amber-700"><FileText size={14} /> Before (Teks Asli)</span>
-                    </TableHead>
-                    <TableHead className="w-8 text-center"></TableHead>
-                    <TableHead className="w-[45%]">
-                      <span className="flex items-center gap-1.5 text-teal-700"><Wand2 size={14} /> After (Hasil Normalisasi)</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="text-sm">
-                  {activeVideo.segments.map((seg, i) => (
-                    <TableRow key={seg.id} className={seg.isEdited ? 'bg-teal-50/20' : ''}>
-                      <TableCell className="text-center text-slate-400 font-mono align-top pt-5">{i + 1}</TableCell>
-                      <TableCell className="align-top">
-                        <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-3.5 text-sm text-slate-700 leading-relaxed">
-                          {seg.originalText}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center align-top pt-8">
-                        <ArrowRight size={18} className="text-slate-300 mx-auto" />
-                      </TableCell>
-                      <TableCell className="align-top">
-                        {hasNormalized ? (
-                          <div className="relative">
-                            <textarea
-                              value={seg.normalizedText}
-                              onChange={(e) => handleSegmentEdit(activeVideo.id, seg.id, e.target.value)}
-                              disabled={isApproved}
-                              className={`w-full min-h-[72px] p-3.5 text-sm leading-relaxed rounded-lg resize-none outline-none transition-all border ${
-                                seg.isEdited
-                                  ? 'border-teal-400 bg-teal-50/50 focus:ring-2 focus:ring-teal-500/30'
-                                  : 'border-slate-200 bg-slate-50 focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-500/20'
-                              } ${isApproved ? 'opacity-70 cursor-not-allowed bg-slate-100 text-slate-500' : 'text-slate-800'}`}
-                            />
-                            {seg.isEdited && (
-                              <span className="absolute -top-2.5 -right-2 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm">
-                                Diedit Manual
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="bg-slate-50 border border-slate-200 border-dashed rounded-lg p-3.5 text-sm text-slate-400 italic flex items-center justify-center h-[72px]">
-                            Klik "Auto-Normalize" untuk memproses...
-                          </div>
-                        )}
-                      </TableCell>
+          ) : (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <FileText size={18} className="text-teal-600" />
+                  Perbandingan Teks — Before & After
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">Kolom &quot;After&quot; bisa diedit manual jika hasil normalisasi bot kurang tepat.</p>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <Table className="w-full text-left">
+                  <TableHeader>
+                    <TableRow className="bg-slate-50 text-xs font-bold uppercase tracking-wider">
+                      <TableHead className="text-center w-12 text-slate-400">#</TableHead>
+                      <TableHead className="w-[45%]">
+                        <span className="flex items-center gap-1.5 text-amber-700"><FileText size={14} /> Before (Teks Asli)</span>
+                      </TableHead>
+                      <TableHead className="w-8 text-center"></TableHead>
+                      <TableHead className="w-[45%]">
+                        <span className="flex items-center gap-1.5 text-teal-700"><Wand2 size={14} /> After (Hasil Normalisasi)</span>
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody className="text-sm">
+                    {activeVideo.segments.map((seg, i) => (
+                      <TableRow key={seg.id} className={seg.isEdited ? 'bg-teal-50/20' : ''}>
+                        <TableCell className="text-center text-slate-400 font-mono align-top pt-5">{i + 1}</TableCell>
+                        <TableCell className="align-top">
+                          <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-3.5 text-sm text-slate-700 leading-relaxed">
+                            {seg.originalText || <span className="text-slate-400 italic">Teks kosong</span>}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center align-top pt-8">
+                          <ArrowRight size={18} className="text-slate-300 mx-auto" />
+                        </TableCell>
+                        <TableCell className="align-top">
+                          {hasNormalized ? (
+                            <div className="relative">
+                              <textarea
+                                value={seg.normalizedText}
+                                onChange={(e) => handleSegmentEdit(activeVideo.id, seg.id, e.target.value)}
+                                disabled={isApproved}
+                                className={`w-full min-h-[72px] p-3.5 text-sm leading-relaxed rounded-lg resize-none outline-none transition-all border ${
+                                  seg.normalizedText === ''
+                                    ? 'border-amber-300 bg-amber-50/30'
+                                    : seg.isEdited
+                                    ? 'border-teal-400 bg-teal-50/50 focus:ring-2 focus:ring-teal-500/30'
+                                    : 'border-slate-200 bg-slate-50 focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-500/20'
+                                } ${isApproved ? 'opacity-70 cursor-not-allowed bg-slate-100 text-slate-500' : 'text-slate-800'}`}
+                              />
+                              {seg.isEdited && (
+                                <span className="absolute -top-2.5 -right-2 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm">
+                                  Diedit Manual
+                                </span>
+                              )}
+                              {seg.normalizedText === '' && !seg.isEdited && (
+                                <span className="absolute -top-2.5 -right-2 bg-amber-100 text-amber-700 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm">
+                                  Kosong
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="bg-slate-50 border border-slate-200 border-dashed rounded-lg p-3.5 text-sm text-slate-400 italic flex items-center justify-center h-[72px]">
+                              Klik &quot;Auto-Normalize&quot; untuk memproses...
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Right: Slang Dictionary Sidebar */}
@@ -424,7 +572,7 @@ export function CurationPage() {
           {dictOpen && (
             <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-slate-50/50">
               <div className="space-y-1.5">
-                {MOCK_SLANG_DICTIONARY.map((entry) => (
+                {SLANG_DICTIONARY.map((entry) => (
                   <div key={entry.slang} className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-slate-200 text-xs shadow-sm">
                     <span className="text-amber-600 font-mono font-medium line-through decoration-amber-600/40">{entry.slang}</span>
                     <ArrowRight size={12} className="text-slate-300 mx-2 flex-shrink-0" />
@@ -434,8 +582,9 @@ export function CurationPage() {
               </div>
               <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
                 <p className="text-[10px] text-blue-700 font-medium leading-relaxed">
-                  <span className="font-bold block mb-1 text-blue-800">Info Bot:</span>
-                  Normalisasi menggunakan pola Regex <code>\bword\b</code> (exact boundary) agar tidak mengubah kata di dalam kata lain.
+                  <span className="font-bold block mb-1 text-blue-800">Info:</span>
+                  Normalisasi otomatis dilakukan oleh backend. Kamus ini hanyalah referensi visual.
+                  Aturan tambahan diterapkan untuk kategori SIBI (pemetaan entitas, ejaan jari).
                 </p>
               </div>
             </div>
@@ -446,3 +595,21 @@ export function CurationPage() {
   );
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────
+
+/** Extract news source from video title (heuristic) */
+function extractSource(title: string | null): string {
+  if (!title) return 'Unknown';
+  const lower = title.toLowerCase();
+  if (lower.includes('inews')) return 'iNews';
+  if (lower.includes('tvri')) return 'TVRI';
+  if (lower.includes('metro')) return 'MetroTV';
+  if (lower.includes('tvone') || lower.includes('tv one')) return 'TVOne';
+  if (lower.includes('kompas')) return 'KompasTV';
+  if (lower.includes('trans7')) return 'Trans7';
+  if (lower.includes('trans')) return 'TransTV';
+  if (lower.includes('sctv')) return 'SCTV';
+  if (lower.includes('rcti')) return 'RCTI';
+  if (lower.includes('antv')) return 'ANTV';
+  return 'Berita';
+}
