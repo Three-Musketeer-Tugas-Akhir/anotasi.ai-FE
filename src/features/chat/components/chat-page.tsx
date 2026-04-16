@@ -128,7 +128,28 @@ export function ChatPage() {
   // ── WebSocket ────────────────────────────────────────────────────
 
   const handleIncomingMessage = useCallback((msg: ChatMessage) => {
-    setMessages((prev) => [...prev, msg]);
+    setMessages((prev) => {
+      // Prevent duplicate IDs (just in case)
+      if (prev.some((p) => p.id === msg.id)) {
+        return prev;
+      }
+
+      // Reconcile optimistic UI: check if there's a temporary message sent by us with the same content
+      const existingOptimisticIndex = prev.findIndex(
+        (p) => p.id.startsWith('temp-') && p.sender_id === msg.sender_id && p.content === msg.content
+      );
+
+      if (existingOptimisticIndex >= 0) {
+        // Replace the optimistic message with the real one from server
+        const newMessages = [...prev];
+        newMessages[existingOptimisticIndex] = msg;
+        return newMessages;
+      }
+
+      // Otherwise, just append
+      return [...prev, msg];
+    });
+    
     // Also re-mark as read since user is actively viewing
     if (selectedRoom) {
       chatApi.markAsRead(selectedRoom.id);
