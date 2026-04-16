@@ -13,8 +13,13 @@ const nextConfig: NextConfig = {
         source: '/api/:path*',
         destination: 'http://152.118.31.36:8000/api/:path*',
       },
+      {
+        source: '/ws/:path*',
+        destination: 'http://152.118.31.36:8000/ws/:path*',
+      },
     ];
   },
 };
 
 export default nextConfig;
+
