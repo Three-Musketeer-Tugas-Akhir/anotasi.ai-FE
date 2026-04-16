@@ -1,21 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { env } from '@/core/config/env';
 import type { ChatMessage, WSIncomingMessage } from '../types';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-/** Derive WebSocket base URL from the current environment. */
+/** Derive WebSocket base URL from the environment config. */
 function getWsBaseUrl(): string {
   if (typeof window === 'undefined') return '';
 
-  // If deployed on Vercel (or any proxy), use the browser origin
-  // and derive ws:// or wss:// from the protocol
-  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-
-  // If the API is proxied through Next.js rewrites, the WS path
-  // is also proxied via `/ws/...` → backend
-  return `${proto}//${window.location.host}`;
+  // Use the explicitly configured WS_URL so we connect directly
+  // to the backend instead of relying on Next.js rewrites.
+  return env.WS_URL;
 }
 
 // ── Hook Types ─────────────────────────────────────────────────────
