@@ -6,10 +6,11 @@
 // ── Status ─────────────────────────────────────────────────────────
 
 export type CurationStatus =
-  | 'ANNOTATED'       // Ready for curation (CUR-01 entry gate)
-  | 'NORMALIZING'     // Auto-normalize in progress
-  | 'NORMALIZED'      // Normalization complete, pending review
-  | 'READY_TO_EXPORT'; // Approved by curator (CUR-05 exit gate)
+  | 'ANNOTATED'                  // Ready for curation (CUR-01 entry gate)
+  | 'READY_TO_BE_NORMALIZED'     // All reviews approved, can normalize or skip
+  | 'NORMALIZING'                // Auto-normalize in progress
+  | 'NORMALIZED'                 // Normalization complete, pending review
+  | 'READY_TO_EXPORT';           // Approved by curator (CUR-05 exit gate)
 
 // ── Domain Models ──────────────────────────────────────────────────
 

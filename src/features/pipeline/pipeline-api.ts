@@ -93,6 +93,10 @@ export const pipelineApi = {
       .get<Stage3ResultsResponse>(`/pipeline/jobs/${jobId}/stage3/results`)
       .then((r) => r.data),
 
+  /** GET /pipeline/jobs/:id/dataset/download — download dataset ZIP */
+  getDatasetDownloadUrl: (jobId: string) =>
+    `${env.API_URL}/pipeline/jobs/${jobId}/dataset/download`,
+
   // ═══════════════════════════════════════════════════════════════════
   // Legacy Jobs (some are public)
   // ═══════════════════════════════════════════════════════════════════

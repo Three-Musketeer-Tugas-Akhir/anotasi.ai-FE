@@ -17,6 +17,7 @@ export interface ASRReviewQueueItem {
   confidence_score: number | null;
   is_low_confidence: boolean;
   requires_attention: boolean;
+  audio_path: string | null;
 }
 
 export interface ASRReviewQueueResponse {

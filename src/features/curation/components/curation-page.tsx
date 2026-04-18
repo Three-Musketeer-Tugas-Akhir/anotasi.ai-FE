@@ -60,6 +60,7 @@ const SLANG_DICTIONARY: SlangEntry[] = [
 function CurationStatusBadge({ status }: { status: CurationStatus }) {
   const configs: Record<CurationStatus, { label: string; color: string; icon: React.ReactNode }> = {
     ANNOTATED: { label: 'Perlu Kurasi', color: 'bg-amber-50 text-amber-700 border-amber-200', icon: <AlertTriangle size={12} /> },
+    READY_TO_BE_NORMALIZED: { label: 'Siap Normalisasi', color: 'bg-blue-50 text-blue-700 border-blue-200', icon: <Wand2 size={12} /> },
     NORMALIZING: { label: 'Memproses...', color: 'bg-teal-50 text-teal-700 border-teal-200', icon: <Loader2 size={12} className="animate-spin" /> },
     NORMALIZED: { label: 'Sudah Dinormalisasi', color: 'bg-teal-100 text-teal-800 border-teal-300', icon: <Wand2 size={12} /> },
     READY_TO_EXPORT: { label: 'Siap Export', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: <CheckCircle2 size={12} /> },

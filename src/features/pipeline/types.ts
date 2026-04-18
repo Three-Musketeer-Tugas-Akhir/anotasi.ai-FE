@@ -16,6 +16,7 @@ export interface JobListItemResponse {
   error_message: string | null;
   total_segments: number;
   completed_segments: number;
+  curation_status?: string | null;
 }
 
 export interface JobListDetailedResponse {
@@ -48,6 +49,7 @@ export interface JobStatusDetailResponse {
   total_segments: number;
   completed_segments: number;
   created_by: string | null;
+  curation_status?: string | null;
 }
 
 // ── Job Create ──────────────────────────────────────────────────────
@@ -189,6 +191,7 @@ export interface Stage2Utterance {
   confidence: number;       // 0.0 – 1.0
   url: string | null;       // Asset URL (optional)
   status: string;           // pending | cropped | failed
+  audio_path: string | null; // WAV audio path (e.g. jobs/{job_id}/audio/{segment_id}.wav)
 }
 
 export interface Stage2SegmentResult {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '@/core/api/axios-client';
+import { env } from '@/core/config/env';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -38,9 +39,11 @@ import {
   ChevronRight,
   Ban,
   Play,
+  Pause,
   Eye,
   Shield,
   X,
+  Volume2,
 } from 'lucide-react';
 import { pipelineApi } from '../pipeline-api';
 import type {
@@ -560,7 +563,7 @@ export function JobDetailPanel({ jobId, onJobChanged }: JobDetailPanelProps) {
                 Semua tahap pemrosesan selesai. {job.total_segments} segmen terdeteksi.
               </p>
             </div>
-            <div className="flex justify-center mt-4 gap-2">
+            <div className="flex justify-center mt-4 gap-2 flex-wrap">
               <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
                 <a href="/asr-review">
                   <ExternalLink size={14} className="mr-1.5" /> Buka ASR Review
@@ -571,6 +574,21 @@ export function JobDetailPanel({ jobId, onJobChanged }: JobDetailPanelProps) {
                   <ExternalLink size={14} className="mr-1.5" /> Buka Annotation
                 </a>
               </Button>
+              {(job.curation_status === 'READY_TO_BE_NORMALIZED' || job.curation_status === 'NORMALIZED') && (
+                <Button
+                  variant="outline"
+                  className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                  asChild
+                >
+                  <a
+                    href={pipelineApi.getDatasetDownloadUrl(jobId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Download size={14} className="mr-1.5" /> Download Dataset
+                  </a>
+                </Button>
+              )}
             </div>
           </div>
         </>
@@ -828,47 +846,60 @@ function Stage2Content({
           </div>
 
           {segment.utterances.map((utt) => (
-            <button
-              key={utt.id}
-              onClick={() => {
-                if (utt.url) {
-                  onPreviewVideo(
-                    utt.url,
-                    `Utterance #${utt.utterance_index + 1}`,
-                    `"${utt.text}" — ${formatTime(utt.start)} → ${formatTime(utt.end)}`
-                  );
-                }
-              }}
-              disabled={!utt.url}
-              className={`w-full bg-gray-50 rounded-lg border p-3 text-left transition-all ${
-                utt.url
-                  ? 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 group cursor-pointer'
-                  : 'border-gray-100 opacity-70 cursor-default'
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <FileText size={12} className="text-blue-600" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-gray-800 leading-relaxed line-clamp-2">
-                    &ldquo;{utt.text}&rdquo;
-                  </p>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="text-[10px] font-mono text-gray-400">
-                      {formatTime(utt.start)} → {formatTime(utt.end)}
-                    </span>
-                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${getConfidenceColor(utt.confidence)}`}>
-                      <Shield size={8} className="mr-0.5" />
-                      {(utt.confidence * 100).toFixed(0)}% {getConfidenceLabel(utt.confidence)}
-                    </Badge>
+            <div key={utt.id} className="space-y-1.5">
+              <button
+                onClick={() => {
+                  if (utt.url) {
+                    onPreviewVideo(
+                      utt.url,
+                      `Utterance #${utt.utterance_index + 1}`,
+                      `"${utt.text}" — ${formatTime(utt.start)} → ${formatTime(utt.end)}`
+                    );
+                  }
+                }}
+                disabled={!utt.url}
+                className={`w-full bg-gray-50 rounded-lg border p-3 text-left transition-all ${
+                  utt.url
+                    ? 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 group cursor-pointer'
+                    : 'border-gray-100 opacity-70 cursor-default'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <FileText size={12} className="text-blue-600" />
                   </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-gray-800 leading-relaxed line-clamp-2">
+                      &ldquo;{utt.text}&rdquo;
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-[10px] font-mono text-gray-400">
+                        {formatTime(utt.start)} → {formatTime(utt.end)}
+                      </span>
+                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${getConfidenceColor(utt.confidence)}`}>
+                        <Shield size={8} className="mr-0.5" />
+                        {(utt.confidence * 100).toFixed(0)}% {getConfidenceLabel(utt.confidence)}
+                      </Badge>
+                    </div>
+                  </div>
+                  {utt.url && (
+                    <Eye size={14} className="text-gray-300 group-hover:text-blue-500 transition-colors flex-shrink-0 mt-1" />
+                  )}
                 </div>
-                {utt.url && (
-                  <Eye size={14} className="text-gray-300 group-hover:text-blue-500 transition-colors flex-shrink-0 mt-1" />
-                )}
-              </div>
-            </button>
+              </button>
+              {/* WAV Audio Player */}
+              {utt.audio_path && (
+                <div className="ml-11 bg-blue-50/50 rounded-lg border border-blue-100 p-2 flex items-center gap-2">
+                  <Volume2 size={12} className="text-blue-500 flex-shrink-0" />
+                  <audio
+                    controls
+                    preload="metadata"
+                    src={`${env.API_URL}/assets/${utt.audio_path}`}
+                    className="h-7 flex-1 [&::-webkit-media-controls-panel]:bg-transparent"
+                  />
+                </div>
+              )}
+            </div>
           ))}
         </div>
       ))}

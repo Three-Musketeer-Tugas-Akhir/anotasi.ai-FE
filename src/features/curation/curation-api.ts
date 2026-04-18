@@ -148,4 +148,15 @@ export const curationApi = {
     });
     return data;
   },
+
+  /**
+   * Mark a video as normalized (transition from READY_TO_BE_NORMALIZED → NORMALIZED).
+   * This step is optional — curator can also approve directly to skip normalization.
+   */
+  markAsNormalized: async (videoId: string): Promise<ApproveApiResponse> => {
+    const { data } = await apiClient.post<ApproveApiResponse>('/curation/normalize-status', {
+      video_id: videoId,
+    });
+    return data;
+  },
 };
