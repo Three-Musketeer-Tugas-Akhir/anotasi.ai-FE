@@ -44,6 +44,7 @@ import {
   Shield,
   X,
   Volume2,
+  Layers,
 } from 'lucide-react';
 import { pipelineApi } from '../pipeline-api';
 import type {
@@ -738,6 +739,9 @@ function Stage1Content({
   results: Stage1ResultsResponse | null;
   onPreviewVideo: (url: string, title: string, subtitle?: string) => void;
 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const PREVIEW_LIMIT = 5;
+
   if (!results || results.results.length === 0) {
     return (
       <div className="flex items-center justify-center py-4 text-emerald-600">
@@ -747,41 +751,80 @@ function Stage1Content({
     );
   }
 
-  return (
-    <div className="pt-3 space-y-2">
-      <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
-        {results.results.length} Segmen Terdeteksi
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {results.results.map((seg) => (
-          <button
-            key={seg.id}
-            onClick={() =>
-              onPreviewVideo(
-                seg.url,
-                `Segmen #${seg.segment_index + 1}`,
-                seg.bbox_data && seg.bbox_data.x_min != null
-                  ? `BBox: ${seg.bbox_data.x_min.toFixed(0)}, ${seg.bbox_data.y_min.toFixed(0)} — ${seg.bbox_data.width.toFixed(0)}×${seg.bbox_data.height.toFixed(0)}`
-                  : undefined
-              )
-            }
-            className="bg-gray-50 rounded-lg border border-gray-200 p-3 flex items-center gap-3 hover:border-teal-300 hover:bg-teal-50/50 transition-all text-left group"
-          >
-            <div className="w-9 h-9 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0 group-hover:bg-teal-200 transition-colors">
-              <Play size={14} className="text-teal-600" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-800">
-                Segmen #{seg.segment_index + 1}
-              </p>
-              <p className="text-[10px] text-gray-400 font-mono mt-0.5">
-                ID: {seg.id.slice(0, 8)}...
-              </p>
-            </div>
-            <Eye size={14} className="text-gray-300 group-hover:text-teal-500 transition-colors flex-shrink-0" />
-          </button>
-        ))}
+  const segments = results.results;
+  const hasMore = segments.length > PREVIEW_LIMIT;
+
+  const renderCard = (seg: any, wClass: string = "w-full") => (
+    <button
+      key={seg.id}
+      onClick={() =>
+        onPreviewVideo(
+          seg.url,
+          `Segmen #${seg.segment_index + 1}`,
+          seg.bbox_data && seg.bbox_data.x_min != null
+            ? `BBox: ${seg.bbox_data.x_min.toFixed(0)}, ${seg.bbox_data.y_min.toFixed(0)} — ${seg.bbox_data.width.toFixed(0)}×${seg.bbox_data.height.toFixed(0)}`
+            : undefined
+        )
+      }
+      className={`${wClass} bg-gray-50 rounded-xl border border-gray-200 p-3 flex items-center gap-3 hover:border-teal-300 hover:bg-teal-50/50 transition-all text-left group flex-shrink-0 shadow-sm`}
+    >
+      <div className="w-10 h-10 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0 group-hover:bg-teal-200 transition-colors">
+        <Play size={16} className="text-teal-600 ml-0.5" />
       </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold text-gray-800">
+          Segmen #{seg.segment_index + 1}
+        </p>
+        <p className="text-[10px] text-gray-400 font-mono mt-0.5">
+          ID: {seg.id.slice(0, 8)}...
+        </p>
+      </div>
+      <Eye size={16} className="text-gray-300 group-hover:text-teal-500 transition-colors flex-shrink-0" />
+    </button>
+  );
+
+  return (
+    <div className="pt-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <Badge variant="outline" className="text-[10px] bg-gray-50 text-gray-600 border-gray-200">
+          <Layers size={10} className="mr-1.5" />
+          {segments.length} Segmen Terdeteksi
+        </Badge>
+
+        {hasMore && isExpanded && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsExpanded(false)}
+            className="h-6 text-[10px] text-gray-500 hover:text-gray-700"
+          >
+            Sembunyikan
+          </Button>
+        )}
+      </div>
+
+      {!isExpanded ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {segments.slice(0, PREVIEW_LIMIT).map(seg => renderCard(seg))}
+          </div>
+          {hasMore && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsExpanded(true)}
+              className="w-full text-xs border-teal-200 text-teal-700 hover:bg-teal-50 shadow-sm"
+            >
+              Lihat {segments.length - PREVIEW_LIMIT} Segmen Lainnya
+              <ChevronDown size={14} className="ml-1.5" />
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="flex overflow-x-auto gap-3 pb-4 pt-1 snap-x">
+          {segments.map(seg => renderCard(seg, "w-[240px] snap-start"))}
+        </div>
+      )}
     </div>
   );
 }
