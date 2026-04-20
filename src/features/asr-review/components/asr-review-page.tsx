@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import {
   Shield,
   Play,
   Pause,
+  Square,
   FileText,
   ChevronLeft,
   ChevronRight,
@@ -33,7 +34,6 @@ import type {
   Stage2ResultsResponse,
   Stage2SegmentResult,
   Stage2Utterance,
-  JobListDetailedResponse,
 } from '@/features/pipeline/types';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -43,6 +43,12 @@ function formatTimestamp(seconds: number): string {
   const s = Math.floor(seconds % 60);
   const ms = Math.floor((seconds % 1) * 1000);
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+}
+
+function formatTimeShort(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 function getConfidenceBadge(score: number): { color: string; label: string } {
@@ -55,83 +61,233 @@ function buildAudioUrl(jobId: string, segmentId: string): string {
   return `${env.API_URL}/assets/jobs/${jobId}/audio/${segmentId}.wav`;
 }
 
-// ── WAV Player ─────────────────────────────────────────────────────
+// Utterance colors for the timeline regions
+const UTT_COLORS = [
+  'rgba(20, 184, 166, 0.3)',  // teal
+  'rgba(59, 130, 246, 0.3)',  // blue
+  'rgba(168, 85, 247, 0.3)',  // purple
+  'rgba(249, 115, 22, 0.3)',  // orange
+  'rgba(236, 72, 153, 0.3)',  // pink
+  'rgba(34, 197, 94, 0.3)',   // green
+];
 
-function WavPlayer({ src, startTime, endTime }: { src: string; startTime?: number; endTime?: number }) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const rafRef = useRef<number>(0);
+const UTT_COLORS_ACTIVE = [
+  'rgba(20, 184, 166, 0.55)',
+  'rgba(59, 130, 246, 0.55)',
+  'rgba(168, 85, 247, 0.55)',
+  'rgba(249, 115, 22, 0.55)',
+  'rgba(236, 72, 153, 0.55)',
+  'rgba(34, 197, 94, 0.55)',
+];
 
-  const togglePlay = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
+// ── Waveform Timeline ──────────────────────────────────────────────
 
-    if (isPlaying) {
-      audio.pause();
-      setIsPlaying(false);
-      cancelAnimationFrame(rafRef.current);
-    } else {
-      // If startTime provided, seek first
-      if (startTime !== undefined) {
-        audio.currentTime = startTime;
-      }
-      audio.play().catch(() => {});
-      setIsPlaying(true);
+function WaveformTimeline({
+  audioUrl,
+  utterances,
+  currentTime,
+  duration,
+  playingUttIdx,
+  hoveredUttIdx,
+  onSeek,
+  onHoverUtt,
+}: {
+  audioUrl: string;
+  utterances: Stage2Utterance[];
+  currentTime: number;
+  duration: number;
+  playingUttIdx: number | null;
+  hoveredUttIdx: number | null;
+  onSeek: (time: number) => void;
+  onHoverUtt: (idx: number | null) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [waveformData, setWaveformData] = useState<Float32Array | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-      // If endTime provided, stop at that point
-      if (endTime !== undefined) {
-        const checkEnd = () => {
-          if (audio.currentTime >= endTime) {
-            audio.pause();
-            setIsPlaying(false);
-            return;
+  // Decode WAV into waveform data
+  useEffect(() => {
+    setIsLoading(true);
+    setWaveformData(null);
+
+    const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+
+    fetch(audioUrl)
+      .then((r) => r.arrayBuffer())
+      .then((buf) => audioCtx.decodeAudioData(buf))
+      .then((decoded) => {
+        const rawData = decoded.getChannelData(0);
+        // Downsample to ~800 points for performance
+        const samples = 800;
+        const blockSize = Math.floor(rawData.length / samples);
+        const filtered = new Float32Array(samples);
+        for (let i = 0; i < samples; i++) {
+          let sum = 0;
+          const start = i * blockSize;
+          for (let j = 0; j < blockSize; j++) {
+            sum += Math.abs(rawData[start + j] || 0);
           }
-          rafRef.current = requestAnimationFrame(checkEnd);
-        };
-        rafRef.current = requestAnimationFrame(checkEnd);
+          filtered[i] = sum / blockSize;
+        }
+        // Normalize
+        const max = Math.max(...filtered) || 1;
+        for (let i = 0; i < filtered.length; i++) {
+          filtered[i] = filtered[i] / max;
+        }
+        setWaveformData(filtered);
+        setIsLoading(false);
+      })
+      .catch(() => {
+        // If decode fails, generate placeholder waveform
+        const samples = 800;
+        const placeholder = new Float32Array(samples);
+        for (let i = 0; i < samples; i++) {
+          placeholder[i] = 0.1 + Math.random() * 0.5;
+        }
+        setWaveformData(placeholder);
+        setIsLoading(false);
+      });
+
+    return () => { audioCtx.close(); };
+  }, [audioUrl]);
+
+  // Draw waveform
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container || !waveformData) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = container.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+
+    const w = rect.width;
+    const h = rect.height;
+    const timelineH = h - 20; // Reserve 20px for time axis
+    const totalDur = duration || 1;
+
+    // Background
+    ctx.fillStyle = '#0f172a'; // slate-900
+    ctx.fillRect(0, 0, w, h);
+
+    // Draw utterance regions
+    utterances.forEach((utt, idx) => {
+      const x1 = (utt.start / totalDur) * w;
+      const x2 = (utt.end / totalDur) * w;
+      const isActive = idx === playingUttIdx;
+      const isHovered = idx === hoveredUttIdx;
+      const colorArr = (isActive || isHovered) ? UTT_COLORS_ACTIVE : UTT_COLORS;
+      ctx.fillStyle = colorArr[idx % colorArr.length];
+      ctx.fillRect(x1, 0, x2 - x1, timelineH);
+
+      // Utterance label
+      if (x2 - x1 > 20) {
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '9px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${idx + 1}`, (x1 + x2) / 2, 10);
       }
+    });
+
+    // Draw waveform bars
+    const barW = Math.max(1, (w / waveformData.length) - 0.5);
+    for (let i = 0; i < waveformData.length; i++) {
+      const x = (i / waveformData.length) * w;
+      const amplitude = waveformData[i];
+      const barH = amplitude * (timelineH - 8);
+      const y = (timelineH / 2) - (barH / 2);
+
+      // Determine bar color based on which utterance it falls in
+      const timeAtBar = (i / waveformData.length) * totalDur;
+      const uttIdx = utterances.findIndex((u) => timeAtBar >= u.start && timeAtBar <= u.end);
+      if (uttIdx >= 0) {
+        const isActive = uttIdx === playingUttIdx || uttIdx === hoveredUttIdx;
+        ctx.fillStyle = isActive ? 'rgba(20, 184, 166, 0.95)' : 'rgba(20, 184, 166, 0.7)';
+      } else {
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.4)'; // slate-400
+      }
+      ctx.fillRect(x, y + 4, barW, barH);
     }
+
+    // Time axis
+    ctx.fillStyle = '#1e293b'; // slate-800
+    ctx.fillRect(0, timelineH, w, 20);
+
+    // Time markers
+    const step = totalDur > 120 ? 30 : totalDur > 30 ? 10 : 5;
+    for (let t = 0; t <= totalDur; t += step) {
+      const x = (t / totalDur) * w;
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.5)';
+      ctx.fillRect(x, timelineH, 1, 4);
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(formatTimeShort(t), x, timelineH + 14);
+    }
+
+    // Playhead
+    if (currentTime > 0 && currentTime <= totalDur) {
+      const px = (currentTime / totalDur) * w;
+      ctx.fillStyle = '#ef4444'; // red-500
+      ctx.fillRect(px - 1, 0, 2, timelineH);
+      // Playhead triangle
+      ctx.beginPath();
+      ctx.moveTo(px - 5, 0);
+      ctx.lineTo(px + 5, 0);
+      ctx.lineTo(px, 6);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }, [waveformData, currentTime, duration, utterances, playingUttIdx, hoveredUttIdx]);
+
+  // Handle click to seek
+  const handleClick = (e: React.MouseEvent) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect || !duration) return;
+    const x = e.clientX - rect.left;
+    const time = (x / rect.width) * duration;
+    onSeek(Math.max(0, Math.min(time, duration)));
   };
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const onEnd = () => {
-      setIsPlaying(false);
-      cancelAnimationFrame(rafRef.current);
-    };
-    audio.addEventListener('ended', onEnd);
-    return () => {
-      audio.removeEventListener('ended', onEnd);
-      cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
-
-  // Reset when src changes
-  useEffect(() => {
-    setIsPlaying(false);
-    cancelAnimationFrame(rafRef.current);
-  }, [src]);
+  // Handle mouse move for hover detection
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect || !duration) return;
+    const x = e.clientX - rect.left;
+    const time = (x / rect.width) * duration;
+    const uttIdx = utterances.findIndex((u) => time >= u.start && time <= u.end);
+    onHoverUtt(uttIdx >= 0 ? uttIdx : null);
+  };
 
   return (
-    <div className="flex items-center justify-center">
-      <audio ref={audioRef} src={src} preload="metadata" />
-      <button
-        onClick={togglePlay}
-        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-          isPlaying
-            ? 'bg-teal-600 text-white shadow-md scale-105'
-            : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
-        }`}
-        title={isPlaying ? 'Pause' : 'Play'}
-      >
-        {isPlaying ? <Pause size={12} /> : <Play size={12} className="ml-0.5" />}
-      </button>
+    <div
+      ref={containerRef}
+      className="relative w-full h-[88px] rounded-lg overflow-hidden cursor-crosshair"
+      onClick={handleClick}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => onHoverUtt(null)}
+    >
+      {isLoading ? (
+        <div className="absolute inset-0 bg-slate-900 flex items-center justify-center">
+          <Loader2 size={16} className="text-teal-500 animate-spin" />
+          <span className="text-[10px] text-slate-400 ml-2">Memuat waveform...</span>
+        </div>
+      ) : (
+        <canvas ref={canvasRef} className="absolute inset-0" />
+      )}
     </div>
   );
 }
 
-// ── Job Picker (when no job_id in URL) ─────────────────────────────
+// ── Job Picker ─────────────────────────────────────────────────────
 
 function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
   const [loading, setLoading] = useState(true);
@@ -225,6 +381,14 @@ export function AsrReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeSegmentIdx, setActiveSegmentIdx] = useState(0);
 
+  // Audio playback state (shared across all utterances)
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const rafRef = useRef<number>(0);
+  const [playingUttIdx, setPlayingUttIdx] = useState<number | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [hoveredUttIdx, setHoveredUttIdx] = useState<number | null>(null);
+
   // Sync URL param
   useEffect(() => {
     if (urlJobId && urlJobId !== selectedJobId) {
@@ -255,11 +419,122 @@ export function AsrReviewPage() {
     }
   }, [selectedJobId, fetchStage2]);
 
+  // Reset playback when segment changes
+  useEffect(() => {
+    stopPlayback();
+    setCurrentTime(0);
+    setAudioDuration(0);
+  }, [activeSegmentIdx]);
+
   const handleJobSelect = (jobId: string) => {
     setSelectedJobId(jobId);
-    // Update URL without reload
     window.history.replaceState(null, '', `/asr-review?job_id=${jobId}`);
   };
+
+  // ── Audio Control (single shared player) ──
+
+  const segments = stage2Data?.results ?? [];
+  const activeSegment = segments[activeSegmentIdx] ?? null;
+  const audioUrl = selectedJobId && activeSegment
+    ? buildAudioUrl(selectedJobId, activeSegment.segment_id)
+    : '';
+
+  // Create/update audio element
+  useEffect(() => {
+    if (!audioUrl) return;
+
+    const audio = new Audio(audioUrl);
+    audio.preload = 'metadata';
+    audioRef.current = audio;
+
+    const onMeta = () => setAudioDuration(audio.duration);
+    const onEnd = () => {
+      setPlayingUttIdx(null);
+      cancelAnimationFrame(rafRef.current);
+    };
+    audio.addEventListener('loadedmetadata', onMeta);
+    audio.addEventListener('ended', onEnd);
+
+    return () => {
+      audio.pause();
+      audio.removeEventListener('loadedmetadata', onMeta);
+      audio.removeEventListener('ended', onEnd);
+      cancelAnimationFrame(rafRef.current);
+      audioRef.current = null;
+    };
+  }, [audioUrl]);
+
+  const startTimeTracking = useCallback(() => {
+    const track = () => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      setCurrentTime(audio.currentTime);
+      rafRef.current = requestAnimationFrame(track);
+    };
+    rafRef.current = requestAnimationFrame(track);
+  }, []);
+
+  const playUtterance = useCallback((uttIdx: number) => {
+    const audio = audioRef.current;
+    if (!audio || !activeSegment) return;
+
+    const utt = activeSegment.utterances[uttIdx];
+    if (!utt) return;
+
+    // Stop any current playback
+    audio.pause();
+    cancelAnimationFrame(rafRef.current);
+
+    // Seek and play
+    audio.currentTime = utt.start;
+    audio.play().catch(() => {});
+    setPlayingUttIdx(uttIdx);
+    setCurrentTime(utt.start);
+
+    // Track time and stop at end
+    const trackAndLimit = () => {
+      if (!audioRef.current) return;
+      setCurrentTime(audioRef.current.currentTime);
+      if (audioRef.current.currentTime >= utt.end) {
+        audioRef.current.pause();
+        setPlayingUttIdx(null);
+        return;
+      }
+      rafRef.current = requestAnimationFrame(trackAndLimit);
+    };
+    rafRef.current = requestAnimationFrame(trackAndLimit);
+  }, [activeSegment]);
+
+  const stopPlayback = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+    }
+    cancelAnimationFrame(rafRef.current);
+    setPlayingUttIdx(null);
+  }, []);
+
+  const handleSeek = useCallback((time: number) => {
+    const audio = audioRef.current;
+    if (!audio || !activeSegment) return;
+
+    audio.currentTime = time;
+    setCurrentTime(time);
+
+    // Find which utterance this falls in
+    const uttIdx = activeSegment.utterances.findIndex((u) => time >= u.start && time <= u.end);
+    if (uttIdx >= 0) {
+      playUtterance(uttIdx);
+    }
+  }, [activeSegment, playUtterance]);
+
+  // Compute total duration from utterances (fallback if audio not loaded)
+  const totalDuration = useMemo(() => {
+    if (audioDuration > 0) return audioDuration;
+    if (!activeSegment) return 0;
+    const maxEnd = Math.max(...activeSegment.utterances.map((u) => u.end), 0);
+    return maxEnd + 1;
+  }, [audioDuration, activeSegment]);
 
   // ── No job selected → show picker ──
   if (!selectedJobId) {
@@ -282,9 +557,6 @@ export function AsrReviewPage() {
   }
 
   // ── Job selected → show ASR results ──
-  const segments = stage2Data?.results ?? [];
-  const activeSegment = segments[activeSegmentIdx] ?? null;
-
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
@@ -305,6 +577,7 @@ export function AsrReviewPage() {
               size="sm"
               className="text-xs"
               onClick={() => {
+                stopPlayback();
                 setSelectedJobId(null);
                 window.history.replaceState(null, '', '/asr-review');
               }}
@@ -353,7 +626,7 @@ export function AsrReviewPage() {
               {segments.map((seg, idx) => (
                 <button
                   key={seg.segment_id}
-                  onClick={() => setActiveSegmentIdx(idx)}
+                  onClick={() => { stopPlayback(); setActiveSegmentIdx(idx); }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex-shrink-0 ${
                     idx === activeSegmentIdx
                       ? 'bg-teal-600 text-white shadow-sm'
@@ -370,9 +643,9 @@ export function AsrReviewPage() {
           {/* DataTable */}
           {activeSegment && (
             <ScrollArea className="flex-1">
-              <div className="p-6">
+              <div className="p-6 space-y-4">
                 {/* Segment Info */}
-                <div className="flex items-center gap-3 mb-4 flex-wrap">
+                <div className="flex items-center gap-3 flex-wrap">
                   <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
                     <FileText size={9} className="mr-1" />
                     Segmen #{activeSegmentIdx + 1} — {activeSegment.utterances.length} kalimat
@@ -384,9 +657,31 @@ export function AsrReviewPage() {
                     </Badge>
                   )}
                   <span className="text-[10px] text-gray-400 font-mono">
-                    ID: {activeSegment.segment_id.slice(0, 16)}...
+                    Durasi: {formatTimeShort(totalDuration)}
                   </span>
+                  {playingUttIdx !== null && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[10px] border-red-200 text-red-600 hover:bg-red-50 ml-auto"
+                      onClick={stopPlayback}
+                    >
+                      <Square size={8} className="mr-1" /> Stop
+                    </Button>
+                  )}
                 </div>
+
+                {/* Waveform Timeline */}
+                <WaveformTimeline
+                  audioUrl={audioUrl}
+                  utterances={activeSegment.utterances}
+                  currentTime={currentTime}
+                  duration={totalDuration}
+                  playingUttIdx={playingUttIdx}
+                  hoveredUttIdx={hoveredUttIdx}
+                  onSeek={handleSeek}
+                  onHoverUtt={setHoveredUttIdx}
+                />
 
                 {/* Table */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -405,10 +700,23 @@ export function AsrReviewPage() {
                     <TableBody>
                       {activeSegment.utterances.map((utt, uttIdx) => {
                         const conf = getConfidenceBadge(utt.confidence);
-                        const audioUrl = buildAudioUrl(selectedJobId, activeSegment.segment_id);
+                        const isPlaying = playingUttIdx === uttIdx;
+                        const isHovered = hoveredUttIdx === uttIdx;
+                        const isOtherPlaying = playingUttIdx !== null && playingUttIdx !== uttIdx;
 
                         return (
-                          <TableRow key={utt.id} className="hover:bg-gray-50/50">
+                          <TableRow
+                            key={utt.id}
+                            className={`transition-colors ${
+                              isPlaying
+                                ? 'bg-teal-50/60'
+                                : isHovered
+                                  ? 'bg-blue-50/40'
+                                  : 'hover:bg-gray-50/50'
+                            }`}
+                            onMouseEnter={() => setHoveredUttIdx(uttIdx)}
+                            onMouseLeave={() => setHoveredUttIdx(null)}
+                          >
                             <TableCell className="text-center text-xs text-gray-400 font-mono">
                               {uttIdx + 1}
                             </TableCell>
@@ -435,11 +743,22 @@ export function AsrReviewPage() {
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              <WavPlayer
-                                src={audioUrl}
-                                startTime={utt.start}
-                                endTime={utt.end}
-                              />
+                              <div className="flex items-center justify-center">
+                                <button
+                                  onClick={() => isPlaying ? stopPlayback() : playUtterance(uttIdx)}
+                                  disabled={isOtherPlaying}
+                                  className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+                                    isPlaying
+                                      ? 'bg-teal-600 text-white shadow-md animate-pulse'
+                                      : isOtherPlaying
+                                        ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                                        : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
+                                  }`}
+                                  title={isPlaying ? 'Pause' : isOtherPlaying ? 'Sedang memutar lainnya' : 'Play'}
+                                >
+                                  {isPlaying ? <Pause size={12} /> : <Play size={12} className="ml-0.5" />}
+                                </button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         );
@@ -448,13 +767,13 @@ export function AsrReviewPage() {
                   </Table>
                 </div>
 
-                {/* Pagination-like segment navigation */}
-                <div className="flex items-center justify-between mt-4">
+                {/* Segment navigation */}
+                <div className="flex items-center justify-between">
                   <Button
                     variant="ghost"
                     size="sm"
                     disabled={activeSegmentIdx <= 0}
-                    onClick={() => setActiveSegmentIdx((i) => i - 1)}
+                    onClick={() => { stopPlayback(); setActiveSegmentIdx((i) => i - 1); }}
                     className="text-xs"
                   >
                     <ChevronLeft size={14} className="mr-1" />
@@ -467,7 +786,7 @@ export function AsrReviewPage() {
                     variant="ghost"
                     size="sm"
                     disabled={activeSegmentIdx >= segments.length - 1}
-                    onClick={() => setActiveSegmentIdx((i) => i + 1)}
+                    onClick={() => { stopPlayback(); setActiveSegmentIdx((i) => i + 1); }}
                     className="text-xs"
                   >
                     Segmen Berikutnya
