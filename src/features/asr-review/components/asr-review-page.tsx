@@ -91,6 +91,8 @@ function WaveformTimeline({
   hoveredUttIdx,
   onSeek,
   onHoverUtt,
+  tablePage,
+  pageSize,
 }: {
   audioUrl: string;
   utterances: Stage2Utterance[];
@@ -100,6 +102,8 @@ function WaveformTimeline({
   hoveredUttIdx: number | null;
   onSeek: (time: number) => void;
   onHoverUtt: (idx: number | null) => void;
+  tablePage: number;
+  pageSize: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -120,7 +124,7 @@ function WaveformTimeline({
         const rawData = decoded.getChannelData(0);
         // Downsample to ~800 points for performance
         const samples = 800;
-        const blockSize = Math.floor(rawData.length / samples);
+        const blockSize = Math.max(1, Math.floor(rawData.length / samples));
         const filtered = new Float32Array(samples);
         for (let i = 0; i < samples; i++) {
           let sum = 0;
@@ -174,45 +178,85 @@ function WaveformTimeline({
     const timelineH = h - 20; // Reserve 20px for time axis
     const totalDur = duration || 1;
 
+    // Identify current page range
+    const pageStartIdx = (tablePage - 1) * pageSize;
+    const pageEndIdx = pageStartIdx + pageSize;
+
     // Background
     ctx.fillStyle = '#0f172a'; // slate-900
     ctx.fillRect(0, 0, w, h);
 
-    // Draw utterance regions
-    utterances.forEach((utt, idx) => {
+    // 1. Draw non-current page boxes ("Bagian #x")
+    const totalPages = Math.ceil(utterances.length / pageSize);
+    for (let p = 1; p <= totalPages; p++) {
+      if (p === tablePage) continue;
+      
+      const startIdx = (p - 1) * pageSize;
+      const endIdx = Math.min(startIdx + pageSize, utterances.length) - 1;
+      const pStart = utterances[startIdx].start;
+      const pEnd = utterances[endIdx].end;
+      
+      const x1 = (pStart / totalDur) * w;
+      const x2 = (pEnd / totalDur) * w;
+      
+      // Grey box
+      ctx.fillStyle = 'rgba(71, 85, 105, 0.4)'; // slate-600
+      ctx.fillRect(x1 + 1, 0, x2 - x1 - 2, timelineH);
+      
+      // Label
+      if (x2 - x1 > 40) {
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.8)'; // slate-400
+        ctx.font = '10px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Bagian #${p}`, (x1 + x2) / 2, timelineH / 2 + 4);
+      }
+    }
+
+    // 2. Draw active page utterance regions
+    for (let i = pageStartIdx; i < pageEndIdx && i < utterances.length; i++) {
+      const utt = utterances[i];
       const x1 = (utt.start / totalDur) * w;
       const x2 = (utt.end / totalDur) * w;
-      const isActive = idx === playingUttIdx;
-      const isHovered = idx === hoveredUttIdx;
+      const isActive = i === playingUttIdx;
+      const isHovered = i === hoveredUttIdx;
       const colorArr = (isActive || isHovered) ? UTT_COLORS_ACTIVE : UTT_COLORS;
-      ctx.fillStyle = colorArr[idx % colorArr.length];
+      ctx.fillStyle = colorArr[i % colorArr.length];
       ctx.fillRect(x1, 0, x2 - x1, timelineH);
 
       // Utterance label
       if (x2 - x1 > 20) {
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.font = '9px system-ui';
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.font = 'bold 9px system-ui';
         ctx.textAlign = 'center';
-        ctx.fillText(`${idx + 1}`, (x1 + x2) / 2, 10);
+        ctx.fillText(`${i + 1}`, (x1 + x2) / 2, 12);
       }
-    });
+    }
 
-    // Draw waveform bars
+    // 3. Draw waveform bars
     const barW = Math.max(1, (w / waveformData.length) - 0.5);
+    const activeStart = utterances[pageStartIdx]?.start ?? 0;
+    const activeEnd = utterances[Math.min(pageEndIdx - 1, utterances.length - 1)]?.end ?? 0;
+
     for (let i = 0; i < waveformData.length; i++) {
       const x = (i / waveformData.length) * w;
       const amplitude = waveformData[i];
       const barH = amplitude * (timelineH - 8);
       const y = (timelineH / 2) - (barH / 2);
 
-      // Determine bar color based on which utterance it falls in
       const timeAtBar = (i / waveformData.length) * totalDur;
-      const uttIdx = utterances.findIndex((u) => timeAtBar >= u.start && timeAtBar <= u.end);
-      if (uttIdx >= 0) {
-        const isActive = uttIdx === playingUttIdx || uttIdx === hoveredUttIdx;
-        ctx.fillStyle = isActive ? 'rgba(20, 184, 166, 0.95)' : 'rgba(20, 184, 166, 0.7)';
+      
+      // Fast check: is this bar inside the currently active page?
+      if (timeAtBar >= activeStart && timeAtBar <= activeEnd) {
+        // Find exact active utterance for highlight color (faster logic)
+        let isActiveOrHovered = false;
+        if (playingUttIdx !== null && timeAtBar >= utterances[playingUttIdx].start && timeAtBar <= utterances[playingUttIdx].end) {
+          isActiveOrHovered = true;
+        } else if (hoveredUttIdx !== null && timeAtBar >= utterances[hoveredUttIdx].start && timeAtBar <= utterances[hoveredUttIdx].end) {
+          isActiveOrHovered = true;
+        }
+        ctx.fillStyle = isActiveOrHovered ? 'rgba(20, 184, 166, 0.95)' : 'rgba(20, 184, 166, 0.7)';
       } else {
-        ctx.fillStyle = 'rgba(148, 163, 184, 0.4)'; // slate-400
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.2)'; // semi-transparent slate for non-active pages
       }
       ctx.fillRect(x, y + 4, barW, barH);
     }
@@ -246,7 +290,7 @@ function WaveformTimeline({
       ctx.closePath();
       ctx.fill();
     }
-  }, [waveformData, currentTime, duration, utterances, playingUttIdx, hoveredUttIdx]);
+  }, [waveformData, currentTime, duration, utterances, playingUttIdx, hoveredUttIdx, tablePage, pageSize]);
 
   // Handle click to seek
   const handleClick = (e: React.MouseEvent) => {
@@ -738,6 +782,8 @@ export function AsrReviewPage() {
                   hoveredUttIdx={hoveredUttIdx}
                   onSeek={handleSeek}
                   onHoverUtt={setHoveredUttIdx}
+                  tablePage={tablePage}
+                  pageSize={TABLE_PAGE_SIZE}
                 />
 
                 {/* Table with client-side pagination */}
