@@ -740,7 +740,7 @@ function Stage1Content({
   onPreviewVideo: (url: string, title: string, subtitle?: string) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const PREVIEW_LIMIT = 5;
+  const PREVIEW_LIMIT = 6;
 
   if (!results || results.results.length === 0) {
     return (
@@ -805,7 +805,7 @@ function Stage1Content({
 
       {!isExpanded ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {segments.slice(0, PREVIEW_LIMIT).map(seg => renderCard(seg))}
           </div>
           {hasMore && (
@@ -963,6 +963,8 @@ function Stage3Content({
   results: Stage3ResultsResponse | null;
   onPreviewVideo: (url: string, title: string, subtitle?: string) => void;
 }) {
+  const [selectedSegIdx, setSelectedSegIdx] = useState<number>(0);
+
   if (!results || results.results.length === 0) {
     return (
       <div className="flex items-center justify-center py-4 text-emerald-600">
@@ -973,9 +975,11 @@ function Stage3Content({
   }
 
   const { summary } = results;
+  const segments = results.results;
+  const selectedSegment = segments[selectedSegIdx];
 
   return (
-    <div className="pt-3 space-y-3">
+    <div className="pt-3 space-y-4">
       {/* Summary Stats */}
       <div className="grid grid-cols-4 gap-2">
         <div className="bg-gray-50 rounded-lg border border-gray-200 p-2.5 text-center">
@@ -996,87 +1000,112 @@ function Stage3Content({
         </div>
       </div>
 
-      {/* Segments with Cropped Utterances */}
-      {results.results.map((segment, segIdx) => (
-        <div key={segment.segment_id} className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-              Segmen #{segIdx + 1}
-            </p>
-            {segment.asr_review_flag && (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-amber-50 text-amber-600 border-amber-200">
-                <AlertTriangle size={8} className="mr-0.5" />
-                Perlu Review
-              </Badge>
+      {/* 1. Horizontal Scroll Area for Segments with Sticky effect */}
+      <div className="flex overflow-x-auto gap-3 pb-2 snap-x relative">
+        {segments.map((segment, idx) => {
+          const isSelected = idx === selectedSegIdx;
+          return (
+            <button
+              key={segment.segment_id}
+              onClick={() => setSelectedSegIdx(idx)}
+              className={`flex-shrink-0 w-48 p-3 text-left transition-all border rounded-xl snap-start ${
+                isSelected 
+                  ? 'sticky left-0 z-10 bg-indigo-50 border-indigo-400 shadow-md ring-1 ring-indigo-400' 
+                  : 'bg-white border-gray-200 hover:bg-gray-50 z-0 opacity-80 hover:opacity-100'
+              }`}
+            >
+              <div className="flex justify-between items-start">
+                <p className="text-sm font-bold text-gray-800">Segmen #{idx + 1}</p>
+                {segment.asr_review_flag && (
+                  <AlertTriangle size={14} className="text-amber-500" />
+                )}
+              </div>
+              <div className="mt-1.5 flex gap-1.5 flex-wrap">
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-blue-50 text-blue-600 border-blue-200">
+                  {segment.utterances.length} Crop
+                </Badge>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 2. Expanded Area for Selected Segment's Utterances */}
+      {selectedSegment && (
+        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
+          <h4 className="text-xs font-bold text-gray-700 mb-3 flex items-center gap-2">
+            <Film size={14} className="text-indigo-500" />
+            Video Cropping - Segmen #{selectedSegIdx + 1}
+          </h4>
+          <div className="flex overflow-x-auto gap-3 pb-2 snap-x">
+            {selectedSegment.utterances.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">Tidak ada data crop di segmen ini.</p>
+            ) : (
+              selectedSegment.utterances.map((utt) => {
+                const isCropped = utt.status === 'cropped';
+                const isFailed = utt.status === 'failed';
+
+                return (
+                  <button
+                    key={utt.id}
+                    onClick={() => {
+                      if (utt.url && isCropped) {
+                        onPreviewVideo(
+                          utt.url,
+                          `Cropped #${utt.utterance_index + 1}`,
+                          `"${utt.text}" — ${formatTime(utt.start)} → ${formatTime(utt.end)}`
+                        );
+                      }
+                    }}
+                    disabled={!utt.url || !isCropped}
+                    className={`flex-shrink-0 w-64 snap-start rounded-xl border p-3 text-left transition-all ${
+                      isCropped && utt.url
+                        ? 'bg-white border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 group cursor-pointer shadow-sm'
+                        : isFailed
+                          ? 'bg-red-50/50 border-red-100 cursor-default'
+                          : 'bg-white border-gray-100 opacity-60 cursor-default'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                        isCropped ? 'bg-indigo-100' :
+                        isFailed ? 'bg-red-100' :
+                        'bg-gray-100'
+                      }`}>
+                        {isCropped ? <Film size={12} className="text-indigo-600" /> :
+                        isFailed ? <AlertTriangle size={12} className="text-red-500" /> :
+                        <Clock size={12} className="text-gray-400" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-gray-800 leading-relaxed line-clamp-1 flex-1">
+                            &ldquo;{utt.text}&rdquo;
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          <Badge variant="outline" className={`text-[9px] px-1.5 py-0 flex-shrink-0 ${
+                            isCropped ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            isFailed ? 'bg-red-50 text-red-600 border-red-200' :
+                            'bg-gray-50 text-gray-500 border-gray-200'
+                          }`}>
+                            {isCropped ? 'Cropped' : isFailed ? 'Gagal' : 'Pending'}
+                          </Badge>
+                          <span className="text-[10px] font-mono text-gray-400">
+                            {formatTime(utt.start)} → {formatTime(utt.end)}
+                          </span>
+                        </div>
+                      </div>
+                      {isCropped && utt.url && (
+                        <Eye size={14} className="text-gray-300 group-hover:text-indigo-500 transition-colors flex-shrink-0 mt-1" />
+                      )}
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
-
-          {segment.utterances.map((utt) => {
-            const isCropped = utt.status === 'cropped';
-            const isFailed = utt.status === 'failed';
-
-            return (
-              <button
-                key={utt.id}
-                onClick={() => {
-                  if (utt.url && isCropped) {
-                    onPreviewVideo(
-                      utt.url,
-                      `Cropped #${utt.utterance_index + 1}`,
-                      `"${utt.text}" — ${formatTime(utt.start)} → ${formatTime(utt.end)}`
-                    );
-                  }
-                }}
-                disabled={!utt.url || !isCropped}
-                className={`w-full rounded-lg border p-3 text-left transition-all ${
-                  isCropped && utt.url
-                    ? 'bg-gray-50 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 group cursor-pointer'
-                    : isFailed
-                      ? 'bg-red-50/50 border-red-100 cursor-default'
-                      : 'bg-gray-50 border-gray-100 opacity-70 cursor-default'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                    isCropped ? 'bg-indigo-100' :
-                    isFailed ? 'bg-red-100' :
-                    'bg-gray-100'
-                  }`}>
-                    {isCropped ? <Film size={12} className="text-indigo-600" /> :
-                     isFailed ? <AlertTriangle size={12} className="text-red-500" /> :
-                     <Clock size={12} className="text-gray-400" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm text-gray-800 leading-relaxed line-clamp-1 flex-1">
-                        &ldquo;{utt.text}&rdquo;
-                      </p>
-                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 flex-shrink-0 ${
-                        isCropped ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                        isFailed ? 'bg-red-50 text-red-600 border-red-200' :
-                        'bg-gray-50 text-gray-500 border-gray-200'
-                      }`}>
-                        {isCropped ? 'Cropped' : isFailed ? 'Gagal' : 'Pending'}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-[10px] font-mono text-gray-400">
-                        {formatTime(utt.start)} → {formatTime(utt.end)}
-                      </span>
-                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${getConfidenceColor(utt.confidence)}`}>
-                        {(utt.confidence * 100).toFixed(0)}%
-                      </Badge>
-                    </div>
-                  </div>
-                  {isCropped && utt.url && (
-                    <Eye size={14} className="text-gray-300 group-hover:text-indigo-500 transition-colors flex-shrink-0 mt-1" />
-                  )}
-                </div>
-              </button>
-            );
-          })}
         </div>
-      ))}
+      )}
 
       {/* Link to Annotation page */}
       <div className="flex justify-center pt-2">
