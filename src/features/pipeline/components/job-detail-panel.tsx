@@ -540,6 +540,7 @@ export function JobDetailPanel({ jobId, onJobChanged }: JobDetailPanelProps) {
             stage={stage}
             expanded={!!expandedStages[stage.name]}
             onToggle={() => toggleStage(stage.name)}
+            jobId={jobId}
             stage1={stage1}
             stage2={stage2}
             stage3={stage3}
@@ -565,7 +566,7 @@ export function JobDetailPanel({ jobId, onJobChanged }: JobDetailPanelProps) {
             </div>
             <div className="flex justify-center mt-4 gap-2 flex-wrap">
               <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
-                <a href="/asr-review">
+                <a href={`/asr-review?job_id=${jobId}`}>
                   <ExternalLink size={14} className="mr-1.5" /> Buka ASR Review
                 </a>
               </Button>
@@ -625,6 +626,7 @@ function StageSection({
   stage,
   expanded,
   onToggle,
+  jobId,
   stage1,
   stage2,
   stage3,
@@ -634,6 +636,7 @@ function StageSection({
   stage: StageInfo;
   expanded: boolean;
   onToggle: () => void;
+  jobId: string;
   stage1: Stage1ResultsResponse | null;
   stage2: Stage2ResultsResponse | null;
   stage3: Stage3ResultsResponse | null;
@@ -714,7 +717,7 @@ function StageSection({
           )}
 
           {stage.status === 'done' && !stageLoading && stage.stageNumber === 2 && (
-            <Stage2Content results={stage2} onPreviewVideo={onPreviewVideo} />
+            <Stage2Content results={stage2} jobId={jobId} />
           )}
 
           {stage.status === 'done' && !stageLoading && stage.stageNumber === 3 && (
@@ -759,9 +762,7 @@ function Stage1Content({
                 `Segmen #${seg.segment_index + 1}`,
                 seg.bbox_data && seg.bbox_data.x_min != null
                   ? `BBox: ${seg.bbox_data.x_min.toFixed(0)}, ${seg.bbox_data.y_min.toFixed(0)} — ${seg.bbox_data.width.toFixed(0)}×${seg.bbox_data.height.toFixed(0)}`
-                  : seg.bbox_data
-                    ? `Deteksi: ${(seg.bbox_data as unknown as Record<string, unknown>).frame_count ?? Object.keys(seg.bbox_data).length} data`
-                    : undefined
+                  : undefined
               )
             }
             className="bg-gray-50 rounded-lg border border-gray-200 p-3 flex items-center gap-3 hover:border-teal-300 hover:bg-teal-50/50 transition-all text-left group"
@@ -785,15 +786,18 @@ function Stage1Content({
   );
 }
 
-// ── Stage 2 Results: ASR Utterances ─────────────────────────────────
+// ── Stage 2 Results: ASR Segment Cards (Collapsible) ────────────────
 
 function Stage2Content({
   results,
-  onPreviewVideo,
+  jobId,
 }: {
   results: Stage2ResultsResponse | null;
-  onPreviewVideo: (url: string, title: string, subtitle?: string) => void;
+  jobId: string;
 }) {
+  const [expandedSegments, setExpandedSegments] = useState<Record<string, boolean>>({});
+  const PREVIEW_LIMIT = 5;
+
   if (!results || results.results.length === 0) {
     return (
       <div className="flex items-center justify-center py-4 text-emerald-600">
@@ -808,7 +812,10 @@ function Stage2Content({
   const avgConf = allUtterances.length > 0
     ? allUtterances.reduce((sum, u) => sum + u.confidence, 0) / allUtterances.length
     : 0;
-  const lowConfCount = allUtterances.filter((u) => u.confidence < 0.7).length;
+
+  const toggleSegment = (segId: string) => {
+    setExpandedSegments((prev) => ({ ...prev, [segId]: !prev[segId] }));
+  };
 
   return (
     <div className="pt-3 space-y-3">
@@ -816,102 +823,90 @@ function Stage2Content({
       <div className="flex items-center gap-3 flex-wrap">
         <Badge variant="outline" className="text-[10px] bg-gray-50 text-gray-600 border-gray-200">
           <FileText size={9} className="mr-1" />
-          {totalUtterances} Utterance
+          {results.results.length} Segmen • {totalUtterances} Kalimat
         </Badge>
         <Badge variant="outline" className={`text-[10px] ${getConfidenceColor(avgConf)}`}>
           <Shield size={9} className="mr-1" />
-          Avg: {(avgConf * 100).toFixed(0)}%
+          Avg Confidence: {(avgConf * 100).toFixed(0)}%
         </Badge>
-        {lowConfCount > 0 && (
-          <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200">
-            <AlertTriangle size={9} className="mr-1" />
-            {lowConfCount} Low Confidence
-          </Badge>
-        )}
       </div>
 
-      {/* Segments with Utterances */}
-      {results.results.map((segment, segIdx) => (
-        <div key={segment.segment_id} className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-              Segmen #{segIdx + 1}
-            </p>
-            {segment.asr_review_flag && (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-amber-50 text-amber-600 border-amber-200">
-                <AlertTriangle size={8} className="mr-0.5" />
-                Perlu Review
-              </Badge>
-            )}
-          </div>
+      {/* Segment Cards */}
+      {results.results.map((segment, segIdx) => {
+        const isExpanded = !!expandedSegments[segment.segment_id];
+        const uttCount = segment.utterances.length;
+        const previewUtts = segment.utterances.slice(0, PREVIEW_LIMIT);
+        const hasMore = uttCount > PREVIEW_LIMIT;
 
-          {segment.utterances.map((utt) => (
-            <div key={utt.id} className="space-y-1.5">
-              <button
-                onClick={() => {
-                  if (utt.url) {
-                    onPreviewVideo(
-                      utt.url,
-                      `Utterance #${utt.utterance_index + 1}`,
-                      `"${utt.text}" — ${formatTime(utt.start)} → ${formatTime(utt.end)}`
-                    );
-                  }
-                }}
-                disabled={!utt.url}
-                className={`w-full bg-gray-50 rounded-lg border p-3 text-left transition-all ${
-                  utt.url
-                    ? 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 group cursor-pointer'
-                    : 'border-gray-100 opacity-70 cursor-default'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <FileText size={12} className="text-blue-600" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-gray-800 leading-relaxed line-clamp-2">
+        return (
+          <div key={segment.segment_id} className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
+            {/* Segment Card Header */}
+            <button
+              onClick={() => toggleSegment(segment.segment_id)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-100/60 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <Volume2 size={14} className="text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold text-gray-800">Segmen #{segIdx + 1}</p>
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-blue-50 text-blue-600 border-blue-200">
+                    {uttCount} kalimat
+                  </Badge>
+                  {segment.asr_review_flag && (
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-amber-50 text-amber-600 border-amber-200">
+                      <AlertTriangle size={8} className="mr-0.5" /> Perlu Review
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-400 font-mono mt-0.5">
+                  ID: {segment.segment_id.slice(0, 12)}...
+                </p>
+              </div>
+              <div className="text-gray-400 flex-shrink-0">
+                {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              </div>
+            </button>
+
+            {/* Expanded: Preview Utterances */}
+            {isExpanded && (
+              <div className="px-4 pb-3 border-t border-gray-200 space-y-1.5 pt-2">
+                {previewUtts.map((utt) => (
+                  <div key={utt.id} className="bg-white rounded-lg border border-gray-100 p-2.5">
+                    <p className="text-sm text-gray-800 leading-relaxed line-clamp-1">
                       &ldquo;{utt.text}&rdquo;
                     </p>
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <div className="flex items-center gap-2 mt-1">
                       <span className="text-[10px] font-mono text-gray-400">
                         {formatTime(utt.start)} → {formatTime(utt.end)}
                       </span>
                       <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${getConfidenceColor(utt.confidence)}`}>
-                        <Shield size={8} className="mr-0.5" />
-                        {(utt.confidence * 100).toFixed(0)}% {getConfidenceLabel(utt.confidence)}
+                        {(utt.confidence * 100).toFixed(0)}%
                       </Badge>
                     </div>
                   </div>
-                  {utt.url && (
-                    <Eye size={14} className="text-gray-300 group-hover:text-blue-500 transition-colors flex-shrink-0 mt-1" />
-                  )}
-                </div>
-              </button>
-              {/* WAV Audio Player */}
-              {utt.audio_path && (
-                <div className="ml-11 bg-blue-50/50 rounded-lg border border-blue-100 p-2 flex items-center gap-2">
-                  <Volume2 size={12} className="text-blue-500 flex-shrink-0" />
-                  <audio
-                    controls
-                    preload="metadata"
-                    src={`${env.API_URL}/assets/${utt.audio_path}`}
-                    className="h-7 flex-1 [&::-webkit-media-controls-panel]:bg-transparent"
-                  />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      ))}
+                ))}
 
-      {/* Link to ASR Review page */}
-      <div className="flex justify-center pt-2">
-        <Button variant="outline" size="sm" className="text-xs border-blue-200 text-blue-600 hover:bg-blue-50" asChild>
-          <a href="/asr-review">
-            <ExternalLink size={12} className="mr-1" /> Buka ASR Review
-          </a>
-        </Button>
-      </div>
+                {/* "Lihat Selengkapnya" */}
+                <div className="flex justify-center pt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs border-blue-200 text-blue-600 hover:bg-blue-50 w-full"
+                    asChild
+                  >
+                    <a href={`/asr-review?job_id=${jobId}`}>
+                      <ExternalLink size={12} className="mr-1" />
+                      {hasMore ? `Lihat Selengkapnya (${uttCount - PREVIEW_LIMIT} kalimat lagi)` : 'Buka di ASR Review'}
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

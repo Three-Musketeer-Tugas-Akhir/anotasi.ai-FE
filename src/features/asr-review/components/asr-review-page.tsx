@@ -1,11 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import {
   Table,
   TableBody,
@@ -18,142 +17,198 @@ import {
   Volume2,
   AlertTriangle,
   CheckCircle2,
-  Clock,
   Loader2,
   RefreshCw,
   Shield,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
   Play,
   Pause,
-  ExternalLink,
+  FileText,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
 } from 'lucide-react';
 import { env } from '@/core/config/env';
-import { asrReviewApi } from '../asr-review-api';
-import type { ASRReviewQueueItem } from '../asr-review-types';
-import { AsrReviewDetailPanel } from './asr-review-detail-panel';
+import { pipelineApi } from '@/features/pipeline/pipeline-api';
+import type {
+  Stage2ResultsResponse,
+  Stage2SegmentResult,
+  Stage2Utterance,
+  JobListDetailedResponse,
+} from '@/features/pipeline/types';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-function formatTimestamp(seconds: number | null): string {
-  if (seconds === null || seconds === undefined) return '--:--:--.---';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
+function formatTimestamp(seconds: number): string {
+  const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   const ms = Math.floor((seconds % 1) * 1000);
-  if (h > 0) return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
 }
 
-function getConfidenceColor(score: number | null): string {
-  if (score === null) return 'text-gray-400';
-  if (score >= 0.9) return 'text-emerald-600';
-  if (score >= 0.5) return 'text-amber-600';
-  return 'text-red-600';
-}
-
-function getConfidenceBg(score: number | null): string {
-  if (score === null) return 'bg-gray-50 border-gray-200';
-  if (score >= 0.9) return 'bg-emerald-50 border-emerald-200';
-  if (score >= 0.5) return 'bg-amber-50 border-amber-200';
-  return 'bg-red-50 border-red-200';
-}
-
-/**
- * Derive data name from filename.
- * Example: "[FULL] HARI INI! Demo Ojol..." → "INEWS_BS_260418_0001"
- */
-function deriveDataName(filename: string, index: number): string {
-  // Try to extract date from filename patterns
-  const dateMatch = filename.match(/(\d{2})[\s._-]?(\d{2})[\s._-]?(\d{2,4})/);
-  let dateStr = 'XXXXXX';
-  if (dateMatch) {
-    const [, d1, d2, d3] = dateMatch;
-    // Could be DD MM YY or YY MM DD, keep as-is
-    dateStr = `${d1}${d2}${d3.slice(-2)}`;
-  }
-
-  // Determine BS/SB from filename
-  const upperName = filename.toUpperCase();
-  const isSB = upperName.includes('SIANG') || upperName.includes('PAGI');
-  const typeCode = isSB ? 'SB' : 'BS';
-
-  const seqNum = (index + 1).toString().padStart(4, '0');
-  return `INEWS_${typeCode}_${dateStr}_${seqNum}`;
+function getConfidenceBadge(score: number): { color: string; label: string } {
+  if (score >= 0.9) return { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Tinggi' };
+  if (score >= 0.7) return { color: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Sedang' };
+  return { color: 'bg-red-50 text-red-700 border-red-200', label: 'Rendah' };
 }
 
 function buildAudioUrl(jobId: string, segmentId: string): string {
   return `${env.API_URL}/assets/jobs/${jobId}/audio/${segmentId}.wav`;
 }
 
-// ── WAV Player Component ───────────────────────────────────────────
+// ── WAV Player ─────────────────────────────────────────────────────
 
-function WavPlayer({ src }: { src: string }) {
+function WavPlayer({ src, startTime, endTime }: { src: string; startTime?: number; endTime?: number }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
+  const rafRef = useRef<number>(0);
 
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio) return;
+
     if (isPlaying) {
       audio.pause();
+      setIsPlaying(false);
+      cancelAnimationFrame(rafRef.current);
     } else {
-      audio.play().catch(() => { /* ignore autoplay block */ });
+      // If startTime provided, seek first
+      if (startTime !== undefined) {
+        audio.currentTime = startTime;
+      }
+      audio.play().catch(() => {});
+      setIsPlaying(true);
+
+      // If endTime provided, stop at that point
+      if (endTime !== undefined) {
+        const checkEnd = () => {
+          if (audio.currentTime >= endTime) {
+            audio.pause();
+            setIsPlaying(false);
+            return;
+          }
+          rafRef.current = requestAnimationFrame(checkEnd);
+        };
+        rafRef.current = requestAnimationFrame(checkEnd);
+      }
     }
-    setIsPlaying(!isPlaying);
   };
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const onEnd = () => setIsPlaying(false);
-    const onTime = () => setCurrentTime(audio.currentTime);
-    const onMeta = () => setDuration(audio.duration);
+    const onEnd = () => {
+      setIsPlaying(false);
+      cancelAnimationFrame(rafRef.current);
+    };
     audio.addEventListener('ended', onEnd);
-    audio.addEventListener('timeupdate', onTime);
-    audio.addEventListener('loadedmetadata', onMeta);
     return () => {
       audio.removeEventListener('ended', onEnd);
-      audio.removeEventListener('timeupdate', onTime);
-      audio.removeEventListener('loadedmetadata', onMeta);
+      cancelAnimationFrame(rafRef.current);
     };
   }, []);
 
   // Reset when src changes
   useEffect(() => {
     setIsPlaying(false);
-    setCurrentTime(0);
+    cancelAnimationFrame(rafRef.current);
   }, [src]);
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center justify-center">
       <audio ref={audioRef} src={src} preload="metadata" />
       <button
         onClick={togglePlay}
-        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
           isPlaying
-            ? 'bg-teal-600 text-white'
+            ? 'bg-teal-600 text-white shadow-md scale-105'
             : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
         }`}
+        title={isPlaying ? 'Pause' : 'Play'}
       >
         {isPlaying ? <Pause size={12} /> : <Play size={12} className="ml-0.5" />}
       </button>
-      <div className="flex-1 min-w-[60px]">
-        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-teal-500 rounded-full transition-all"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+    </div>
+  );
+}
+
+// ── Job Picker (when no job_id in URL) ─────────────────────────────
+
+function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
+  const [loading, setLoading] = useState(true);
+  const [jobs, setJobs] = useState<{ id: string; status: string; total_segments: number; created_at: string | null }[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await pipelineApi.listJobs({ status: 'READY_FOR_ANNOTATION', page: 1, page_size: 50 });
+        setJobs(data.items);
+      } catch {
+        setError('Gagal memuat daftar job');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 size={24} className="text-teal-600 animate-spin" />
       </div>
-      <span className="text-[10px] font-mono text-gray-400 flex-shrink-0 w-8">
-        {duration > 0 ? `${Math.floor(duration)}s` : '--'}
-      </span>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 text-center">
+        <AlertTriangle size={28} className="text-red-400 mx-auto mb-2" />
+        <p className="text-sm text-red-600">{error}</p>
+      </div>
+    );
+  }
+
+  if (jobs.length === 0) {
+    return (
+      <div className="p-12 text-center">
+        <FileText size={40} className="text-gray-300 mx-auto mb-3" />
+        <p className="text-sm font-medium text-gray-500">Belum ada job yang selesai diproses</p>
+        <p className="text-xs text-gray-400 mt-1">Upload dan proses video terlebih dahulu di halaman Pipeline</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="text-center mb-6">
+        <Layers size={32} className="text-teal-500 mx-auto mb-2" />
+        <h2 className="text-lg font-bold text-gray-800">Pilih Job untuk Review ASR</h2>
+        <p className="text-sm text-gray-500 mt-1">Pilih salah satu video yang sudah selesai diproses</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {jobs.map((job) => (
+          <button
+            key={job.id}
+            onClick={() => onSelectJob(job.id)}
+            className="bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-teal-300 hover:bg-teal-50/30 hover:shadow-sm transition-all group"
+          >
+            <p className="text-sm font-bold text-gray-800 font-mono group-hover:text-teal-700 transition-colors">
+              Job #{job.id.slice(0, 8)}
+            </p>
+            <div className="flex items-center gap-2 mt-2">
+              <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                <CheckCircle2 size={8} className="mr-0.5" /> Selesai
+              </Badge>
+              <span className="text-[10px] text-gray-400">{job.total_segments} segmen</span>
+            </div>
+            {job.created_at && (
+              <p className="text-[10px] text-gray-400 mt-1.5">
+                {new Date(job.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </p>
+            )}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -161,83 +216,74 @@ function WavPlayer({ src }: { src: string }) {
 // ── Main Component ─────────────────────────────────────────────────
 
 export function AsrReviewPage() {
-  // ── State ─────────────────────────────────────────────────────
-  const [items, setItems] = useState<ASRReviewQueueItem[]>([]);
-  const [totalItems, setTotalItems] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [lowConfidenceCount, setLowConfidenceCount] = useState(0);
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
-  const [lowConfidenceOnly, setLowConfidenceOnly] = useState(false);
-  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
+  const urlJobId = searchParams.get('job_id');
+
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(urlJobId);
+  const [stage2Data, setStage2Data] = useState<Stage2ResultsResponse | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeSegmentIdx, setActiveSegmentIdx] = useState(0);
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // ── Fetch Queue ───────────────────────────────────────────────
-
-  const fetchQueue = useCallback(
-    async (silent = false) => {
-      if (!silent) setLoading(true);
-      try {
-        const data = await asrReviewApi.getQueue({
-          page,
-          page_size: pageSize,
-          low_confidence_only: lowConfidenceOnly,
-        });
-        setItems(data.items);
-        setTotalItems(data.total);
-        setTotalPages(data.pages);
-        setLowConfidenceCount(data.low_confidence_count);
-        setError(null);
-      } catch (err: unknown) {
-        const msg =
-          (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-          'Gagal memuat antrian review';
-        setError(typeof msg === 'string' ? msg : 'Gagal memuat antrian review');
-      } finally {
-        if (!silent) setLoading(false);
-      }
-    },
-    [page, pageSize, lowConfidenceOnly],
-  );
-
-  // Load on mount + filter change
+  // Sync URL param
   useEffect(() => {
-    fetchQueue();
-  }, [fetchQueue]);
-
-  // Polling every 10s
-  useEffect(() => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(() => fetchQueue(true), 10000);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [fetchQueue]);
-
-  // ── Handlers ──────────────────────────────────────────────────
-
-  const handleActionCompleted = () => {
-    fetchQueue(true);
-    const currentIdx = items.findIndex((i) => i.review_id === selectedReviewId);
-    if (currentIdx >= 0 && currentIdx < items.length - 1) {
-      setSelectedReviewId(items[currentIdx + 1].review_id);
-    } else if (items.length > 1) {
-      setSelectedReviewId(items[0].review_id);
-    } else {
-      setSelectedReviewId(null);
+    if (urlJobId && urlJobId !== selectedJobId) {
+      setSelectedJobId(urlJobId);
     }
+  }, [urlJobId]);
+
+  // Fetch stage2 data when job is selected
+  const fetchStage2 = useCallback(async (jobId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await pipelineApi.getStage2Results(jobId);
+      setStage2Data(data);
+      setActiveSegmentIdx(0);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Gagal memuat hasil ASR';
+      setError(typeof msg === 'string' ? msg : 'Gagal memuat hasil ASR');
+      setStage2Data(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedJobId) {
+      fetchStage2(selectedJobId);
+    }
+  }, [selectedJobId, fetchStage2]);
+
+  const handleJobSelect = (jobId: string) => {
+    setSelectedJobId(jobId);
+    // Update URL without reload
+    window.history.replaceState(null, '', `/asr-review?job_id=${jobId}`);
   };
 
-  const handleFilterToggle = (checked: boolean) => {
-    setLowConfidenceOnly(checked);
-    setPage(1);
-    setSelectedReviewId(null);
-  };
+  // ── No job selected → show picker ──
+  if (!selectedJobId) {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
+          <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <Volume2 size={22} className="text-teal-600" />
+            ASR Review
+          </h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Review hasil transkripsi otomatis (Whisper ASR) per video
+          </p>
+        </header>
+        <ScrollArea className="flex-1">
+          <JobPicker onSelectJob={handleJobSelect} />
+        </ScrollArea>
+      </div>
+    );
+  }
 
-  // ── Render ────────────────────────────────────────────────────
+  // ── Job selected → show ASR results ──
+  const segments = stage2Data?.results ?? [];
+  const activeSegment = segments[activeSegmentIdx] ?? null;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -247,179 +293,192 @@ export function AsrReviewPage() {
           <div>
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
               <Volume2 size={22} className="text-teal-600" />
-              ASR Annotation
+              ASR Review
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Review dan validasi hasil transkripsi otomatis (Whisper ASR)
+              Job <span className="font-mono text-gray-700">{selectedJobId.slice(0, 8)}...</span> — Hasil transkripsi Whisper ASR
             </p>
           </div>
-          <div className="flex gap-3 items-center">
-            {/* Stats */}
-            <div className="flex gap-2 text-xs">
-              <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">
-                <Clock size={10} className="mr-1" />
-                {totalItems} Pending
-              </Badge>
-              {lowConfidenceCount > 0 && (
-                <Badge variant="outline" className="bg-red-50 text-red-600 border-red-200">
-                  <AlertTriangle size={10} className="mr-1" />
-                  {lowConfidenceCount} Low Confidence
-                </Badge>
-              )}
-            </div>
-            {/* Filter */}
-            <div className="flex items-center gap-2 border-l border-gray-200 pl-3 ml-1">
-              <Filter size={12} className="text-gray-400" />
-              <Label htmlFor="low-conf-toggle-dt" className="text-[10px] font-medium text-gray-500 uppercase tracking-wider cursor-pointer">
-                Low Conf.
-              </Label>
-              <Switch id="low-conf-toggle-dt" checked={lowConfidenceOnly} onCheckedChange={handleFilterToggle} className="scale-75" />
-            </div>
-            <button onClick={() => fetchQueue()} className="p-1.5 rounded-lg text-gray-400 hover:text-teal-600 hover:bg-gray-100 transition-colors" title="Refresh">
-              <RefreshCw size={16} />
-            </button>
+          <div className="flex gap-2 items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() => {
+                setSelectedJobId(null);
+                window.history.replaceState(null, '', '/asr-review');
+              }}
+            >
+              <ChevronLeft size={14} className="mr-1" />
+              Pilih Job Lain
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() => fetchStage2(selectedJobId)}
+            >
+              <RefreshCw size={14} className="mr-1" />
+              Refresh
+            </Button>
           </div>
         </div>
       </header>
 
-      {/* Body */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* ── Main: DataTable ── */}
-        <div className={`${selectedReviewId ? 'flex-1' : 'flex-1'} flex flex-col overflow-hidden bg-white`}>
-          <ScrollArea className="flex-1">
-            {loading ? (
-              <div className="flex items-center justify-center py-16">
-                <Loader2 size={24} className="text-teal-600 animate-spin" />
-              </div>
-            ) : error ? (
-              <div className="p-8 text-center">
-                <AlertTriangle size={28} className="text-red-400 mx-auto mb-2" />
-                <p className="text-sm text-red-600 mb-2">{error}</p>
-                <Button variant="outline" size="sm" onClick={() => fetchQueue()}>Coba Lagi</Button>
-              </div>
-            ) : items.length === 0 ? (
-              <div className="p-12 text-center">
-                <CheckCircle2 size={40} className="text-emerald-300 mx-auto mb-3" />
-                <p className="text-sm font-medium text-gray-500">
-                  {lowConfidenceOnly ? 'Tidak ada segmen low confidence' : 'Antrian review kosong'}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {lowConfidenceOnly ? 'Coba matikan filter untuk melihat semua segmen' : 'Semua segmen telah di-review'}
-                </p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50/80">
-                    <TableHead className="w-12 text-center">#</TableHead>
-                    <TableHead className="w-52">Nama Data</TableHead>
-                    <TableHead className="w-28 text-center">Start</TableHead>
-                    <TableHead className="w-28 text-center">End</TableHead>
-                    <TableHead>Transkrip</TableHead>
-                    <TableHead className="w-20 text-center">Conf.</TableHead>
-                    <TableHead className="w-44">Play WAV</TableHead>
-                    <TableHead className="w-24 text-center">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((item, idx) => {
-                    const isSelected = item.review_id === selectedReviewId;
-                    const dataName = deriveDataName(item.original_filename, (page - 1) * pageSize + idx);
-                    const audioUrl = buildAudioUrl(item.job_id, item.segment_id);
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-16 flex-1">
+          <Loader2 size={24} className="text-teal-600 animate-spin" />
+        </div>
+      )}
 
-                    return (
-                      <TableRow
-                        key={item.review_id}
-                        className={`cursor-pointer transition-colors ${
-                          isSelected ? 'bg-teal-50 border-l-2 border-l-teal-500' : 'hover:bg-gray-50'
-                        }`}
-                        onClick={() => setSelectedReviewId(item.review_id)}
-                      >
-                        <TableCell className="text-center text-xs text-gray-400 font-mono">
-                          {(page - 1) * pageSize + idx + 1}
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="text-xs font-semibold text-gray-800 font-mono">{dataName}</p>
-                            <p className="text-[10px] text-gray-400 truncate mt-0.5" title={item.original_filename}>
-                              {item.original_filename}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="text-xs font-mono text-gray-600">{formatTimestamp(item.asr_start)}</span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="text-xs font-mono text-gray-600">{formatTimestamp(item.asr_end)}</span>
-                        </TableCell>
-                        <TableCell>
-                          <p className="text-sm text-gray-800 line-clamp-2 leading-relaxed max-w-md">
-                            &ldquo;{item.asr_text}&rdquo;
-                          </p>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${getConfidenceBg(item.confidence_score)} ${getConfidenceColor(item.confidence_score)}`}>
-                            <Shield size={8} className="mr-0.5" />
-                            {item.confidence_score !== null ? `${Math.round(item.confidence_score * 100)}%` : 'N/A'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <WavPlayer src={audioUrl} />
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Button
-                            size="sm"
-                            variant={isSelected ? 'default' : 'outline'}
-                            className={`h-7 text-[10px] ${isSelected ? 'bg-teal-600 hover:bg-teal-700 text-white' : ''}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedReviewId(item.review_id);
-                            }}
-                          >
-                            <ExternalLink size={10} className="mr-1" />
-                            Detail
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </ScrollArea>
+      {/* Error */}
+      {error && !loading && (
+        <div className="p-8 text-center flex-1 flex flex-col items-center justify-center">
+          <AlertTriangle size={28} className="text-red-400 mb-2" />
+          <p className="text-sm text-red-600 mb-3">{error}</p>
+          <Button variant="outline" size="sm" onClick={() => fetchStage2(selectedJobId)}>Coba Lagi</Button>
+        </div>
+      )}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <span className="text-xs text-gray-500">
-                Menampilkan {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalItems)} dari {totalItems}
+      {/* Content */}
+      {!loading && !error && stage2Data && (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Segment Tabs */}
+          <div className="bg-white border-b border-gray-200 px-6 py-2 flex-shrink-0">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex-shrink-0 mr-1">
+                Segmen:
               </span>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="h-7 text-xs">
-                  <ChevronLeft size={14} />
-                </Button>
-                <span className="text-xs text-gray-500 font-medium">
-                  Hal {page}/{totalPages}
-                </span>
-                <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="h-7 text-xs">
-                  <ChevronRight size={14} />
-                </Button>
-              </div>
+              {segments.map((seg, idx) => (
+                <button
+                  key={seg.segment_id}
+                  onClick={() => setActiveSegmentIdx(idx)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex-shrink-0 ${
+                    idx === activeSegmentIdx
+                      ? 'bg-teal-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  #{idx + 1}
+                  <span className="ml-1 opacity-70">({seg.utterances.length})</span>
+                </button>
+              ))}
             </div>
+          </div>
+
+          {/* DataTable */}
+          {activeSegment && (
+            <ScrollArea className="flex-1">
+              <div className="p-6">
+                {/* Segment Info */}
+                <div className="flex items-center gap-3 mb-4 flex-wrap">
+                  <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
+                    <FileText size={9} className="mr-1" />
+                    Segmen #{activeSegmentIdx + 1} — {activeSegment.utterances.length} kalimat
+                  </Badge>
+                  {activeSegment.asr_review_flag && (
+                    <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">
+                      <AlertTriangle size={9} className="mr-1" />
+                      Perlu Review
+                    </Badge>
+                  )}
+                  <span className="text-[10px] text-gray-400 font-mono">
+                    ID: {activeSegment.segment_id.slice(0, 16)}...
+                  </span>
+                </div>
+
+                {/* Table */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50/80">
+                        <TableHead className="w-12 text-center">#</TableHead>
+                        <TableHead className="w-48">Nama Data</TableHead>
+                        <TableHead className="w-28 text-center">Start</TableHead>
+                        <TableHead className="w-28 text-center">End</TableHead>
+                        <TableHead>Kalimat ASR</TableHead>
+                        <TableHead className="w-20 text-center">Conf.</TableHead>
+                        <TableHead className="w-16 text-center">Play</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {activeSegment.utterances.map((utt, uttIdx) => {
+                        const conf = getConfidenceBadge(utt.confidence);
+                        const audioUrl = buildAudioUrl(selectedJobId, activeSegment.segment_id);
+
+                        return (
+                          <TableRow key={utt.id} className="hover:bg-gray-50/50">
+                            <TableCell className="text-center text-xs text-gray-400 font-mono">
+                              {uttIdx + 1}
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-xs font-mono text-gray-600">
+                                INEWS_BS_XXXXXX_{(uttIdx + 1).toString().padStart(4, '0')}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className="text-xs font-mono text-gray-700">{formatTimestamp(utt.start)}</span>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className="text-xs font-mono text-gray-700">{formatTimestamp(utt.end)}</span>
+                            </TableCell>
+                            <TableCell>
+                              <p className="text-sm text-gray-800 leading-relaxed">
+                                {utt.text}
+                              </p>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${conf.color}`}>
+                                <Shield size={8} className="mr-0.5" />
+                                {(utt.confidence * 100).toFixed(0)}%
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <WavPlayer
+                                src={audioUrl}
+                                startTime={utt.start}
+                                endTime={utt.end}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Pagination-like segment navigation */}
+                <div className="flex items-center justify-between mt-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={activeSegmentIdx <= 0}
+                    onClick={() => setActiveSegmentIdx((i) => i - 1)}
+                    className="text-xs"
+                  >
+                    <ChevronLeft size={14} className="mr-1" />
+                    Segmen Sebelumnya
+                  </Button>
+                  <span className="text-xs text-gray-500">
+                    Segmen {activeSegmentIdx + 1} dari {segments.length}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={activeSegmentIdx >= segments.length - 1}
+                    onClick={() => setActiveSegmentIdx((i) => i + 1)}
+                    className="text-xs"
+                  >
+                    Segmen Berikutnya
+                    <ChevronRight size={14} className="ml-1" />
+                  </Button>
+                </div>
+              </div>
+            </ScrollArea>
           )}
         </div>
-
-        {/* ── Right: Detail Panel ── */}
-        {selectedReviewId && (
-          <div className="w-[480px] min-w-[480px] border-l border-gray-200 flex-shrink-0">
-            <AsrReviewDetailPanel
-              key={selectedReviewId}
-              reviewId={selectedReviewId}
-              onActionCompleted={handleActionCompleted}
-            />
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
