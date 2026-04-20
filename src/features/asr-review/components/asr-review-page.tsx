@@ -369,6 +369,58 @@ function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
   );
 }
 
+// ── Expandable Text Component ──────────────────────────────────────
+
+function ExpandableText({ text }: { text: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isTruncated, setIsTruncated] = useState(false);
+  const textRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+
+    const checkTruncation = () => {
+      // If we are not expanded, we can check if scrollHeight > clientHeight
+      // to determine if it's truncated by the line clamp.
+      if (!isExpanded) {
+        setIsTruncated(el.scrollHeight > el.clientHeight);
+      }
+    };
+
+    checkTruncation();
+
+    const observer = new ResizeObserver(checkTruncation);
+    observer.observe(el);
+
+    return () => observer.disconnect();
+  }, [text, isExpanded]);
+
+  return (
+    <div className="flex flex-col items-start w-full">
+      <div
+        ref={textRef}
+        className={`text-sm text-gray-800 leading-relaxed overflow-hidden text-wrap break-words w-full ${
+          !isExpanded ? 'line-clamp-2' : ''
+        }`}
+        style={{
+          wordBreak: 'break-word',
+        }}
+      >
+        {text}
+      </div>
+      {(isTruncated || isExpanded) && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-[10px] text-teal-600 hover:text-teal-800 font-medium mt-1 transition-colors"
+        >
+          {isExpanded ? 'Sembunyikan' : 'Tampilkan selengkapnya...'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────
 
 export function AsrReviewPage() {
@@ -392,7 +444,6 @@ export function AsrReviewPage() {
   // Table pagination & expand state
   const [tablePage, setTablePage] = useState(1);
   const TABLE_PAGE_SIZE = 20;
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   // Sync URL param
   useEffect(() => {
@@ -430,7 +481,6 @@ export function AsrReviewPage() {
     setCurrentTime(0);
     setAudioDuration(0);
     setTablePage(1);
-    setExpandedRows(new Set());
   }, [activeSegmentIdx]);
 
   const handleJobSelect = (jobId: string) => {
@@ -721,8 +771,6 @@ export function AsrReviewPage() {
                               const isPlaying = playingUttIdx === globalIdx;
                               const isHovered = hoveredUttIdx === globalIdx;
                               const isOtherPlaying = playingUttIdx !== null && playingUttIdx !== globalIdx;
-                              const isExpanded = expandedRows.has(utt.id);
-                              const isLong = utt.text.length > 80;
 
                               return (
                                 <TableRow
@@ -751,27 +799,8 @@ export function AsrReviewPage() {
                                   <TableCell className="text-center align-top pt-3">
                                     <span className="text-xs font-mono text-gray-700">{formatTimestamp(utt.end)}</span>
                                   </TableCell>
-                                  <TableCell className="align-top pt-3 max-w-md">
-                                    <p className={`text-sm text-gray-800 leading-relaxed ${
-                                      !isExpanded && isLong ? 'line-clamp-1' : ''
-                                    }`}>
-                                      {utt.text}
-                                    </p>
-                                    {isLong && (
-                                      <button
-                                        onClick={() => {
-                                          setExpandedRows((prev) => {
-                                            const next = new Set(prev);
-                                            if (next.has(utt.id)) next.delete(utt.id);
-                                            else next.add(utt.id);
-                                            return next;
-                                          });
-                                        }}
-                                        className="text-[10px] text-teal-600 hover:text-teal-800 font-medium mt-0.5 transition-colors"
-                                      >
-                                        {isExpanded ? 'Sembunyikan' : 'Tampilkan selengkapnya...'}
-                                      </button>
-                                    )}
+                                  <TableCell className="align-top pt-3 max-w-sm">
+                                    <ExpandableText text={utt.text} />
                                   </TableCell>
                                   <TableCell className="text-center align-top pt-3">
                                     <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${conf.color}`}>
