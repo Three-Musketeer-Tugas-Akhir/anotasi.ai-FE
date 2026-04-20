@@ -739,9 +739,6 @@ function Stage1Content({
   results: Stage1ResultsResponse | null;
   onPreviewVideo: (url: string, title: string, subtitle?: string) => void;
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const PREVIEW_LIMIT = 6;
-
   if (!results || results.results.length === 0) {
     return (
       <div className="flex items-center justify-center py-4 text-emerald-600">
@@ -752,7 +749,6 @@ function Stage1Content({
   }
 
   const segments = results.results;
-  const hasMore = segments.length > PREVIEW_LIMIT;
 
   const renderCard = (seg: any, wClass: string = "w-full") => (
     <button
@@ -790,41 +786,13 @@ function Stage1Content({
           <Layers size={10} className="mr-1.5" />
           {segments.length} Segmen Terdeteksi
         </Badge>
-
-        {hasMore && isExpanded && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsExpanded(false)}
-            className="h-6 text-[10px] text-gray-500 hover:text-gray-700"
-          >
-            Sembunyikan
-          </Button>
-        )}
       </div>
 
-      {!isExpanded ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {segments.slice(0, PREVIEW_LIMIT).map(seg => renderCard(seg))}
-          </div>
-          {hasMore && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsExpanded(true)}
-              className="w-full text-xs border-teal-200 text-teal-700 hover:bg-teal-50 shadow-sm"
-            >
-              Lihat {segments.length - PREVIEW_LIMIT} Segmen Lainnya
-              <ChevronDown size={14} className="ml-1.5" />
-            </Button>
-          )}
+      <div className="max-h-[240px] overflow-y-auto pr-1 pb-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {segments.map((seg) => renderCard(seg))}
         </div>
-      ) : (
-        <div className="flex overflow-x-auto gap-3 pb-4 pt-1 snap-x">
-          {segments.map(seg => renderCard(seg, "w-[240px] snap-start"))}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
