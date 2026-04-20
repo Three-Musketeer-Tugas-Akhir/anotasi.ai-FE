@@ -389,6 +389,11 @@ export function AsrReviewPage() {
   const [audioDuration, setAudioDuration] = useState(0);
   const [hoveredUttIdx, setHoveredUttIdx] = useState<number | null>(null);
 
+  // Table pagination & expand state
+  const [tablePage, setTablePage] = useState(1);
+  const TABLE_PAGE_SIZE = 20;
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
   // Sync URL param
   useEffect(() => {
     if (urlJobId && urlJobId !== selectedJobId) {
@@ -419,11 +424,13 @@ export function AsrReviewPage() {
     }
   }, [selectedJobId, fetchStage2]);
 
-  // Reset playback when segment changes
+  // Reset playback + table state when segment changes
   useEffect(() => {
     stopPlayback();
     setCurrentTime(0);
     setAudioDuration(0);
+    setTablePage(1);
+    setExpandedRows(new Set());
   }, [activeSegmentIdx]);
 
   const handleJobSelect = (jobId: string) => {
@@ -683,89 +690,164 @@ export function AsrReviewPage() {
                   onHoverUtt={setHoveredUttIdx}
                 />
 
-                {/* Table */}
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50/80">
-                        <TableHead className="w-12 text-center">#</TableHead>
-                        <TableHead className="w-48">Nama Data</TableHead>
-                        <TableHead className="w-28 text-center">Start</TableHead>
-                        <TableHead className="w-28 text-center">End</TableHead>
-                        <TableHead>Kalimat ASR</TableHead>
-                        <TableHead className="w-20 text-center">Conf.</TableHead>
-                        <TableHead className="w-16 text-center">Play</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {activeSegment.utterances.map((utt, uttIdx) => {
-                        const conf = getConfidenceBadge(utt.confidence);
-                        const isPlaying = playingUttIdx === uttIdx;
-                        const isHovered = hoveredUttIdx === uttIdx;
-                        const isOtherPlaying = playingUttIdx !== null && playingUttIdx !== uttIdx;
+                {/* Table with client-side pagination */}
+                {(() => {
+                  const allUtts = activeSegment.utterances;
+                  const totalUtts = allUtts.length;
+                  const totalTablePages = Math.max(1, Math.ceil(totalUtts / TABLE_PAGE_SIZE));
+                  const pageStart = (tablePage - 1) * TABLE_PAGE_SIZE;
+                  const pageEnd = Math.min(pageStart + TABLE_PAGE_SIZE, totalUtts);
+                  const pageUtts = allUtts.slice(pageStart, pageEnd);
 
-                        return (
-                          <TableRow
-                            key={utt.id}
-                            className={`transition-colors ${
-                              isPlaying
-                                ? 'bg-teal-50/60'
-                                : isHovered
-                                  ? 'bg-blue-50/40'
-                                  : 'hover:bg-gray-50/50'
-                            }`}
-                            onMouseEnter={() => setHoveredUttIdx(uttIdx)}
-                            onMouseLeave={() => setHoveredUttIdx(null)}
-                          >
-                            <TableCell className="text-center text-xs text-gray-400 font-mono">
-                              {uttIdx + 1}
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-xs font-mono text-gray-600">
-                                INEWS_BS_XXXXXX_{(uttIdx + 1).toString().padStart(4, '0')}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <span className="text-xs font-mono text-gray-700">{formatTimestamp(utt.start)}</span>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <span className="text-xs font-mono text-gray-700">{formatTimestamp(utt.end)}</span>
-                            </TableCell>
-                            <TableCell>
-                              <p className="text-sm text-gray-800 leading-relaxed">
-                                {utt.text}
-                              </p>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${conf.color}`}>
-                                <Shield size={8} className="mr-0.5" />
-                                {(utt.confidence * 100).toFixed(0)}%
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center justify-center">
-                                <button
-                                  onClick={() => isPlaying ? stopPlayback() : playUtterance(uttIdx)}
-                                  disabled={isOtherPlaying}
-                                  className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+                  return (
+                    <>
+                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-slate-50/80">
+                              <TableHead className="w-12 text-center">#</TableHead>
+                              <TableHead className="w-48">Nama Data</TableHead>
+                              <TableHead className="w-28 text-center">Start</TableHead>
+                              <TableHead className="w-28 text-center">End</TableHead>
+                              <TableHead>Kalimat ASR</TableHead>
+                              <TableHead className="w-20 text-center">Conf.</TableHead>
+                              <TableHead className="w-16 text-center">Play</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {pageUtts.map((utt, localIdx) => {
+                              const globalIdx = pageStart + localIdx;
+                              const conf = getConfidenceBadge(utt.confidence);
+                              const isPlaying = playingUttIdx === globalIdx;
+                              const isHovered = hoveredUttIdx === globalIdx;
+                              const isOtherPlaying = playingUttIdx !== null && playingUttIdx !== globalIdx;
+                              const isExpanded = expandedRows.has(utt.id);
+                              const isLong = utt.text.length > 80;
+
+                              return (
+                                <TableRow
+                                  key={utt.id}
+                                  className={`transition-colors ${
                                     isPlaying
-                                      ? 'bg-teal-600 text-white shadow-md animate-pulse'
-                                      : isOtherPlaying
-                                        ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                                        : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
+                                      ? 'bg-teal-50/60'
+                                      : isHovered
+                                        ? 'bg-blue-50/40'
+                                        : 'hover:bg-gray-50/50'
                                   }`}
-                                  title={isPlaying ? 'Pause' : isOtherPlaying ? 'Sedang memutar lainnya' : 'Play'}
+                                  onMouseEnter={() => setHoveredUttIdx(globalIdx)}
+                                  onMouseLeave={() => setHoveredUttIdx(null)}
                                 >
-                                  {isPlaying ? <Pause size={12} /> : <Play size={12} className="ml-0.5" />}
-                                </button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
+                                  <TableCell className="text-center text-xs text-gray-400 font-mono align-top pt-3">
+                                    {globalIdx + 1}
+                                  </TableCell>
+                                  <TableCell className="align-top pt-3">
+                                    <span className="text-xs font-mono text-gray-600">
+                                      INEWS_BS_XXXXXX_{(globalIdx + 1).toString().padStart(4, '0')}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-center align-top pt-3">
+                                    <span className="text-xs font-mono text-gray-700">{formatTimestamp(utt.start)}</span>
+                                  </TableCell>
+                                  <TableCell className="text-center align-top pt-3">
+                                    <span className="text-xs font-mono text-gray-700">{formatTimestamp(utt.end)}</span>
+                                  </TableCell>
+                                  <TableCell className="align-top pt-3 max-w-md">
+                                    <p className={`text-sm text-gray-800 leading-relaxed ${
+                                      !isExpanded && isLong ? 'line-clamp-1' : ''
+                                    }`}>
+                                      {utt.text}
+                                    </p>
+                                    {isLong && (
+                                      <button
+                                        onClick={() => {
+                                          setExpandedRows((prev) => {
+                                            const next = new Set(prev);
+                                            if (next.has(utt.id)) next.delete(utt.id);
+                                            else next.add(utt.id);
+                                            return next;
+                                          });
+                                        }}
+                                        className="text-[10px] text-teal-600 hover:text-teal-800 font-medium mt-0.5 transition-colors"
+                                      >
+                                        {isExpanded ? 'Sembunyikan' : 'Tampilkan selengkapnya...'}
+                                      </button>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-center align-top pt-3">
+                                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${conf.color}`}>
+                                      <Shield size={8} className="mr-0.5" />
+                                      {(utt.confidence * 100).toFixed(0)}%
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="align-top pt-3">
+                                    <div className="flex items-center justify-center">
+                                      <button
+                                        onClick={() => isPlaying ? stopPlayback() : playUtterance(globalIdx)}
+                                        disabled={isOtherPlaying}
+                                        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+                                          isPlaying
+                                            ? 'bg-teal-600 text-white shadow-md animate-pulse'
+                                            : isOtherPlaying
+                                              ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                                              : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
+                                        }`}
+                                        title={isPlaying ? 'Pause' : isOtherPlaying ? 'Sedang memutar lainnya' : 'Play'}
+                                      >
+                                        {isPlaying ? <Pause size={12} /> : <Play size={12} className="ml-0.5" />}
+                                      </button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* Pagination */}
+                      {totalTablePages > 1 && (
+                        <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-2.5">
+                          <span className="text-xs text-gray-500">
+                            Menampilkan {pageStart + 1}–{pageEnd} dari {totalUtts} kalimat
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={tablePage <= 1}
+                              onClick={() => setTablePage((p) => p - 1)}
+                              className="h-7 w-7 p-0"
+                            >
+                              <ChevronLeft size={14} />
+                            </Button>
+                            {Array.from({ length: totalTablePages }, (_, i) => i + 1).map((p) => (
+                              <button
+                                key={p}
+                                onClick={() => setTablePage(p)}
+                                className={`h-7 min-w-[28px] rounded text-xs font-semibold transition-colors ${
+                                  p === tablePage
+                                    ? 'bg-teal-600 text-white'
+                                    : 'text-gray-500 hover:bg-gray-100'
+                                }`}
+                              >
+                                {p}
+                              </button>
+                            ))}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={tablePage >= totalTablePages}
+                              onClick={() => setTablePage((p) => p + 1)}
+                              className="h-7 w-7 p-0"
+                            >
+                              <ChevronRight size={14} />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
 
                 {/* Segment navigation */}
                 <div className="flex items-center justify-between">
