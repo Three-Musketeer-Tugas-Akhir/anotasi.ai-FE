@@ -1,16 +1,16 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { PenTool, ArrowLeft, Loader2, AlertTriangle, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { VideoPlayer } from './video-player';
 import { TimelineEditor } from './timeline-editor';
-import { PropertiesPanel, type AnnotationEditData } from './properties-panel';
+import { PropertiesPanel } from './properties-panel';
 import { ActionBar } from './action-bar';
 import { AnnotationQueue } from './annotation-queue';
 import { SyncWorkbench } from './sync-workbench';
 import { annotationApi } from '../annotation-api';
-import type { SegmentDetailResponse } from '../annotation-types';
+import type { SegmentDetailResponse, UtteranceCorrection } from '../annotation-types';
 
 // ── Component ──────────────────────────────────────────────────────
 
@@ -21,12 +21,8 @@ export function AnnotationPage() {
   const [segmentLoading, setSegmentLoading] = useState(false);
   const [segmentError, setSegmentError] = useState<string | null>(null);
 
-  // ── Edit Data ─────────────────────────────────────────────────
-  const [editData, setEditData] = useState<AnnotationEditData>({
-    newText: '',
-    newStart: 0,
-    newEnd: 0,
-  });
+  // ── Utterance-Level Edit State ────────────────────────────────
+  const [utteranceEdits, setUtteranceEdits] = useState<UtteranceCorrection[]>([]);
 
   // ── Video State ───────────────────────────────────────────────
   const [isPlaying, setIsPlaying] = useState(false);
@@ -46,6 +42,17 @@ export function AnnotationPage() {
   const [latestEditId, setLatestEditId] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
+  // ── Computed Aggregated Values (for TimelineEditor) ──────────
+  const segmentStart = useMemo(() => {
+    if (utteranceEdits.length === 0) return 0;
+    return Math.min(...utteranceEdits.map((u) => u.start));
+  }, [utteranceEdits]);
+
+  const segmentEnd = useMemo(() => {
+    if (utteranceEdits.length === 0) return 0;
+    return Math.max(...utteranceEdits.map((u) => u.end));
+  }, [utteranceEdits]);
+
   // ── Load Segment Detail ───────────────────────────────────────
 
   const loadSegment = useCallback(async (segmentId: string) => {
@@ -55,13 +62,25 @@ export function AnnotationPage() {
     try {
       const data = await annotationApi.getSegment(segmentId);
       setSegment(data);
-      setEditData({
-        newText: data.current_text,
-        newStart: data.current_start,
-        newEnd: data.current_end,
-      });
 
-      // Auto-populate latestEditId from existing edit history (for returning users)
+      // Initialize utterance edits from current_utterances (existing edit)
+      // or fall back to transcripts (ASR original)
+      if (data.current_utterances && data.current_utterances.length > 0) {
+        setUtteranceEdits(data.current_utterances);
+      } else if (data.transcripts && data.transcripts.length > 0) {
+        setUtteranceEdits(
+          data.transcripts.map((t) => ({
+            utterance_index: t.utterance_index,
+            text: t.text,
+            start: t.start,
+            end: t.end,
+          }))
+        );
+      } else {
+        setUtteranceEdits([]);
+      }
+
+      // Auto-populate latestEditId from existing edit history
       if (data.edit_history && data.edit_history.length > 0) {
         const mostRecent = data.edit_history[data.edit_history.length - 1];
         setLatestEditId(mostRecent.edit_id);
@@ -109,7 +128,6 @@ export function AnnotationPage() {
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
-    // Pre-populate editId from queue if available (skip redundant lookups)
     setLatestEditId(editId ?? null);
     setSyncStatus(null);
   };
@@ -120,34 +138,52 @@ export function AnnotationPage() {
     setIsPlaying(false);
     setLatestEditId(null);
     setSyncStatus(null);
+    setUtteranceEdits([]);
   };
 
-  const handleEditDataChange = (updates: Partial<AnnotationEditData>) => {
-    setEditData((prev) => ({ ...prev, ...updates }));
+  const handleUtteranceChange = (index: number, updates: Partial<UtteranceCorrection>) => {
+    setUtteranceEdits((prev) => {
+      const next = [...prev];
+      if (next[index]) {
+        next[index] = { ...next[index], ...updates };
+      }
+      return next;
+    });
   };
 
   const handleTrimChange = (start: number, end: number) => {
-    setEditData((prev) => ({ ...prev, newStart: start, newEnd: end }));
+    // Adjust utterance boundaries based on timeline trim
+    // Strategy: adjust first utterance start and last utterance end
+    setUtteranceEdits((prev) => {
+      if (prev.length === 0) return prev;
+      const next = [...prev];
+      const currentStart = Math.min(...next.map((u) => u.start));
+      const currentEnd = Math.max(...next.map((u) => u.end));
+      const startDelta = start - currentStart;
+      const endDelta = end - currentEnd;
+
+      // Apply delta to all utterances proportionally or to boundaries
+      // Simple approach: shift all by startDelta, stretch last by endDelta
+      next[0] = { ...next[0], start: next[0].start + startDelta };
+      next[next.length - 1] = { ...next[next.length - 1], end: next[next.length - 1].end + endDelta };
+      return next;
+    });
   };
 
   // ── API Actions ───────────────────────────────────────────────
 
   const handleSaveDraft = async () => {
-    if (!selectedSegmentId || !editData.newText.trim()) return;
+    if (!selectedSegmentId || utteranceEdits.length === 0) return;
     setIsSaving(true);
     setActionMessage(null);
     try {
       const result = await annotationApi.saveDraft(selectedSegmentId, {
-        new_text: editData.newText.trim(),
-        new_start: editData.newStart,
-        new_end: editData.newEnd,
+        utterances: utteranceEdits,
       });
       setActionMessage(result.message || 'Draft tersimpan');
-      // Capture edit_id for sync workbench
       if (result.edit_id) {
         setLatestEditId(result.edit_id);
       }
-      // Reload segment to get updated edit history
       await loadSegment(selectedSegmentId);
     } catch (err: unknown) {
       const msg =
@@ -163,11 +199,10 @@ export function AnnotationPage() {
     if (!selectedSegmentId) return;
     try {
       const preview = await annotationApi.getPreview(selectedSegmentId, {
-        start_time: editData.newStart,
-        end_time: editData.newEnd,
-        transcript_text: editData.newText,
+        start_time: segmentStart,
+        end_time: segmentEnd,
+        transcript_text: utteranceEdits.map((u) => u.text).join(' '),
       });
-      // Seek video to preview start and play
       setCurrentTime(preview.start_time);
       setIsPlaying(true);
       setActionMessage(`Preview: ${preview.start_time.toFixed(2)}s → ${preview.end_time.toFixed(2)}s`);
@@ -184,15 +219,19 @@ export function AnnotationPage() {
     try {
       const result = await annotationApi.resetToOriginal(selectedSegmentId);
       setActionMessage(result.message);
-      // Reset edit data to reverted values
       if (result.reverted_to) {
-        setEditData({
-          newText: (result.reverted_to.text as string) || '',
-          newStart: (result.reverted_to.start as number) || 0,
-          newEnd: (result.reverted_to.end as number) || 0,
-        });
+        // Reset utterance edits from ASR original
+        if (segment && segment.transcripts.length > 0) {
+          setUtteranceEdits(
+            segment.transcripts.map((t) => ({
+              utterance_index: t.utterance_index,
+              text: t.text,
+              start: t.start,
+              end: t.end,
+            }))
+          );
+        }
       }
-      // Reload segment
       await loadSegment(selectedSegmentId);
     } catch (err: unknown) {
       const msg =
@@ -205,7 +244,6 @@ export function AnnotationPage() {
   const handleSubmit = async () => {
     if (!selectedSegmentId) return;
     try {
-      // Check submission status first
       const status = await annotationApi.checkSubmissionStatus(selectedSegmentId);
       const confirmNoChanges = !status.has_edits;
 
@@ -214,7 +252,6 @@ export function AnnotationPage() {
       });
       setActionMessage(`✅ ${result.message}`);
       setReviewStatus(result.status);
-      // Reload segment
       await loadSegment(selectedSegmentId);
     } catch (err: unknown) {
       const msg =
@@ -247,6 +284,12 @@ export function AnnotationPage() {
                 <span className="font-medium text-gray-600">{segment.original_filename}</span>
                 <span className="text-gray-300 mx-1.5">·</span>
                 <span className="text-teal-600">Segmen #{segment.segment_id.slice(0, 8)}</span>
+                {segment.transcripts.length > 0 && (
+                  <>
+                    <span className="text-gray-300 mx-1.5">·</span>
+                    <span className="text-gray-500">{segment.transcripts.length} utterances</span>
+                  </>
+                )}
               </p>
             ) : (
               <p className="text-xs text-gray-500 mt-0.5">
@@ -337,8 +380,8 @@ export function AnnotationPage() {
                     currentTime={currentTime}
                     isPlaying={isPlaying}
                     onTimeUpdate={setCurrentTime}
-                    trimStart={editData.newStart}
-                    trimEnd={editData.newEnd}
+                    trimStart={segmentStart}
+                    trimEnd={segmentEnd}
                     onTrimChange={handleTrimChange}
                   />
                 </div>
@@ -358,8 +401,8 @@ export function AnnotationPage() {
               <div className="flex-[1] min-w-[300px] overflow-hidden">
                 <PropertiesPanel
                   segment={segment}
-                  editData={editData}
-                  onEditDataChange={handleEditDataChange}
+                  utteranceEdits={utteranceEdits}
+                  onUtteranceChange={handleUtteranceChange}
                 />
               </div>
             </div>

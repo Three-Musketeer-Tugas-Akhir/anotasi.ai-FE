@@ -24,6 +24,7 @@ import {
   Video,
   Layers,
   Newspaper,
+  List,
 } from 'lucide-react';
 import { annotationApi } from '../annotation-api';
 import type { QueueItemResponse, ReviewStatusResponse } from '../annotation-types';
@@ -601,6 +602,13 @@ function JobCard({
                         <Badge variant="outline" className={`text-[8px] px-1 py-0 ${sBadge.color}`}>
                           {sBadge.label}
                         </Badge>
+                        {/* Utterance count */}
+                        {item.utterance_count > 0 && (
+                          <Badge variant="outline" className="text-[8px] px-1 py-0 bg-gray-50 text-gray-500 border-gray-200">
+                            <List size={7} className="mr-0.5" />
+                            {item.utterance_count}
+                          </Badge>
+                        )}
                         {/* ASR confidence */}
                         {item.asr_confidence !== null && (
                           <Badge variant="outline" className="text-[8px] px-1 py-0 bg-gray-50 text-gray-500 border-gray-200">

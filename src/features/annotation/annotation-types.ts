@@ -3,6 +3,23 @@
  * Derived from OpenAPI spec + jbi-service/app/schemas/annotation.py
  */
 
+// ── Utterance-Level Types (NEW) ─────────────────────────────────────
+
+export interface TranscriptUtterance {
+  utterance_index: number;
+  text: string;
+  start: number;
+  end: number;
+  confidence: number;
+}
+
+export interface UtteranceCorrection {
+  utterance_index: number;
+  text: string;
+  start: number;
+  end: number;
+}
+
 // ── Queue ───────────────────────────────────────────────────────────
 
 export interface QueueItemResponse {
@@ -12,6 +29,7 @@ export interface QueueItemResponse {
   original_filename: string;
   video_preview_url: string;
   transcript_text: string | null;
+  utterance_count: number;
   asr_confidence: number | null;
   status: string;
   priority: number;
@@ -58,12 +76,20 @@ export interface SegmentDetailResponse {
   original_filename: string;
   video_url: string;
   video_duration: number | null;
+
+  // NEW: full utterance list
+  transcripts: TranscriptUtterance[];
+  avg_confidence: number | null;
+  current_utterances: UtteranceCorrection[] | null;
+
+  // DEPRECATED but kept for backward compat
   asr_text: string | null;
   asr_start: number | null;
   asr_end: number | null;
   asr_confidence: number | null;
   jbi_start: number | null;
   jbi_end: number | null;
+
   current_text: string;
   current_start: number;
   current_end: number;
@@ -75,9 +101,7 @@ export interface SegmentDetailResponse {
 // ── Annotation Edit ─────────────────────────────────────────────────
 
 export interface AnnotationEditCreate {
-  new_text: string;
-  new_start: number;
-  new_end: number;
+  utterances: UtteranceCorrection[];
 }
 
 export interface AnnotationEditResponse {
@@ -122,9 +146,7 @@ export interface AnnotationPreviewResponse {
 // ── Draft ───────────────────────────────────────────────────────────
 
 export interface SaveDraftRequest {
-  new_text: string;
-  new_start: number;
-  new_end: number;
+  utterances: UtteranceCorrection[];
 }
 
 export interface SaveDraftResponse {

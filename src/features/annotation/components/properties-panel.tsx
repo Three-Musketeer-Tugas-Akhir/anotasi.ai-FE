@@ -12,21 +12,22 @@ import {
   FileText,
   History,
   Volume2,
+  List,
+  GripVertical,
 } from 'lucide-react';
-import type { SegmentDetailResponse, SegmentEditHistory } from '../annotation-types';
+import type {
+  SegmentDetailResponse,
+  SegmentEditHistory,
+  TranscriptUtterance,
+  UtteranceCorrection,
+} from '../annotation-types';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export interface AnnotationEditData {
-  newText: string;
-  newStart: number;
-  newEnd: number;
-}
-
 interface PropertiesPanelProps {
   segment: SegmentDetailResponse;
-  editData: AnnotationEditData;
-  onEditDataChange: (updates: Partial<AnnotationEditData>) => void;
+  utteranceEdits: UtteranceCorrection[];
+  onUtteranceChange: (index: number, updates: Partial<UtteranceCorrection>) => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -46,10 +47,107 @@ function getConfidenceBadge(score: number | null): { label: string; className: s
   return { label: `${Math.round(score * 100)}% Rendah`, className: 'bg-red-50 text-red-700 border-red-200' };
 }
 
+function getConfidenceDot(score: number | null): string {
+  if (score === null) return 'bg-gray-300';
+  if (score >= 0.9) return 'bg-emerald-500';
+  if (score >= 0.5) return 'bg-amber-500';
+  return 'bg-red-500';
+}
+
+// ── Sub-component: Single Utterance Card ───────────────────────────
+
+function UtteranceCard({
+  transcript,
+  edit,
+  onChange,
+}: {
+  transcript: TranscriptUtterance;
+  edit: UtteranceCorrection;
+  onChange: (updates: Partial<UtteranceCorrection>) => void;
+}) {
+  const confBadge = getConfidenceBadge(transcript.confidence);
+  const isModified = edit.text !== transcript.text || edit.start !== transcript.start || edit.end !== transcript.end;
+
+  return (
+    <div className={`border rounded-lg p-3 transition-colors ${isModified ? 'border-teal-200 bg-teal-50/30' : 'border-gray-100 bg-white'}`}>
+      {/* Header row: index + timestamps + confidence */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 text-[10px] text-gray-400">
+            <GripVertical size={10} className="text-gray-300" />
+            <span className="font-mono font-bold text-gray-500">#{transcript.utterance_index}</span>
+          </div>
+          <Badge variant="outline" className={`text-[9px] px-1 py-0 gap-0.5 ${confBadge.className}`}>
+            <Shield size={7} className="mr-0.5" />
+            {confBadge.label}
+          </Badge>
+          {isModified && (
+            <Badge variant="outline" className="text-[9px] px-1 py-0 bg-teal-50 text-teal-600 border-teal-200">
+              diedit
+            </Badge>
+          )}
+        </div>
+        <div className="text-[10px] font-mono text-gray-400">
+          {formatTs(transcript.start)} → {formatTs(transcript.end)}
+        </div>
+      </div>
+
+      {/* ASR Reference (collapsible-style compact display) */}
+      <div className="mb-2">
+        <div className="text-[10px] text-gray-400 mb-0.5 flex items-center gap-1">
+          <Volume2 size={8} />
+          ASR Referensi
+        </div>
+        <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded px-2 py-1 leading-relaxed">
+          {transcript.text}
+        </div>
+      </div>
+
+      {/* Editable Correction */}
+      <div>
+        <div className="text-[10px] text-teal-600 mb-0.5 flex items-center gap-1 font-medium">
+          <FileText size={8} />
+          Koreksi
+        </div>
+        <Textarea
+          value={edit.text}
+          onChange={(e) => onChange({ text: e.target.value })}
+          placeholder="Tulis koreksi..."
+          className="text-xs resize-none h-14 border-teal-200 focus-visible:ring-teal-500 mb-2"
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label className="text-[9px] text-gray-400">Mulai (detik)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min={0}
+              value={edit.start.toFixed(2)}
+              onChange={(e) => onChange({ start: parseFloat(e.target.value) || 0 })}
+              className="h-7 text-xs font-mono"
+            />
+          </div>
+          <div>
+            <Label className="text-[9px] text-gray-400">Berakhir (detik)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min={0}
+              value={edit.end.toFixed(2)}
+              onChange={(e) => onChange({ end: parseFloat(e.target.value) || 0 })}
+              className="h-7 text-xs font-mono"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────────
 
-export function PropertiesPanel({ segment, editData, onEditDataChange }: PropertiesPanelProps) {
-  const confBadge = getConfidenceBadge(segment.asr_confidence);
+export function PropertiesPanel({ segment, utteranceEdits, onUtteranceChange }: PropertiesPanelProps) {
+  const avgConfBadge = getConfidenceBadge(segment.avg_confidence);
 
   return (
     <Card className="h-full border-gray-200 flex flex-col shadow-sm">
@@ -63,88 +161,64 @@ export function PropertiesPanel({ segment, editData, onEditDataChange }: Propert
       <CardContent className="p-0 flex-1 overflow-hidden">
         <ScrollArea className="h-full">
           <div className="p-4 space-y-4">
-            {/* ── ASR Original (read-only) ── */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-[10px] text-gray-400 uppercase tracking-wider font-bold flex items-center gap-1">
-                  <Volume2 size={10} /> Transkripsi ASR (Referensi)
-                </Label>
-                <Badge variant="outline" className={`text-[9px] ${confBadge.className}`}>
+            {/* ── Segment Summary ── */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <List size={12} className="text-gray-400" />
+                <span className="text-xs text-gray-600 font-medium">
+                  {segment.transcripts.length} utterance{segment.transcripts.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              {segment.avg_confidence !== null && (
+                <Badge variant="outline" className={`text-[9px] ${avgConfBadge.className}`}>
                   <Shield size={8} className="mr-0.5" />
-                  {confBadge.label}
+                  Avg: {avgConfBadge.label}
                 </Badge>
-              </div>
-              <div className="p-2.5 border border-blue-200 rounded-lg bg-blue-50 text-xs text-blue-900 leading-relaxed min-h-[40px]">
-                {segment.asr_text || '(tidak ada transkripsi)'}
-              </div>
-              <div className="flex gap-3 text-[10px] text-gray-400">
-                <span>Start: <strong className="text-gray-600">{formatTs(segment.asr_start)}</strong></span>
-                <span>End: <strong className="text-gray-600">{formatTs(segment.asr_end)}</strong></span>
+              )}
+            </div>
+
+            {/* ── Aggregated Current Text (read-only reference) ── */}
+            <div className="p-2.5 border border-gray-200 rounded-lg bg-white">
+              <Label className="text-[10px] text-gray-400 uppercase tracking-wider font-bold flex items-center gap-1 mb-1">
+                <FileText size={10} /> Teks Aggregrat Saat Ini
+              </Label>
+              <p className="text-xs text-gray-700 leading-relaxed">
+                {segment.current_text || '(tidak ada teks)'}
+              </p>
+              <div className="flex gap-3 text-[10px] text-gray-400 mt-1">
+                <span>Range: <strong className="text-gray-600">{formatTs(segment.current_start)} → {formatTs(segment.current_end)}</strong></span>
               </div>
             </div>
 
-            {/* ── JBI Timestamps (read-only reference) ── */}
-            {(segment.jbi_start !== null || segment.jbi_end !== null) && (
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-2.5">
-                <Label className="text-[10px] text-purple-500 uppercase tracking-wider font-bold">
-                  JBI Detection Timestamps
-                </Label>
-                <div className="flex gap-3 text-[10px] text-purple-700 mt-1">
-                  <span>Start: <strong>{formatTs(segment.jbi_start)}</strong></span>
-                  <span>End: <strong>{formatTs(segment.jbi_end)}</strong></span>
-                </div>
-              </div>
-            )}
-
-            {/* ── Editable: Current/Draft Values ── */}
-            <div className="space-y-3 pt-2 border-t border-gray-100">
+            {/* ── Utterance List ── */}
+            <div className="space-y-2">
               <Label className="text-[10px] text-teal-600 uppercase tracking-wider font-bold flex items-center gap-1">
-                <FileText size={10} /> Koreksi Anotasi
+                <Volume2 size={10} /> Daftar Utterance ASR
               </Label>
-
-              <div>
-                <Label htmlFor="ann-text" className="text-xs text-gray-600 font-medium">
-                  Teks Transkripsi *
-                </Label>
-                <Textarea
-                  id="ann-text"
-                  value={editData.newText}
-                  onChange={(e) => onEditDataChange({ newText: e.target.value })}
-                  placeholder="Tulis koreksi transkripsi..."
-                  className="mt-1 text-sm resize-none h-24 border-teal-200 focus-visible:ring-teal-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="ann-start" className="text-xs text-gray-500">
-                    Mulai (detik)
-                  </Label>
-                  <Input
-                    id="ann-start"
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={editData.newStart.toFixed(2)}
-                    onChange={(e) => onEditDataChange({ newStart: parseFloat(e.target.value) || 0 })}
-                    className="h-8 text-sm font-mono"
-                  />
+              {segment.transcripts.length === 0 ? (
+                <div className="text-xs text-gray-400 italic p-4 text-center border border-dashed border-gray-200 rounded-lg">
+                  Tidak ada transkripsi untuk segmen ini
                 </div>
-                <div>
-                  <Label htmlFor="ann-end" className="text-xs text-gray-500">
-                    Berakhir (detik)
-                  </Label>
-                  <Input
-                    id="ann-end"
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={editData.newEnd.toFixed(2)}
-                    onChange={(e) => onEditDataChange({ newEnd: parseFloat(e.target.value) || 0 })}
-                    className="h-8 text-sm font-mono"
-                  />
+              ) : (
+                <div className="space-y-2">
+                  {segment.transcripts.map((transcript, idx) => {
+                    const edit = utteranceEdits[idx] || {
+                      utterance_index: transcript.utterance_index,
+                      text: transcript.text,
+                      start: transcript.start,
+                      end: transcript.end,
+                    };
+                    return (
+                      <UtteranceCard
+                        key={transcript.utterance_index}
+                        transcript={transcript}
+                        edit={edit}
+                        onChange={(updates) => onUtteranceChange(idx, updates)}
+                      />
+                    );
+                  })}
                 </div>
-              </div>
+              )}
             </div>
 
             {/* ── Edit History ── */}
