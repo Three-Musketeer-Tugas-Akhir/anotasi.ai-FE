@@ -64,6 +64,11 @@ export function TopBar() {
   const queryClient = useQueryClient();
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const prevUnreadRef = useRef(0);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const initials = user?.email
     ? user.email.substring(0, 2).toUpperCase()
@@ -77,7 +82,7 @@ export function TopBar() {
     queryKey: ['chat-rooms-unread'],
     queryFn: () => chatApi.listRooms(50, 0),
     refetchInterval: 20000,
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && mounted,
   });
 
   const totalChatUnread = chatRooms?.items?.reduce((sum, r) => sum + (r.unread_count || 0), 0) ?? 0;
@@ -87,7 +92,7 @@ export function TopBar() {
     queryKey: ['notifications-topbar'],
     queryFn: () => notificationApi.list({ limit: 10, unread_only: false }),
     refetchInterval: 30000,
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && mounted,
   });
 
   const notifications: Notification[] = notifData?.items ?? [];
@@ -121,6 +126,38 @@ export function TopBar() {
     queryClient.invalidateQueries({ queryKey: ['notifications-topbar'] });
     toast.success('Semua notifikasi ditandai dibaca');
   }, [queryClient]);
+
+  // ── Pre-mount: render a static placeholder to avoid Radix ID hydration mismatches ──
+  if (!mounted) {
+    return (
+      <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0 z-10">
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-400 font-medium">Anotasi.ai</span>
+          <span className="text-gray-300">/</span>
+          <span className="text-sm font-semibold text-gray-700">Pipeline Anotasi SIBI</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="p-2 text-gray-500"><MessageCircle size={18} /></div>
+          <div className="p-2 text-gray-500"><Bell size={18} /></div>
+          <Badge variant="outline" className="text-teal-700 border-teal-200 bg-teal-50 font-semibold text-xs capitalize">
+            {roleLabel}
+          </Badge>
+          <div className="flex items-center gap-2 rounded-lg p-1.5">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-gradient-to-br from-teal-400 to-emerald-600 text-white text-xs font-bold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <div className="hidden sm:block text-left">
+              <p className="text-sm font-medium text-gray-700 leading-none capitalize">{displayName}</p>
+              <p className="text-xs text-gray-400 leading-none mt-0.5 capitalize">{roleLabel}</p>
+            </div>
+            <ChevronDown size={14} className="text-gray-400" />
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0 z-10">

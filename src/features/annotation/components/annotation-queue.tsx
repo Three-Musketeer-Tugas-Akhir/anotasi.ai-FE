@@ -1,15 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { Combobox } from '@/components/ui/combobox';
 import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  FileText,
   Loader2,
   RefreshCw,
   Shield,
@@ -21,10 +20,28 @@ import {
   PenLine,
   Sparkles,
   Timer,
+  ChevronDown,
+  Video,
+  Layers,
+  Newspaper,
 } from 'lucide-react';
 import { annotationApi } from '../annotation-api';
 import type { QueueItemResponse, ReviewStatusResponse } from '../annotation-types';
 import { QUEUE_STATUS } from '../annotation-types';
+
+// ── Types ──────────────────────────────────────────────────────────
+
+/** Queue items grouped by job_id for the segment-centric layout. */
+interface JobGroup {
+  jobId: string;
+  originalFilename: string;
+  segments: QueueItemResponse[];
+  /** Derived stats */
+  totalSegments: number;
+  completedSegments: number;
+  draftSegments: number;
+  newSegments: number;
+}
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -76,6 +93,49 @@ function formatTimeAgo(iso: string): string {
   return `${days}h lalu`;
 }
 
+/** Strip file extension and truncate long filenames for display. */
+function formatFilename(name: string, maxLen = 40): string {
+  const base = name.replace(/\.[^/.]+$/, '');
+  if (base.length <= maxLen) return base;
+  return base.slice(0, maxLen - 3) + '…';
+}
+
+/** Group flat queue items into job-based groups. */
+function groupByJob(items: QueueItemResponse[]): JobGroup[] {
+  const map = new Map<string, JobGroup>();
+
+  for (const item of items) {
+    let group = map.get(item.job_id);
+    if (!group) {
+      group = {
+        jobId: item.job_id,
+        originalFilename: item.original_filename,
+        segments: [],
+        totalSegments: 0,
+        completedSegments: 0,
+        draftSegments: 0,
+        newSegments: 0,
+      };
+      map.set(item.job_id, group);
+    }
+    group.segments.push(item);
+    group.totalSegments++;
+    if (item.status === QUEUE_STATUS.COMPLETED) group.completedSegments++;
+    if (item.edit_status === 'DRAFT') group.draftSegments++;
+    if (!item.has_active_work) group.newSegments++;
+  }
+
+  return Array.from(map.values());
+}
+
+function getJobProgressColor(completed: number, total: number): string {
+  const pct = total > 0 ? completed / total : 0;
+  if (pct >= 1) return 'bg-emerald-500';
+  if (pct >= 0.5) return 'bg-teal-500';
+  if (pct > 0) return 'bg-amber-500';
+  return 'bg-gray-300';
+}
+
 // ── Props ──────────────────────────────────────────────────────────
 
 interface AnnotationQueueProps {
@@ -99,6 +159,9 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId }: Annotati
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Expanded state (which jobs are expanded)
+  const [expandedJobs, setExpandedJobs] = useState<Record<string, boolean>>({});
+
   // Submissions state
   const [submissions, setSubmissions] = useState<ReviewStatusResponse[]>([]);
   const [subsTotal, setSubsTotal] = useState(0);
@@ -106,9 +169,26 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId }: Annotati
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Derived counts
-  const draftCount = items.filter((i) => i.edit_status === 'DRAFT').length;
-  const newCount = items.filter((i) => !i.has_active_work).length;
+  // ── Derived Data ──────────────────────────────────────────────
+
+  const jobGroups = useMemo(() => groupByJob(items), [items]);
+
+  const totalStats = useMemo(() => {
+    const draftCount = items.filter((i) => i.edit_status === 'DRAFT').length;
+    const newCount = items.filter((i) => !i.has_active_work).length;
+    const completedCount = items.filter((i) => i.status === QUEUE_STATUS.COMPLETED).length;
+    return { draftCount, newCount, completedCount };
+  }, [items]);
+
+  // Auto-expand the job group that contains the selected segment
+  useEffect(() => {
+    if (selectedSegmentId) {
+      const parentJob = items.find((i) => i.segment_id === selectedSegmentId);
+      if (parentJob) {
+        setExpandedJobs((prev) => ({ ...prev, [parentJob.job_id]: true }));
+      }
+    }
+  }, [selectedSegmentId, items]);
 
   // ── Fetch Queue ───────────────────────────────────────────────
 
@@ -118,7 +198,7 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId }: Annotati
       try {
         const data = await annotationApi.getQueue({
           page,
-          page_size: 20,
+          page_size: 50, // Fetch more to build proper groups
           status: statusFilter === 'all' ? undefined : statusFilter,
         });
         setItems(data.items);
@@ -167,12 +247,18 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId }: Annotati
     };
   }, [fetchQueue, tab]);
 
+  // ── Handlers ──────────────────────────────────────────────────
+
+  const toggleJob = (jobId: string) => {
+    setExpandedJobs((prev) => ({ ...prev, [jobId]: !prev[jobId] }));
+  };
+
   // ── Render ────────────────────────────────────────────────────
 
   return (
-    <div className="w-80 min-w-[320px] bg-white border-r border-gray-200 flex flex-col">
+    <div className="w-[340px] min-w-[340px] h-full overflow-hidden bg-white border-r border-gray-200 flex flex-col">
       {/* Tab Switcher */}
-      <div className="flex border-b border-gray-200">
+      <div className="flex border-b border-gray-200 flex-shrink-0">
         <button
           onClick={() => setTab('queue')}
           className={`flex-1 px-3 py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
@@ -199,7 +285,7 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId }: Annotati
 
       {/* Queue Tab */}
       {tab === 'queue' && (
-        <>
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Filter Bar */}
           <div className="px-3 py-2.5 border-b border-gray-100 flex items-center gap-2">
             <Combobox
@@ -224,23 +310,28 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId }: Annotati
           </div>
 
           {/* Quick Stats */}
-          {!loading && !error && items.length > 0 && (draftCount > 0 || newCount > 0) && (
-            <div className="px-3 py-1.5 border-b border-gray-100 flex items-center gap-2 text-[10px]">
-              {newCount > 0 && (
+          {!loading && !error && items.length > 0 && (totalStats.draftCount > 0 || totalStats.newCount > 0 || totalStats.completedCount > 0) && (
+            <div className="px-3 py-1.5 border-b border-gray-100 flex items-center gap-3 text-[10px]">
+              {totalStats.newCount > 0 && (
                 <span className="flex items-center gap-1 text-emerald-600">
-                  <Sparkles size={9} /> {newCount} baru
+                  <Sparkles size={9} /> {totalStats.newCount} baru
                 </span>
               )}
-              {draftCount > 0 && (
+              {totalStats.draftCount > 0 && (
                 <span className="flex items-center gap-1 text-amber-600">
-                  <PenLine size={9} /> {draftCount} draft
+                  <PenLine size={9} /> {totalStats.draftCount} draft
+                </span>
+              )}
+              {totalStats.completedCount > 0 && (
+                <span className="flex items-center gap-1 text-teal-600">
+                  <CheckCircle2 size={9} /> {totalStats.completedCount} selesai
                 </span>
               )}
             </div>
           )}
 
-          {/* Queue Items */}
-          <ScrollArea className="flex-1">
+          {/* Queue Items — Grouped by Job */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 size={20} className="text-teal-600 animate-spin" />
@@ -258,77 +349,24 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId }: Annotati
                 <p className="text-xs text-gray-400 mt-1">Belum ada segmen yang di-assign</p>
               </div>
             ) : (
-              items.map((item) => {
-                const isSelected = item.segment_id === selectedSegmentId;
-                const sBadge = getStatusBadge(item.status);
-                const editBadge = getEditStatusBadge(item);
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => onSelectSegment(item.segment_id, item.edit_id)}
-                    className={`block w-full text-left px-4 py-3.5 border-b border-gray-100 transition-all ${
-                      isSelected
-                        ? 'bg-teal-50 border-l-[3px] border-l-teal-500'
-                        : 'hover:bg-gray-50 border-l-[3px] border-l-transparent'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="mt-1.5">
-                        <div className={`w-2.5 h-2.5 rounded-full ${getConfidenceColor(item.asr_confidence)} flex-shrink-0`} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className={`text-xs font-medium truncate ${isSelected ? 'text-teal-800' : 'text-gray-700'}`}>
-                          {item.original_filename}
-                        </p>
-                        {item.transcript_text && (
-                          <p className="text-[11px] text-gray-500 mt-1 line-clamp-2 leading-relaxed">
-                            &ldquo;{item.transcript_text}&rdquo;
-                          </p>
-                        )}
-                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                          {/* Edit status badge (primary indicator) */}
-                          {editBadge && (
-                            <Badge variant="outline" className={`text-[9px] px-1.5 py-0 gap-0.5 ${editBadge.color}`}>
-                              {editBadge.icon} {editBadge.label}
-                            </Badge>
-                          )}
-                          {/* Queue status badge */}
-                          <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${sBadge.color}`}>
-                            {sBadge.label}
-                          </Badge>
-                          {/* ASR confidence */}
-                          {item.asr_confidence !== null && (
-                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-gray-50 text-gray-500 border-gray-200">
-                              <Shield size={8} className="mr-0.5" />
-                              {Math.round(item.asr_confidence * 100)}%
-                            </Badge>
-                          )}
-                        </div>
-                        {/* Last edited info */}
-                        {item.last_edited_at && (
-                          <p className="text-[9px] text-gray-400 mt-1 flex items-center gap-0.5">
-                            <Clock size={8} />
-                            Diedit {formatTimeAgo(item.last_edited_at)}
-                          </p>
-                        )}
-                        {/* Due date */}
-                        {!item.last_edited_at && item.due_date && (
-                          <p className="text-[9px] text-gray-400 mt-1 flex items-center gap-0.5">
-                            <Clock size={8} />
-                            {new Date(item.due_date).toLocaleDateString('id-ID')}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
+              <div className="p-2 space-y-2">
+                {jobGroups.map((group) => (
+                  <JobCard
+                    key={group.jobId}
+                    group={group}
+                    isExpanded={!!expandedJobs[group.jobId]}
+                    onToggle={() => toggleJob(group.jobId)}
+                    selectedSegmentId={selectedSegmentId}
+                    onSelectSegment={onSelectSegment}
+                  />
+                ))}
+              </div>
             )}
-          </ScrollArea>
+          </div>
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="px-4 py-2 border-t border-gray-100 flex items-center justify-between">
+            <div className="px-4 py-2 border-t border-gray-100 flex items-center justify-between flex-shrink-0">
               <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="h-7 text-xs">
                 <ChevronLeft size={14} />
               </Button>
@@ -338,12 +376,12 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId }: Annotati
               </Button>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* Submissions Tab */}
       {tab === 'submissions' && (
-        <ScrollArea className="flex-1">
+        <div className="flex-1 min-h-0 overflow-y-auto">
           {subsLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 size={20} className="text-teal-600 animate-spin" />
@@ -388,7 +426,209 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId }: Annotati
               );
             })
           )}
-        </ScrollArea>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Job Card (Collapsible) — groups segments under one video/job
+// ═══════════════════════════════════════════════════════════════════
+
+function JobCard({
+  group,
+  isExpanded,
+  onToggle,
+  selectedSegmentId,
+  onSelectSegment,
+}: {
+  group: JobGroup;
+  isExpanded: boolean;
+  onToggle: () => void;
+  selectedSegmentId: string | null;
+  onSelectSegment: (segmentId: string, editId?: string | null) => void;
+}) {
+  const progressPct = group.totalSegments > 0 ? (group.completedSegments / group.totalSegments) * 100 : 0;
+  const hasSelectedChild = group.segments.some((s) => s.segment_id === selectedSegmentId);
+
+  return (
+    <div
+      className={`rounded-xl border overflow-hidden transition-all ${
+        hasSelectedChild
+          ? 'border-teal-300 shadow-sm ring-1 ring-teal-200'
+          : 'border-gray-200 shadow-sm'
+      }`}
+    >
+      {/* ── Job Header (collapsible) ── */}
+      <button
+        onClick={onToggle}
+        className={`w-full flex items-start gap-3 px-3.5 py-3 text-left transition-colors ${
+          hasSelectedChild
+            ? 'bg-teal-50/60 hover:bg-teal-50'
+            : 'bg-white hover:bg-gray-50/80'
+        }`}
+      >
+        {/* Icon */}
+        <div
+          className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+            hasSelectedChild
+              ? 'bg-teal-100 text-teal-600'
+              : 'bg-slate-100 text-slate-500'
+          }`}
+        >
+          <Newspaper size={16} />
+        </div>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          {/* Title — News filename */}
+          <p
+            className={`text-[13px] font-semibold leading-snug ${
+              hasSelectedChild ? 'text-teal-800' : 'text-gray-800'
+            }`}
+            title={group.originalFilename}
+          >
+            {formatFilename(group.originalFilename)}
+          </p>
+
+          {/* Meta badges */}
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-gray-50 text-gray-500 border-gray-200">
+              <Layers size={8} className="mr-0.5" />
+              {group.totalSegments} segmen
+            </Badge>
+            {group.newSegments > 0 && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-emerald-50 text-emerald-600 border-emerald-200">
+                <Sparkles size={8} className="mr-0.5" />
+                {group.newSegments} baru
+              </Badge>
+            )}
+            {group.draftSegments > 0 && (
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-amber-50 text-amber-600 border-amber-200">
+                <PenLine size={8} className="mr-0.5" />
+                {group.draftSegments} draft
+              </Badge>
+            )}
+          </div>
+
+          {/* Progress bar */}
+          <div className="mt-2 flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${getJobProgressColor(group.completedSegments, group.totalSegments)}`}
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <span className="text-[9px] text-gray-400 font-mono w-12 text-right flex-shrink-0">
+              {group.completedSegments}/{group.totalSegments}
+            </span>
+          </div>
+        </div>
+
+        {/* Expand/Collapse chevron */}
+        <div className={`text-gray-400 flex-shrink-0 mt-1 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
+          <ChevronDown size={16} />
+        </div>
+      </button>
+
+      {/* ── Expanded: Segment (Transcript) Cards ── */}
+      {isExpanded && (
+        <div className="border-t border-gray-100 bg-gray-50/40">
+          {/* Breadcrumb-style context bar */}
+          <div className="px-3.5 py-1.5 flex items-center gap-1.5 text-[10px] text-gray-400 border-b border-gray-100 bg-white/60">
+            <Video size={10} className="text-teal-500" />
+            <span className="font-medium text-gray-500 truncate" title={group.originalFilename}>
+              {formatFilename(group.originalFilename, 30)}
+            </span>
+            <span className="text-gray-300">·</span>
+            <span>{group.totalSegments} transkrip</span>
+          </div>
+
+          {/* Transcript cards */}
+          <div className="p-2 space-y-1">
+            {group.segments.map((item, idx) => {
+              const isSelected = item.segment_id === selectedSegmentId;
+              const sBadge = getStatusBadge(item.status);
+              const editBadge = getEditStatusBadge(item);
+
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onSelectSegment(item.segment_id, item.edit_id)}
+                  className={`block w-full text-left rounded-lg px-3 py-2.5 transition-all ${
+                    isSelected
+                      ? 'bg-teal-50 border border-teal-300 shadow-sm'
+                      : 'bg-white border border-gray-100 hover:border-gray-200 hover:bg-gray-50/80'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    {/* Segment index pill */}
+                    <div
+                      className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 text-[10px] font-bold mt-0.5 ${
+                        isSelected
+                          ? 'bg-teal-600 text-white'
+                          : item.status === QUEUE_STATUS.COMPLETED
+                            ? 'bg-emerald-100 text-emerald-600'
+                            : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      {idx + 1}
+                    </div>
+
+                    {/* Content */}
+                    <div className="min-w-0 flex-1">
+                      {/* Transcript preview text */}
+                      {item.transcript_text ? (
+                        <p className={`text-[11px] leading-relaxed line-clamp-2 ${isSelected ? 'text-teal-900' : 'text-gray-700'}`}>
+                          &ldquo;{item.transcript_text}&rdquo;
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-gray-400 italic">
+                          (tidak ada transkripsi)
+                        </p>
+                      )}
+
+                      {/* Badges row */}
+                      <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                        {/* Edit status badge */}
+                        {editBadge && (
+                          <Badge variant="outline" className={`text-[8px] px-1 py-0 gap-0.5 ${editBadge.color}`}>
+                            {editBadge.icon} {editBadge.label}
+                          </Badge>
+                        )}
+                        {/* Queue status badge */}
+                        <Badge variant="outline" className={`text-[8px] px-1 py-0 ${sBadge.color}`}>
+                          {sBadge.label}
+                        </Badge>
+                        {/* ASR confidence */}
+                        {item.asr_confidence !== null && (
+                          <Badge variant="outline" className="text-[8px] px-1 py-0 bg-gray-50 text-gray-500 border-gray-200">
+                            <Shield size={7} className="mr-0.5" />
+                            {Math.round(item.asr_confidence * 100)}%
+                          </Badge>
+                        )}
+                      </div>
+
+                      {/* Last edited info */}
+                      {item.last_edited_at && (
+                        <p className="text-[9px] text-gray-400 mt-1 flex items-center gap-0.5">
+                          <Clock size={8} />
+                          Diedit {formatTimeAgo(item.last_edited_at)}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Confidence dot */}
+                    <div className="mt-1.5 flex-shrink-0">
+                      <div className={`w-2 h-2 rounded-full ${getConfidenceColor(item.asr_confidence)}`} />
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
     </div>
   );

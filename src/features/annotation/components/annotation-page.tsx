@@ -236,19 +236,26 @@ export function AnnotationPage() {
               <ArrowLeft size={16} />
             </Button>
           )}
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
               <PenTool size={20} className="text-teal-600" />
               {selectedSegmentId ? 'Workspace Anotasi' : 'Antrian Anotasi'}
             </h1>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {selectedSegmentId
-                ? 'Edit transkripsi dan sinkronisasikan timestamp video'
-                : 'Pilih segmen dari antrian untuk mulai anotasi'}
-            </p>
+            {selectedSegmentId && segment ? (
+              <p className="text-xs text-gray-500 mt-0.5 truncate" title={segment.original_filename}>
+                <span className="text-gray-400">Video:</span>{' '}
+                <span className="font-medium text-gray-600">{segment.original_filename}</span>
+                <span className="text-gray-300 mx-1.5">·</span>
+                <span className="text-teal-600">Segmen #{segment.segment_id.slice(0, 8)}</span>
+              </p>
+            ) : (
+              <p className="text-xs text-gray-500 mt-0.5">
+                Pilih video, lalu pilih transkrip untuk mulai anotasi
+              </p>
+            )}
           </div>
           {/* Action message + Sync status */}
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2 flex-shrink-0">
             {syncStatus && (
               <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
                 syncStatus === 'LOCKED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
@@ -278,10 +285,12 @@ export function AnnotationPage() {
         {/* Main Content */}
         {!selectedSegmentId ? (
           <div className="flex-1 flex items-center justify-center bg-gray-50">
-            <div className="text-center">
+            <div className="text-center max-w-xs">
               <PenTool size={48} className="text-gray-300 mx-auto mb-3" />
-              <p className="text-sm text-gray-500">Pilih segmen dari antrian di kiri</p>
-              <p className="text-xs text-gray-400 mt-1">untuk mulai menganotasi transkripsi</p>
+              <p className="text-sm font-medium text-gray-500">Pilih transkrip untuk dianotasi</p>
+              <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
+                Klik judul video berita di panel kiri untuk membuka daftar segmen transkrip, lalu pilih salah satu untuk mulai menganotasi.
+              </p>
             </div>
           </div>
         ) : segmentLoading ? (
