@@ -1,15 +1,15 @@
 'use client';
 
-import { Search, Clock, PlayCircle } from 'lucide-react';
+import { Search, Clock, PlayCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { ClassificationJob, CategoryStatus } from '@/features/classification/types/classification.types';
 import { StatusBadge } from './status-badge';
-
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 const FILTER_OPTIONS: { value: 'all' | CategoryStatus; label: string }[] = [
   { value: 'all', label: 'Semua' },
-  { value: 'uncategorized', label: 'Uncategorized' },
+  { value: 'uncategorized', label: 'Belum Diklasifikasikan' },
   { value: 'SIBI', label: 'SIBI' },
   { value: 'BISINDO', label: 'BISINDO' },
 ];
@@ -24,6 +24,12 @@ interface VideoListProps {
   onSelectJob: (id: string) => void;
   onFilterChange: (filter: FilterValue) => void;
   onSearchChange: (query: string) => void;
+  /** Global progress — always reflects all videos, ignoring filter/page */
+  categorisedCount: number;
+  totalAll: number;
+  page: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
 }
 
 /**
@@ -37,17 +43,30 @@ export function VideoList({
   onSelectJob,
   onFilterChange,
   onSearchChange,
+  categorisedCount,
+  totalAll,
+  page,
+  totalPages,
+  onPageChange,
 }: VideoListProps) {
-  // Filter jobs
-  const filteredJobs = jobs.filter((j) => {
-    const matchesFilter = filter === 'all' || j.category === filter;
-    const matchesSearch =
-      !searchQuery || (j.video_title || '').toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesSearch;
-  });
+  const progressPct = totalAll > 0 ? (categorisedCount / totalAll) * 100 : 0;
 
   return (
     <div id="tour-video-list" className="w-1/3 min-w-[320px] bg-white border-r border-gray-200 flex flex-col z-10">
+      {/* Progress */}
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+        <div className="flex justify-between items-center mb-1">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Progress Klasifikasi</span>
+          <span className="text-xs font-bold text-teal-700">{categorisedCount}<span className="font-normal text-gray-400">/{totalAll} video</span></span>
+        </div>
+        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-teal-500 rounded-full transition-all duration-500"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+      </div>
+
       {/* Filter & Search */}
       <div className="p-4 border-b border-gray-100 space-y-3">
         <div className="relative">
@@ -60,13 +79,13 @@ export function VideoList({
             className="pl-9 bg-gray-50 border-gray-200"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {FILTER_OPTIONS.map((f) => (
             <button
               key={f.value}
               onClick={() => onFilterChange(f.value)}
               className={cn(
-                'px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors',
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
                 filter === f.value
                   ? 'bg-teal-100 text-teal-700'
                   : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50',
@@ -146,6 +165,35 @@ export function VideoList({
           )}
         </div>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="border-t border-gray-100 px-4 py-2 flex items-center justify-between bg-white flex-shrink-0">
+          <span className="text-xs text-gray-400">
+            Hal. {page + 1} dari {totalPages}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={page === 0}
+              onClick={() => onPageChange(Math.max(0, page - 1))}
+              className="h-7 w-7 hover:bg-gray-100 text-gray-600 disabled:opacity-40"
+            >
+              <ChevronLeft size={14} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={page >= totalPages - 1}
+              onClick={() => onPageChange(page + 1)}
+              className="h-7 w-7 hover:bg-gray-100 text-gray-600 disabled:opacity-40"
+            >
+              <ChevronRight size={14} />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

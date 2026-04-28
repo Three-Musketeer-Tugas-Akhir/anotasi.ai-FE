@@ -34,7 +34,7 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">Kategorisasi JBI</h2>
+          <h2 className="text-lg font-bold text-slate-800">Klasifikasi JBI</h2>
           <p className="text-slate-500 text-sm">
             Tonton video di atas, lalu klik tombol <strong>SIBI</strong> atau <strong>BISINDO</strong> sesuai
             tipe bahasa isyarat yang digunakan.
@@ -42,7 +42,7 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
         </div>
         <div className="text-right">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-            Status Saat Ini
+            Status Klasifikasi
           </span>
           <div className="mt-1">
             <StatusBadge status={job.category} />

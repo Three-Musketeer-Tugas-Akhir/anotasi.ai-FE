@@ -6,7 +6,7 @@ import { CategoryStatus } from '@/features/classification/types/classification.t
 const statusConfig: Record<CategoryStatus, { className: string; label: string }> = {
   uncategorized: {
     className: 'bg-gray-100 text-gray-600 border-gray-200',
-    label: 'Belum Dikategorikan',
+    label: 'Belum Diklasifikasikan',
   },
   SIBI: {
     className: 'bg-teal-100 text-teal-700 border-teal-200',

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CheckCircle, Layout, Loader2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Layout, Loader2, AlertCircle } from 'lucide-react';
 import { useJobs, useUpdateCategory } from '@/features/classification/hooks/use-classification';
 import type { CategoryStatus, JobListParams } from '@/features/classification/types/classification.types';
 import { useTour } from '@/shared/components/tour';
@@ -48,6 +48,17 @@ export function ClassificationPage() {
   const totalJobs = data?.total || 0;
   const totalPages = Math.ceil(totalJobs / PAGE_SIZE);
 
+  // ── Global progress stats (independent of current filter/page) ───────
+  // Fetch minimal (limit:1) queries so we always have the true totals.
+  const { data: allStatsData } = useJobs({ limit: 1 });
+  const { data: sibiStatsData } = useJobs({ limit: 1, category: 'SIBI' });
+  const { data: bisindoStatsData } = useJobs({ limit: 1, category: 'BISINDO' });
+
+  const totalAll = allStatsData?.total ?? 0;
+  const sibiTotal = sibiStatsData?.total ?? 0;
+  const bisindoTotal = bisindoStatsData?.total ?? 0;
+  const categorisedCount = sibiTotal + bisindoTotal;
+
   const { mutate: updateCategory, isPending } = useUpdateCategory();
 
   const { startTour, activeTour, hasCompletedTour } = useTour();
@@ -77,11 +88,6 @@ export function ClassificationPage() {
       !searchQuery || (j.video_title || '').toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
   });
-
-  // Count categorised jobs for progress display
-  const categorisedCount = jobs.filter(
-    (j) => j.category === 'SIBI' || j.category === 'BISINDO',
-  ).length;
 
   // Handle keyboard shortcuts (1 = SIBI, 2 = BISINDO)
   useEffect(() => {
@@ -159,7 +165,7 @@ export function ClassificationPage() {
 
   return (
     <>
-      {/* Top Progress Bar */}
+      {/* Top Header */}
       <div className="px-6 py-4 bg-white border-b border-gray-200 flex-shrink-0 flex justify-between items-center">
         <div>
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -169,54 +175,15 @@ export function ClassificationPage() {
           <p className="text-sm text-gray-500 mt-1">
             Tentukan apakah Juru Bahasa Isyarat menggunakan SIBI atau BISINDO
           </p>
-          <Button
-            onClick={() => setIsUploadModalOpen(true)}
-            size="sm"
-            variant="secondary"
-            className="mt-3 text-teal-700 bg-teal-100 hover:bg-teal-200"
-          >
-            + Upload Video Baru
-          </Button>
         </div>
-        <div className="text-right">
-          <p className="text-sm font-medium text-gray-700">
-            Progress: {categorisedCount}/{totalJobs} Video
-          </p>
-          <div className="w-48 h-2 bg-gray-200 rounded-full mt-1 overflow-hidden">
-            <div
-              className="h-full bg-teal-500 rounded-full transition-all duration-300"
-              style={{
-                width: `${totalJobs > 0 ? (categorisedCount / totalJobs) * 100 : 0}%`,
-              }}
-            />
-          </div>
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-end gap-2 mt-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                disabled={page === 0}
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                className="h-8 w-8 hover:bg-gray-100 text-gray-600 disabled:opacity-40"
-              >
-                <ChevronLeft size={16} />
-              </Button>
-              <span className="text-xs text-gray-500">
-                {page + 1} / {totalPages}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                disabled={page >= totalPages - 1}
-                onClick={() => setPage((p) => p + 1)}
-                className="h-8 w-8 hover:bg-gray-100 text-gray-600 disabled:opacity-40"
-              >
-                <ChevronRight size={16} />
-              </Button>
-            </div>
-          )}
-        </div>
+        <Button
+          onClick={() => setIsUploadModalOpen(true)}
+          size="sm"
+          variant="secondary"
+          className="text-teal-700 bg-teal-100 hover:bg-teal-200"
+        >
+          + Upload Video Baru
+        </Button>
       </div>
 
       {/* Main Content */}
@@ -228,8 +195,13 @@ export function ClassificationPage() {
           filter={filter}
           searchQuery={searchQuery}
           onSelectJob={setSelectedJobId}
-          onFilterChange={setFilter}
+          onFilterChange={(f) => { setFilter(f); setPage(0); }}
           onSearchChange={setSearchQuery}
+          categorisedCount={categorisedCount}
+          totalAll={totalAll}
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
         />
 
         {/* Right Panel — Player + Categorisation */}
@@ -245,7 +217,7 @@ export function ClassificationPage() {
             </>
           ) : (
             <div className="flex items-center justify-center h-full text-gray-400">
-              <p>Pilih video dari daftar di samping untuk mulai mengkategorikan.</p>
+              <p>Pilih video dari daftar di samping untuk mulai mengklasifikasikan.</p>
             </div>
           )}
         </div>
