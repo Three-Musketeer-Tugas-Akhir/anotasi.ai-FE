@@ -1,23 +1,27 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
+import { useState, useMemo, useEffect } from 'react';
+import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button';
 import {
   Shield,
   Clock,
   FileText,
-  History,
   Volume2,
-  List,
-  GripVertical,
+  CheckCircle2,
+  Save,
+  Send,
+  RotateCcw,
+  Loader2,
+  AlertTriangle,
+  Crosshair,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import type {
   SegmentDetailResponse,
-  SegmentEditHistory,
   TranscriptUtterance,
   UtteranceCorrection,
 } from '../annotation-types';
@@ -28,6 +32,17 @@ interface PropertiesPanelProps {
   segment: SegmentDetailResponse;
   utteranceEdits: UtteranceCorrection[];
   onUtteranceChange: (index: number, updates: Partial<UtteranceCorrection>) => void;
+  activeUtteranceIndex: number | null;
+  onSelectUtterance: (index: number) => void;
+  // Action bar props (merged)
+  onSaveDraft: () => Promise<void>;
+  onSubmit: () => Promise<void>;
+  onReset: () => Promise<void>;
+  isSaving: boolean;
+  canSubmit: boolean;
+  submitWarning: string | null;
+  reviewStatus: string | null;
+  reviewFeedback: string | null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -42,218 +57,310 @@ function formatTs(s: number | null): string {
 
 function getConfidenceBadge(score: number | null): { label: string; className: string } {
   if (score === null) return { label: 'N/A', className: 'bg-gray-100 text-gray-500 border-gray-200' };
-  if (score >= 0.9) return { label: `${Math.round(score * 100)}% Tinggi`, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
-  if (score >= 0.5) return { label: `${Math.round(score * 100)}% Sedang`, className: 'bg-amber-50 text-amber-700 border-amber-200' };
-  return { label: `${Math.round(score * 100)}% Rendah`, className: 'bg-red-50 text-red-700 border-red-200' };
+  if (score >= 0.9) return { label: `${Math.round(score * 100)}%`, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+  if (score >= 0.5) return { label: `${Math.round(score * 100)}%`, className: 'bg-amber-50 text-amber-700 border-amber-200' };
+  return { label: `${Math.round(score * 100)}%`, className: 'bg-red-50 text-red-700 border-red-200' };
 }
 
-function getConfidenceDot(score: number | null): string {
-  if (score === null) return 'bg-gray-300';
-  if (score >= 0.9) return 'bg-emerald-500';
-  if (score >= 0.5) return 'bg-amber-500';
-  return 'bg-red-500';
-}
-
-// ── Sub-component: Single Utterance Card ───────────────────────────
-
-function UtteranceCard({
-  transcript,
-  edit,
-  onChange,
-}: {
-  transcript: TranscriptUtterance;
-  edit: UtteranceCorrection;
-  onChange: (updates: Partial<UtteranceCorrection>) => void;
-}) {
-  const confBadge = getConfidenceBadge(transcript.confidence);
-  const isModified = edit.text !== transcript.text || edit.start !== transcript.start || edit.end !== transcript.end;
-
-  return (
-    <div className={`border rounded-lg p-3 transition-colors ${isModified ? 'border-teal-200 bg-teal-50/30' : 'border-gray-100 bg-white'}`}>
-      {/* Header row: index + timestamps + confidence */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 text-[10px] text-gray-400">
-            <GripVertical size={10} className="text-gray-300" />
-            <span className="font-mono font-bold text-gray-500">#{transcript.utterance_index}</span>
-          </div>
-          <Badge variant="outline" className={`text-[9px] px-1 py-0 gap-0.5 ${confBadge.className}`}>
-            <Shield size={7} className="mr-0.5" />
-            {confBadge.label}
-          </Badge>
-          {isModified && (
-            <Badge variant="outline" className="text-[9px] px-1 py-0 bg-teal-50 text-teal-600 border-teal-200">
-              diedit
-            </Badge>
-          )}
-        </div>
-        <div className="text-[10px] font-mono text-gray-400">
-          {formatTs(transcript.start)} → {formatTs(transcript.end)}
-        </div>
-      </div>
-
-      {/* ASR Reference (collapsible-style compact display) */}
-      <div className="mb-2">
-        <div className="text-[10px] text-gray-400 mb-0.5 flex items-center gap-1">
-          <Volume2 size={8} />
-          ASR Referensi
-        </div>
-        <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded px-2 py-1 leading-relaxed">
-          {transcript.text}
-        </div>
-      </div>
-
-      {/* Editable Correction */}
-      <div>
-        <div className="text-[10px] text-teal-600 mb-0.5 flex items-center gap-1 font-medium">
-          <FileText size={8} />
-          Koreksi
-        </div>
-        <Textarea
-          value={edit.text}
-          onChange={(e) => onChange({ text: e.target.value })}
-          placeholder="Tulis koreksi..."
-          className="text-xs resize-none h-14 border-teal-200 focus-visible:ring-teal-500 mb-2"
-        />
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <Label className="text-[9px] text-gray-400">Mulai (detik)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min={0}
-              value={edit.start.toFixed(2)}
-              onChange={(e) => onChange({ start: parseFloat(e.target.value) || 0 })}
-              className="h-7 text-xs font-mono"
-            />
-          </div>
-          <div>
-            <Label className="text-[9px] text-gray-400">Berakhir (detik)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min={0}
-              value={edit.end.toFixed(2)}
-              onChange={(e) => onChange({ end: parseFloat(e.target.value) || 0 })}
-              className="h-7 text-xs font-mono"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+function getReviewBadge(status: string | null): { label: string; className: string } | null {
+  if (!status || status === 'NOT_SUBMITTED') return null;
+  switch (status) {
+    case 'SUBMITTED':
+    case 'PENDING':
+      return { label: 'Menunggu Review', className: 'bg-amber-50 text-amber-700 border-amber-200' };
+    case 'APPROVED':
+      return { label: 'Disetujui ✓', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+    case 'REJECTED':
+      return { label: 'Perlu Revisi', className: 'bg-red-50 text-red-700 border-red-200' };
+    default:
+      return null;
+  }
 }
 
 // ── Component ──────────────────────────────────────────────────────
 
-export function PropertiesPanel({ segment, utteranceEdits, onUtteranceChange }: PropertiesPanelProps) {
-  const avgConfBadge = getConfidenceBadge(segment.avg_confidence);
+export function PropertiesPanel({
+  segment,
+  utteranceEdits,
+  onUtteranceChange,
+  activeUtteranceIndex,
+  onSelectUtterance,
+  onSaveDraft,
+  onSubmit,
+  onReset,
+  isSaving,
+  canSubmit,
+  submitWarning,
+  reviewStatus,
+  reviewFeedback,
+}: PropertiesPanelProps) {
+  const [resetting, setResetting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const reviewBadge = getReviewBadge(reviewStatus);
+  const isPendingReview = reviewStatus === 'SUBMITTED' || reviewStatus === 'PENDING';
+  const isReviewed = reviewStatus === 'APPROVED' || reviewStatus === 'REJECTED';
+  const actionsDisabled = isPendingReview || isReviewed;
+
+  // ── Pagination for progress dots ─────────────────────────────
+  const PAGE_SIZE = 15;
+  const totalPages = Math.ceil(segment.transcripts.length / PAGE_SIZE);
+  const [dotPage, setDotPage] = useState(0);
+
+  useEffect(() => {
+    if (activeUtteranceIndex !== null) {
+      setDotPage(Math.floor(activeUtteranceIndex / PAGE_SIZE));
+    }
+  }, [activeUtteranceIndex]);
+
+  const pagedTranscripts = useMemo(() => {
+    const start = dotPage * PAGE_SIZE;
+    return segment.transcripts.slice(start, start + PAGE_SIZE).map((t, i) => ({
+      t,
+      idx: start + i,
+    }));
+  }, [dotPage, segment.transcripts]);
+
+
+  // Get active utterance data
+  const activeTranscript: TranscriptUtterance | null =
+    activeUtteranceIndex !== null && activeUtteranceIndex < segment.transcripts.length
+      ? segment.transcripts[activeUtteranceIndex]
+      : null;
+
+  const activeEdit: UtteranceCorrection | null =
+    activeUtteranceIndex !== null && activeUtteranceIndex < utteranceEdits.length
+      ? utteranceEdits[activeUtteranceIndex]
+      : null;
+
+  const isModified = activeTranscript && activeEdit
+    ? (activeEdit.text !== activeTranscript.text || activeEdit.start !== activeTranscript.start || activeEdit.end !== activeTranscript.end)
+    : false;
+
+  // Count edited utterances
+  const editedCount = segment.transcripts.reduce((count, t, idx) => {
+    const edit = utteranceEdits[idx];
+    if (!edit) return count;
+    return count + (edit.text !== t.text || edit.start !== t.start || edit.end !== t.end ? 1 : 0);
+  }, 0);
+
+  // Handlers
+  const handleReset = async () => {
+    if (!confirm('Reset semua edit? Data akan kembali ke ASR original.')) return;
+    setResetting(true);
+    try { await onReset(); } finally { setResetting(false); }
+  };
+
+  const handleSubmit = async () => {
+    if (submitWarning && !confirm(submitWarning + '\n\nLanjutkan submit?')) return;
+    if (!confirm('Submit anotasi untuk review oleh kurator?')) return;
+    setSubmitting(true);
+    try { await onSubmit(); } finally { setSubmitting(false); }
+  };
+
+  const confBadge = activeTranscript ? getConfidenceBadge(activeTranscript.confidence) : null;
 
   return (
-    <Card className="h-full border-gray-200 flex flex-col shadow-sm">
-      <CardHeader className="py-3 border-b border-gray-100 bg-gray-50">
-        <CardTitle className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-          <FileText size={14} className="text-teal-600" />
-          Annotation Editor
-        </CardTitle>
-      </CardHeader>
+    <Card className="border-gray-200 shadow-sm bg-white flex flex-col h-full overflow-hidden">
+      {/* ── Progress bar + dots ── */}
+      <div className="px-4 pt-3 pb-2 border-b border-gray-100 bg-gray-50/80 flex-shrink-0">
+        <div className="flex items-center justify-between text-xs mb-2">
+          <span className="text-gray-600 font-medium flex items-center gap-1.5">
+            <FileText size={12} className="text-teal-600" />
+            Progress Anotasi
+          </span>
+          <span className="font-semibold text-teal-700">
+            {editedCount}/{segment.transcripts.length} diedit
+          </span>
+        </div>
 
-      <CardContent className="p-0 flex-1 overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="p-4 space-y-4">
-            {/* ── Segment Summary ── */}
+        {/* Progress dots — paginated, clickable */}
+        <div className="flex items-center gap-1.5">
+          {/* Prev page */}
+          <button
+            onClick={() => setDotPage((p) => Math.max(0, p - 1))}
+            disabled={dotPage === 0}
+            className="w-5 h-5 flex items-center justify-center rounded text-gray-400 hover:text-teal-600 hover:bg-teal-50 disabled:opacity-30 transition-colors flex-shrink-0"
+            title="Halaman sebelumnya"
+          >
+            <ChevronLeft size={12} />
+          </button>
+
+          {/* Dots for current page */}
+          <div className="flex gap-1 flex-1">
+            {pagedTranscripts.map(({ t, idx }) => {
+              const edit = utteranceEdits[idx];
+              const modified = edit && (edit.text !== t.text || edit.start !== t.start || edit.end !== t.end);
+              const isActive = idx === activeUtteranceIndex;
+              return (
+                <button
+                  key={t.utterance_index}
+                  onClick={() => onSelectUtterance(idx)}
+                  className={`h-2.5 flex-1 rounded-full transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-teal-500 ring-2 ring-teal-300 ring-offset-1 scale-110'
+                      : modified
+                        ? 'bg-amber-400 hover:bg-teal-400'
+                        : 'bg-gray-200 hover:bg-teal-300'
+                  }`}
+                  title={`Utterance #${t.utterance_index}${modified ? ' ✓ diedit' : ''}`}
+                />
+              );
+            })}
+          </div>
+
+          {/* Next page */}
+          <button
+            onClick={() => setDotPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={dotPage >= totalPages - 1}
+            className="w-5 h-5 flex items-center justify-center rounded text-gray-400 hover:text-teal-600 hover:bg-teal-50 disabled:opacity-30 transition-colors flex-shrink-0"
+            title="Halaman berikutnya"
+          >
+            <ChevronRight size={12} />
+          </button>
+        </div>
+
+        {/* Page indicator */}
+        {totalPages > 1 && (
+          <div className="text-xs text-gray-500 font-medium text-right mt-1.5">
+            Hal {dotPage + 1}/{totalPages} · {dotPage * PAGE_SIZE + 1}–{Math.min((dotPage + 1) * PAGE_SIZE, segment.transcripts.length)} dari {segment.transcripts.length}
+          </div>
+        )}
+
+        {/* Review status */}
+        {reviewBadge && (
+          <div className="mt-2 flex items-center gap-2">
+            <Badge variant="outline" className={`text-[11px] ${reviewBadge.className}`}>
+              {reviewBadge.label}
+            </Badge>
+            {reviewFeedback && reviewStatus === 'REJECTED' && (
+              <span className="text-[11px] text-red-500 truncate">
+                Feedback: {reviewFeedback}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Main editor area ── */}
+      <div className="flex-1 p-4 overflow-y-auto min-h-0">
+        {activeTranscript && activeEdit ? (
+          <div className="space-y-4">
+            {/* Active utterance header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <List size={12} className="text-gray-400" />
-                <span className="text-xs text-gray-600 font-medium">
-                  {segment.transcripts.length} utterance{segment.transcripts.length !== 1 ? 's' : ''}
+                <span className="text-sm font-bold bg-teal-600 text-white px-2 py-0.5 rounded">
+                  #{activeTranscript.utterance_index}
                 </span>
+                <Badge variant="outline" className="text-[11px] px-1.5 py-0.5 bg-teal-50 text-teal-600 border-teal-200">
+                  <Crosshair size={10} className="mr-1" />
+                  Aktif
+                </Badge>
+                {isModified && (
+                  <Badge variant="outline" className="text-[11px] px-1.5 py-0.5 bg-amber-50 text-amber-600 border-amber-200">
+                    <CheckCircle2 size={10} className="mr-1" />
+                    Diedit
+                  </Badge>
+                )}
               </div>
-              {segment.avg_confidence !== null && (
-                <Badge variant="outline" className={`text-[9px] ${avgConfBadge.className}`}>
-                  <Shield size={8} className="mr-0.5" />
-                  Avg: {avgConfBadge.label}
+              {confBadge && (
+                <Badge variant="outline" className={`text-[11px] px-1.5 py-0.5 ${confBadge.className}`}>
+                  <Shield size={10} className="mr-1" />
+                  ASR: {confBadge.label}
                 </Badge>
               )}
             </div>
 
-            {/* ── Aggregated Current Text (read-only reference) ── */}
-            <div className="p-2.5 border border-gray-200 rounded-lg bg-white">
-              <Label className="text-[10px] text-gray-400 uppercase tracking-wider font-bold flex items-center gap-1 mb-1">
-                <FileText size={10} /> Teks Aggregrat Saat Ini
-              </Label>
-              <p className="text-xs text-gray-700 leading-relaxed">
-                {segment.current_text || '(tidak ada teks)'}
+            {/* Timestamps — read-only */}
+            <div className="flex items-center gap-2 text-xs">
+              <Clock size={12} className="text-teal-600" />
+              <span className="font-mono text-teal-700 font-semibold text-sm">
+                {formatTs(activeEdit.start)}
+              </span>
+              <span className="text-gray-300 text-lg">→</span>
+              <span className="font-mono text-teal-700 font-semibold text-sm">
+                {formatTs(activeEdit.end)}
+              </span>
+              <span className="text-gray-400 text-xs">
+                ({(activeEdit.end - activeEdit.start).toFixed(1)}s)
+              </span>
+              <span className="text-xs text-teal-500 italic ml-auto font-medium">
+                geser filmstrip untuk ubah
+              </span>
+            </div>
+
+            {/* ASR Reference — large, clear */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="text-xs text-gray-500 mb-1.5 flex items-center gap-1.5 font-semibold uppercase tracking-wide">
+                <Volume2 size={12} />
+                Teks ASR (Referensi)
+              </div>
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {activeTranscript.text || '(tidak ada teks)'}
               </p>
-              <div className="flex gap-3 text-[10px] text-gray-400 mt-1">
-                <span>Range: <strong className="text-gray-600">{formatTs(segment.current_start)} → {formatTs(segment.current_end)}</strong></span>
-              </div>
             </div>
 
-            {/* ── Utterance List ── */}
-            <div className="space-y-2">
-              <Label className="text-[10px] text-teal-600 uppercase tracking-wider font-bold flex items-center gap-1">
-                <Volume2 size={10} /> Daftar Utterance ASR
-              </Label>
-              {segment.transcripts.length === 0 ? (
-                <div className="text-xs text-gray-400 italic p-4 text-center border border-dashed border-gray-200 rounded-lg">
-                  Tidak ada transkripsi untuk segmen ini
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {segment.transcripts.map((transcript, idx) => {
-                    const edit = utteranceEdits[idx] || {
-                      utterance_index: transcript.utterance_index,
-                      text: transcript.text,
-                      start: transcript.start,
-                      end: transcript.end,
-                    };
-                    return (
-                      <UtteranceCard
-                        key={transcript.utterance_index}
-                        transcript={transcript}
-                        edit={edit}
-                        onChange={(updates) => onUtteranceChange(idx, updates)}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* ── Edit History ── */}
-            {segment.edit_history.length > 0 && (
-              <div className="space-y-2 pt-2 border-t border-gray-100">
-                <Label className="text-[10px] text-gray-400 uppercase tracking-wider font-bold flex items-center gap-1">
-                  <History size={10} /> Riwayat Edit ({segment.edit_history.length})
-                </Label>
-                <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-                  {segment.edit_history.map((edit: SegmentEditHistory) => (
-                    <div
-                      key={edit.edit_id}
-                      className="border border-gray-100 rounded-lg p-2 bg-gray-50/50 text-[10px]"
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 bg-gray-100 text-gray-500 border-gray-200">
-                          {edit.status}
-                        </Badge>
-                        <span className="text-gray-400 flex items-center gap-0.5">
-                          <Clock size={8} />
-                          {new Date(edit.edited_at).toLocaleString('id-ID')}
-                        </span>
-                      </div>
-                      <p className="text-gray-600 line-clamp-2 leading-relaxed">{edit.new_text}</p>
-                      <div className="text-gray-400 mt-1">
-                        {formatTs(edit.new_start)} → {formatTs(edit.new_end)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            {/* Correction textarea — prominent */}
+            <div>
+              <div className="text-[11px] text-teal-700 mb-1.5 flex items-center gap-1 font-semibold uppercase tracking-wide">
+                <FileText size={10} />
+                Koreksi Teks
               </div>
-            )}
+              <Textarea
+                value={activeEdit.text}
+                onChange={(e) => onUtteranceChange(activeUtteranceIndex!, { text: e.target.value })}
+                placeholder="Tulis koreksi teks bahasa isyarat..."
+                disabled={actionsDisabled}
+                className="text-sm leading-relaxed resize-none min-h-[100px] border-teal-200 focus-visible:ring-teal-500 bg-white"
+              />
+            </div>
           </div>
-        </ScrollArea>
-      </CardContent>
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-400">
+            <div className="text-center">
+              <AlertTriangle size={24} className="mx-auto mb-2 opacity-40" />
+              <p className="text-xs">Pilih utterance dari timeline atau progress dots di atas</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Action buttons ── */}
+      <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center gap-2 flex-shrink-0">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleReset}
+          disabled={actionsDisabled || resetting}
+          className="gap-1.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+        >
+          {resetting ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+          Reset
+        </Button>
+
+        <div className="flex-1" />
+
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onSaveDraft}
+          disabled={actionsDisabled || isSaving}
+          className="gap-1.5 text-xs bg-teal-50 text-teal-700 hover:bg-teal-100 border-teal-200"
+        >
+          {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+          Simpan Draft
+        </Button>
+
+        <Button
+          size="sm"
+          onClick={handleSubmit}
+          disabled={actionsDisabled || !canSubmit || submitting}
+          className="gap-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white"
+        >
+          {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+          Submit
+        </Button>
+      </div>
     </Card>
   );
 }

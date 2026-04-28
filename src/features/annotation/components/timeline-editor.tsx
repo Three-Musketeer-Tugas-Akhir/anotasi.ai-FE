@@ -1,31 +1,29 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import WaveSurfer from 'wavesurfer.js';
-import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
-import ZoomPlugin from 'wavesurfer.js/dist/plugins/zoom.esm.js';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import type { UtteranceCorrection } from '../annotation-types';
 import {
+  ChevronLeft,
+  ChevronRight,
+  Crosshair,
+  Loader2,
+  Film,
   ZoomIn,
+  ZoomOut,
   Maximize2,
-  Focus,
-  Minus,
-  Plus,
 } from 'lucide-react';
 
 // ── Constants ──────────────────────────────────────────────────────
 
-/** Minimum zoom: fit entire waveform in container */
-const MIN_PX_PER_SEC = 0;
-/** Maximum zoom: very detailed view */
-const MAX_PX_PER_SEC = 800;
-/** Default zoom level for "fit to view" */
-const DEFAULT_PX_PER_SEC = 0;
-/** Zoom step for button clicks */
-const ZOOM_STEP = 50;
-/** Zoom multiplier for double-click */
-const DOUBLE_CLICK_ZOOM_FACTOR = 4;
+const THUMB_HEIGHT = 56;        // compact filmstrip height
+const MAX_FRAMES = 30;
+const MIN_FRAMES = 10;
+const MIN_ZOOM = 1;             // 1× = fit-to-width
+const MAX_ZOOM = 8;             // 8× = very detailed
+const ZOOM_STEP = 0.5;
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -38,6 +36,12 @@ interface TimelineEditorProps {
   trimStart: number;
   trimEnd: number;
   onTrimChange: (start: number, end: number) => void;
+  activeUtterance?: { index: number; start: number; end: number } | null;
+  allUtterances?: UtteranceCorrection[];
+  onPrevUtterance?: () => void;
+  onNextUtterance?: () => void;
+  utteranceCount?: number;
+  activeUtterancePosition?: number;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -49,362 +53,389 @@ function formatTimestamp(seconds: number): string {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
 }
 
-function getZoomLabel(pxPerSec: number, containerWidth: number, duration: number): string {
-  if (duration === 0) return '1×';
-  const fitPxPerSec = containerWidth / duration;
-  if (fitPxPerSec === 0) return '1×';
-  const ratio = Math.max(1, pxPerSec / fitPxPerSec);
-  return `${ratio.toFixed(1)}×`;
-}
-
 // ── Component ──────────────────────────────────────────────────────
 
 export function TimelineEditor({
   videoUrl,
   duration,
   currentTime,
-  isPlaying,
   onTimeUpdate,
   trimStart,
   trimEnd,
   onTrimChange,
+  activeUtterance,
+  allUtterances,
+  onPrevUtterance,
+  onNextUtterance,
+  utteranceCount,
+  activeUtterancePosition,
 }: TimelineEditorProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const wavesurfer = useRef<WaveSurfer | null>(null);
-  const wsRegions = useRef<RegionsPlugin | null>(null);
-  const zoomPlugin = useRef<ReturnType<typeof ZoomPlugin.create> | null>(null);
-  const [isReady, setIsReady] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState(DEFAULT_PX_PER_SEC);
+  const outerRef = useRef<HTMLDivElement>(null);   // scrollable outer container
+  const innerRef = useRef<HTMLDivElement>(null);    // zoomed inner strip
+  const extractVideoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Track whether we're programmatically updating the region to avoid feedback loops
-  const isUpdatingRegion = useRef(false);
-  // Track container width for zoom ratio display
-  const containerWidthRef = useRef(0);
+  const [frames, setFrames] = useState<string[]>([]);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [outerWidth, setOuterWidth] = useState(0);
+  const [zoom, setZoom] = useState(MIN_ZOOM);
 
-  // ── Initialize WaveSurfer ───────────────────────────────────────
+  // Drag state
+  const [dragging, setDragging] = useState<'start' | 'end' | 'region' | null>(null);
+  const dragStartClientX = useRef(0);
+  const dragStartValues = useRef({ start: 0, end: 0 });
+
+  // ── Measure outer container ───────────────────────────────────
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!outerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) setOuterWidth(entry.contentRect.width);
+    });
+    observer.observe(outerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
-    if (!wavesurfer.current) {
-      wsRegions.current = RegionsPlugin.create();
+  // ── Zoom helpers ──────────────────────────────────────────────
 
-      // ZoomPlugin: enables pinch-to-zoom on trackpad and scroll-wheel zoom
-      zoomPlugin.current = ZoomPlugin.create({
-        scale: 0.5,
-        maxZoom: MAX_PX_PER_SEC,
-        deltaThreshold: 5,
-        exponentialZooming: false,
+  const innerWidth = useMemo(() => outerWidth * zoom, [outerWidth, zoom]);
+
+  const handleZoomIn = () => setZoom((z) => Math.min(MAX_ZOOM, +(z + ZOOM_STEP).toFixed(1)));
+  const handleZoomOut = () => setZoom((z) => Math.max(MIN_ZOOM, +(z - ZOOM_STEP).toFixed(1)));
+  const handleZoomReset = () => setZoom(MIN_ZOOM);
+
+  // Auto-scroll so active utterance stays centered when zoom changes
+  useEffect(() => {
+    if (!outerRef.current || !activeUtterance || duration <= 0 || innerWidth <= 0) return;
+    const mid = (activeUtterance.start + activeUtterance.end) / 2;
+    const midPx = (mid / duration) * innerWidth;
+    outerRef.current.scrollLeft = midPx - outerRef.current.clientWidth / 2;
+  }, [zoom, activeUtterance, duration, innerWidth]);
+
+  // ── Frame extraction ──────────────────────────────────────────
+
+  const frameCount = useMemo(() => {
+    if (duration <= 0) return MIN_FRAMES;
+    return Math.min(MAX_FRAMES, Math.max(MIN_FRAMES, Math.ceil(duration)));
+  }, [duration]);
+
+  useEffect(() => {
+    if (!videoUrl || duration <= 0) return;
+
+    let cancelled = false;
+    setIsExtracting(true);
+    setFrames([]);
+
+    const extractFrames = async () => {
+      const video = document.createElement('video');
+      video.crossOrigin = 'anonymous';
+      video.muted = true;
+      video.preload = 'auto';
+      extractVideoRef.current = video;
+
+      await new Promise<void>((resolve, reject) => {
+        video.onloadeddata = () => resolve();
+        video.onerror = () => reject(new Error('Failed to load video for filmstrip'));
+        video.src = videoUrl;
       });
 
-      wavesurfer.current = WaveSurfer.create({
-        container: containerRef.current,
-        waveColor: '#d1d5db',
-        progressColor: '#0f766e',
-        cursorColor: '#ef4444',
-        barWidth: 2,
-        barGap: 1,
-        barRadius: 2,
-        height: 100,
-        normalize: true,
-        minPxPerSec: DEFAULT_PX_PER_SEC,
-        autoScroll: true,
-        autoCenter: true,
-        plugins: [wsRegions.current, zoomPlugin.current],
-      });
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-      wavesurfer.current.on('ready', () => {
-        setIsReady(true);
-        // Measure container width for zoom ratio
-        if (containerRef.current) {
-          containerWidthRef.current = containerRef.current.clientWidth;
-        }
-      });
+      const aspectRatio = video.videoWidth / video.videoHeight;
+      const thumbWidth = Math.round(THUMB_HEIGHT * aspectRatio);
+      canvas.width = thumbWidth;
+      canvas.height = THUMB_HEIGHT;
 
-      wavesurfer.current.on('timeupdate', (time) => {
-        if (wavesurfer.current && Math.abs(wavesurfer.current.getCurrentTime() - currentTime) > 0.1) {
-          onTimeUpdate(time);
-        }
-      });
+      const extracted: string[] = [];
+      const interval = duration / frameCount;
 
-      // Track zoom level changes from ZoomPlugin (scroll wheel / trackpad)
-      wavesurfer.current.on('zoom', (minPxPerSec: number) => {
-        setZoomLevel(minPxPerSec);
-      });
+      for (let i = 0; i < frameCount; i++) {
+        if (cancelled) return;
+        const seekTime = i * interval + interval / 2;
+        video.currentTime = Math.min(seekTime, duration - 0.01);
+        await new Promise<void>((resolve) => {
+          video.onseeked = () => {
+            ctx.drawImage(video, 0, 0, thumbWidth, THUMB_HEIGHT);
+            extracted.push(canvas.toDataURL('image/jpeg', 0.6));
+            resolve();
+          };
+        });
+      }
 
-      // Region events handling for drag/resize
-      wsRegions.current.on('region-updated', (region) => {
-        if (!isUpdatingRegion.current) {
-          onTrimChange(region.start, region.end);
-        }
-      });
-    }
+      if (!cancelled) {
+        setFrames(extracted);
+        setIsExtracting(false);
+      }
+      video.src = '';
+      video.load();
+      extractVideoRef.current = null;
+    };
+
+    extractFrames().catch(() => {
+      if (!cancelled) setIsExtracting(false);
+    });
 
     return () => {
-      // Cleanup handled on unmount
+      cancelled = true;
+      if (extractVideoRef.current) {
+        extractVideoRef.current.src = '';
+        extractVideoRef.current.load();
+        extractVideoRef.current = null;
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [videoUrl, duration, frameCount]);
 
-  // ── Load Video Audio ────────────────────────────────────────────
+  // ── Position helpers ──────────────────────────────────────────
+
+  const timeToInnerPx = useCallback(
+    (time: number) => {
+      if (duration <= 0 || innerWidth <= 0) return 0;
+      return Math.max(0, Math.min(innerWidth, (time / duration) * innerWidth));
+    },
+    [duration, innerWidth]
+  );
+
+  const clientXToTime = useCallback(
+    (clientX: number) => {
+      if (!outerRef.current || duration <= 0 || innerWidth <= 0) return 0;
+      const rect = outerRef.current.getBoundingClientRect();
+      const scrollLeft = outerRef.current.scrollLeft;
+      const innerX = clientX - rect.left + scrollLeft;
+      return Math.max(0, Math.min(duration, (innerX / innerWidth) * duration));
+    },
+    [duration, innerWidth]
+  );
+
+  // ── Click to seek ─────────────────────────────────────────────
+
+  const handleFilmstripClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (dragging) return;
+      onTimeUpdate(clientXToTime(e.clientX));
+    },
+    [dragging, clientXToTime, onTimeUpdate]
+  );
+
+  // ── Drag handlers ─────────────────────────────────────────────
+
+  const handleMouseDown = useCallback(
+    (type: 'start' | 'end' | 'region', e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      setDragging(type);
+      dragStartClientX.current = e.clientX;
+      dragStartValues.current = { start: trimStart, end: trimEnd };
+    },
+    [trimStart, trimEnd]
+  );
 
   useEffect(() => {
-    if (wavesurfer.current && videoUrl) {
-      setIsReady(false);
-      setZoomLevel(DEFAULT_PX_PER_SEC);
-      wavesurfer.current.load(videoUrl);
-    }
-  }, [videoUrl]);
+    if (!dragging) return;
 
-  // ── Sync external Play/Pause ────────────────────────────────────
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!outerRef.current || duration <= 0 || innerWidth <= 0) return;
+      const rect = outerRef.current.getBoundingClientRect();
+      const scrollLeft = outerRef.current.scrollLeft;
 
-  useEffect(() => {
-    if (wavesurfer.current && isReady) {
-      if (isPlaying) {
-        wavesurfer.current.play();
+      const startInnerX = dragStartClientX.current - rect.left + scrollLeft;
+      const curInnerX = e.clientX - rect.left + scrollLeft;
+      const deltaTime = ((curInnerX - startInnerX) / innerWidth) * duration;
+
+      const origStart = dragStartValues.current.start;
+      const origEnd = dragStartValues.current.end;
+
+      if (dragging === 'start') {
+        const newStart = Math.max(0, Math.min(origEnd - 0.05, origStart + deltaTime));
+        onTrimChange(newStart, origEnd);
+      } else if (dragging === 'end') {
+        const newEnd = Math.max(origStart + 0.05, Math.min(duration, origEnd + deltaTime));
+        onTrimChange(origStart, newEnd);
       } else {
-        wavesurfer.current.pause();
+        const regionDur = origEnd - origStart;
+        let newStart = origStart + deltaTime;
+        let newEnd = origEnd + deltaTime;
+        if (newStart < 0) { newStart = 0; newEnd = regionDur; }
+        if (newEnd > duration) { newEnd = duration; newStart = duration - regionDur; }
+        onTrimChange(newStart, newEnd);
       }
-    }
-  }, [isPlaying, isReady]);
+    };
 
-  // ── Sync external Time ──────────────────────────────────────────
+    const handleMouseUp = () => setDragging(null);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [dragging, duration, innerWidth, onTrimChange]);
 
-  useEffect(() => {
-    if (wavesurfer.current && isReady) {
-      if (Math.abs(wavesurfer.current.getCurrentTime() - currentTime) > 0.1) {
-        wavesurfer.current.setTime(currentTime);
-      }
-    }
-  }, [currentTime, isReady]);
+  // ── Computed positions (in px on inner strip) ─────────────────
 
-  // ── Region management ───────────────────────────────────────────
+  const regionLeftPx = timeToInnerPx(trimStart);
+  const regionRightPx = timeToInnerPx(trimEnd > 0 ? trimEnd : duration);
+  const playheadPx = timeToInnerPx(currentTime);
 
-  useEffect(() => {
-    if (!wsRegions.current || !isReady || duration === 0) return;
-
-    isUpdatingRegion.current = true;
-    wsRegions.current.clearRegions();
-
-    const regionEnd = trimEnd > 0 ? trimEnd : duration;
-    const regionStart = trimStart >= 0 ? trimStart : 0;
-
-    wsRegions.current.addRegion({
-      id: 'main-trim',
-      start: regionStart,
-      end: regionEnd,
-      color: 'rgba(20, 184, 166, 0.35)',
-      drag: true,
-      resize: true,
-    });
-
-    // Reset the flag after a tick so user interactions are captured
-    requestAnimationFrame(() => {
-      isUpdatingRegion.current = false;
-    });
-  }, [trimStart, trimEnd, isReady, duration]);
-
-  // ── Zoom Controls ───────────────────────────────────────────────
-
-  const applyZoom = useCallback((newLevel: number) => {
-    if (!wavesurfer.current) return;
-    const clamped = Math.max(MIN_PX_PER_SEC, Math.min(MAX_PX_PER_SEC, newLevel));
-    wavesurfer.current.zoom(clamped);
-    setZoomLevel(clamped);
-  }, []);
-
-  const handleZoomIn = useCallback(() => {
-    applyZoom(zoomLevel + ZOOM_STEP);
-  }, [zoomLevel, applyZoom]);
-
-  const handleZoomOut = useCallback(() => {
-    applyZoom(zoomLevel - ZOOM_STEP);
-  }, [zoomLevel, applyZoom]);
-
-  const handleFitToView = useCallback(() => {
-    applyZoom(0);
-  }, [applyZoom]);
-
-  /** Zoom to fit the current trim region into the viewport */
-  const handleFocusTrim = useCallback(() => {
-    if (!wavesurfer.current || !containerRef.current) return;
-    const regionStart = trimStart >= 0 ? trimStart : 0;
-    const regionEnd = trimEnd > 0 ? trimEnd : duration;
-    const regionDuration = regionEnd - regionStart;
-    if (regionDuration <= 0) return;
-
-    const containerWidth = containerRef.current.clientWidth;
-    // Calculate px/sec needed to fit region into ~80% of container width (leave padding)
-    const targetPxPerSec = (containerWidth * 0.8) / regionDuration;
-    const clamped = Math.min(MAX_PX_PER_SEC, targetPxPerSec);
-    
-    wavesurfer.current.zoom(clamped);
-    setZoomLevel(clamped);
-
-    // Scroll to center the region after zoom
-    requestAnimationFrame(() => {
-      if (!wavesurfer.current) return;
-      const scrollTarget = regionStart * clamped - containerWidth * 0.1;
-      wavesurfer.current.setScroll(Math.max(0, scrollTarget));
-    });
-  }, [trimStart, trimEnd, duration, applyZoom]);
-
-  /** Double-click handler: zoom into the clicked position */
-  const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!wavesurfer.current || !containerRef.current) return;
-
-    const rect = containerRef.current.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const containerWidth = rect.width;
-
-    // Calculate the time position that was clicked
-    const scroll = wavesurfer.current.getScroll();
-    const currentPxPerSec = zoomLevel || (containerWidth / (duration || 1));
-    const clickedTime = (scroll + clickX) / currentPxPerSec;
-
-    // Determine new zoom level
-    const newZoom = zoomLevel <= MIN_PX_PER_SEC
-      ? Math.max(ZOOM_STEP, (containerWidth / (duration || 1)) * DOUBLE_CLICK_ZOOM_FACTOR)
-      : MIN_PX_PER_SEC; // If already zoomed, double-click resets to fit
-
-    wavesurfer.current.zoom(newZoom);
-    setZoomLevel(newZoom);
-
-    // Scroll to center the clicked position
-    if (newZoom > MIN_PX_PER_SEC) {
-      requestAnimationFrame(() => {
-        if (!wavesurfer.current) return;
-        const scrollTarget = clickedTime * newZoom - containerWidth / 2;
-        wavesurfer.current.setScroll(Math.max(0, scrollTarget));
-      });
-    }
-  }, [zoomLevel, duration]);
-
-  // ── Zoom level display ──────────────────────────────────────────
-
-  const isZoomed = zoomLevel > MIN_PX_PER_SEC;
-  const zoomLabel = isReady
-    ? getZoomLabel(zoomLevel, containerWidthRef.current, duration)
-    : '1×';
-
-  // ── Render ──────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────
 
   return (
-    <Card className="flex flex-col border-gray-200 shadow-sm p-4 relative">
-      {/* Header Row */}
-      <div className="flex justify-between items-center mb-2">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-gray-800">Visual Trimmer</h3>
-          {isZoomed && (
-            <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-blue-50 text-blue-600 border-blue-200">
-              <ZoomIn size={8} className="mr-0.5" />
-              {zoomLabel}
+    <Card className="border-gray-200 shadow-sm p-2 bg-white">
+      {/* ── Header: nav + zoom controls ── */}
+      <div className="flex items-center gap-2 mb-2">
+
+        {/* Utterance nav */}
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="sm" onClick={onPrevUtterance}
+            disabled={!onPrevUtterance || activeUtterancePosition === 1}
+            className="h-7 px-2 text-xs gap-0.5">
+            <ChevronLeft size={14} />
+          </Button>
+          {activeUtterancePosition !== undefined && utteranceCount !== undefined && (
+            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-teal-50 text-teal-600 border-teal-200 h-7">
+              <Crosshair size={10} className="mr-1" />
+              {activeUtterancePosition} / {utteranceCount}
             </Badge>
           )}
-          {!isReady && <span className="text-xs text-gray-400">Loading waveform...</span>}
+          <Button variant="outline" size="sm" onClick={onNextUtterance}
+            disabled={!onNextUtterance || activeUtterancePosition === utteranceCount}
+            className="h-7 px-2 text-xs gap-0.5">
+            <ChevronRight size={14} />
+          </Button>
         </div>
 
-        {/* Zoom Controls */}
-        {isReady && (
-          <div className="flex items-center gap-1">
-            {/* Fit to View */}
-            <button
-              onClick={handleFitToView}
-              className={`p-1.5 rounded-md transition-colors text-xs ${
-                !isZoomed
-                  ? 'bg-gray-100 text-gray-400 cursor-default'
-                  : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
-              }`}
-              disabled={!isZoomed}
-              title="Fit to view (reset zoom)"
-            >
-              <Maximize2 size={13} />
+        {/* Title */}
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          <Film size={14} className="text-teal-600 flex-shrink-0" />
+          <span className="text-sm font-semibold text-gray-700 truncate">
+            {activeUtterance ? `Utterance #${activeUtterance.index}` : 'Filmstrip Timeline'}
+          </span>
+        </div>
+
+        {/* Timestamps */}
+        <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-gray-500">
+          <span className="text-teal-600 font-semibold">{formatTimestamp(trimStart)}</span>
+          <span className="text-gray-400">→</span>
+          <span className="text-teal-600 font-semibold">{formatTimestamp(trimEnd > 0 ? trimEnd : duration)}</span>
+          <span className="text-gray-400">({((trimEnd > 0 ? trimEnd : duration) - trimStart).toFixed(1)}s)</span>
+        </div>
+
+        {/* Zoom controls */}
+        <div className="flex items-center gap-0.5 bg-gray-50 border border-gray-200 rounded-lg px-1 py-0.5">
+          <button onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM}
+            className="p-1 rounded hover:bg-gray-200 text-gray-500 disabled:opacity-30 transition-colors"
+            title="Zoom out">
+            <ZoomOut size={12} />
+          </button>
+          <span className="text-xs font-mono text-gray-600 min-w-[32px] text-center select-none font-medium">
+            {zoom.toFixed(1)}×
+          </span>
+          <button onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM}
+            className="p-1 rounded hover:bg-gray-200 text-gray-500 disabled:opacity-30 transition-colors"
+            title="Zoom in">
+            <ZoomIn size={12} />
+          </button>
+          {zoom > MIN_ZOOM && (
+            <button onClick={handleZoomReset}
+              className="p-1 rounded hover:bg-gray-200 text-gray-400 transition-colors"
+              title="Reset zoom">
+              <Maximize2 size={11} />
             </button>
-
-            {/* Focus on Trim Region */}
-            <button
-              onClick={handleFocusTrim}
-              className="p-1.5 rounded-md hover:bg-teal-50 text-teal-600 hover:text-teal-700 transition-colors"
-              title="Zoom ke area trim"
-            >
-              <Focus size={13} />
-            </button>
-
-            {/* Zoom Slider / Buttons */}
-            <div className="flex items-center gap-0.5 bg-gray-50 border border-gray-200 rounded-lg px-1 py-0.5 ml-1">
-              <button
-                onClick={handleZoomOut}
-                className="p-1 rounded hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-30"
-                disabled={zoomLevel <= MIN_PX_PER_SEC}
-                title="Zoom out"
-              >
-                <Minus size={12} />
-              </button>
-              <span className="text-[10px] font-mono text-gray-500 min-w-[32px] text-center select-none">
-                {zoomLabel}
-              </span>
-              <button
-                onClick={handleZoomIn}
-                className="p-1 rounded hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-30"
-                disabled={zoomLevel >= MAX_PX_PER_SEC}
-                title="Zoom in"
-              >
-                <Plus size={12} />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Waveform Container */}
-      <div
-        className={`w-full relative bg-gray-50 border border-gray-200 rounded-md overflow-hidden transition-all ${
-          isZoomed ? 'ring-1 ring-blue-200' : ''
-        }`}
-      >
-        <div
-          ref={containerRef}
-          className="w-full relative z-10"
-          onDoubleClick={handleDoubleClick}
-          style={{ cursor: isZoomed ? 'grab' : 'default' }}
-        />
-
-        {/* Zoom hint overlay — only when waveform is loaded and not zoomed */}
-        {isReady && !isZoomed && duration > 0 && (
-          <div className="absolute inset-0 pointer-events-none flex items-end justify-center pb-1.5 z-20">
-            <span className="text-[9px] text-gray-400 bg-white/80 backdrop-blur-sm px-2 py-0.5 rounded-full border border-gray-100">
-              Scroll / Pinch untuk zoom · Double-click untuk fokus
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Footer: Legend + Timestamps */}
-      <div className="mt-3 flex items-center justify-between">
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 bg-teal-500/35 border border-teal-500 rounded-sm" />
-            <span>Area trim (geser/resize)</span>
-          </div>
-          {isZoomed && (
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-blue-50 border border-blue-300 rounded-sm" />
-              <span>Mode zoom aktif</span>
-            </div>
           )}
         </div>
+      </div>
 
-        {/* Trim region timestamp display */}
-        {isReady && duration > 0 && (
-          <div className="flex items-center gap-2 text-[10px] font-mono text-gray-500">
-            <span className="text-teal-600 font-semibold">{formatTimestamp(trimStart)}</span>
-            <span className="text-gray-300">→</span>
-            <span className="text-teal-600 font-semibold">{formatTimestamp(trimEnd > 0 ? trimEnd : duration)}</span>
-            <span className="text-gray-400 ml-1">
-              ({((trimEnd > 0 ? trimEnd : duration) - trimStart).toFixed(1)}s)
-            </span>
+      {/* ── Scrollable filmstrip ── */}
+      <div
+        ref={outerRef}
+        className="relative overflow-x-auto overflow-y-hidden rounded-md border border-gray-200 bg-gray-900 select-none"
+        style={{ height: `${THUMB_HEIGHT + 8}px`, cursor: dragging ? 'grabbing' : 'pointer' }}
+        onClick={handleFilmstripClick}
+      >
+        {/* Inner strip — zoomed width */}
+        <div
+          ref={innerRef}
+          className="relative h-full"
+          style={{ width: innerWidth > 0 ? `${innerWidth}px` : '100%', minWidth: '100%' }}
+        >
+          {/* Thumbnail frames */}
+          {isExtracting ? (
+            <div className="absolute inset-0 flex items-center justify-center text-gray-400 gap-2">
+              <Loader2 size={16} className="animate-spin" />
+              <span className="text-xs">Generating filmstrip...</span>
+            </div>
+          ) : frames.length > 0 ? (
+            <div className="flex h-full w-full">
+              {frames.map((src, i) => (
+                <img key={i} src={src} alt="" className="h-full object-cover flex-1 min-w-0" draggable={false} />
+              ))}
+            </div>
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-gray-500">
+              <span className="text-xs">Memuat video...</span>
+            </div>
+          )}
+
+          {/* Dimmed overlay outside active region */}
+          <div className="absolute top-0 bottom-0 left-0 bg-black/50 pointer-events-none"
+            style={{ width: `${regionLeftPx}px` }} />
+          <div className="absolute top-0 bottom-0 bg-black/50 pointer-events-none"
+            style={{ left: `${regionRightPx}px`, right: 0 }} />
+
+          {/* Background regions for other utterances */}
+          {allUtterances && activeUtterance && allUtterances.map((u) => {
+            if (u.utterance_index === activeUtterance.index) return null;
+            const left = timeToInnerPx(u.start);
+            const width = timeToInnerPx(u.end) - left;
+            return (
+              <div key={`bg-${u.utterance_index}`}
+                className="absolute top-0 bottom-0 border border-white/20 pointer-events-none"
+                style={{ left: `${left}px`, width: `${width}px`, background: 'rgba(255,255,255,0.08)' }} />
+            );
+          })}
+
+          {/* Active region border */}
+          <div className="absolute top-0 bottom-0 border-2 border-teal-400 pointer-events-none rounded-sm"
+            style={{ left: `${regionLeftPx}px`, width: `${regionRightPx - regionLeftPx}px` }} />
+
+          {/* Drag handle — start */}
+          <div className="absolute top-0 bottom-0 w-4 cursor-col-resize z-20 group flex items-center justify-center"
+            style={{ left: `${regionLeftPx - 8}px` }}
+            onMouseDown={(e) => handleMouseDown('start', e)}
+            onClick={(e) => e.stopPropagation()}>
+            <div className="w-1 h-full bg-teal-400 group-hover:bg-teal-300 transition-colors rounded-full" />
           </div>
-        )}
+
+          {/* Drag handle — end */}
+          <div className="absolute top-0 bottom-0 w-4 cursor-col-resize z-20 group flex items-center justify-center"
+            style={{ left: `${regionRightPx - 8}px` }}
+            onMouseDown={(e) => handleMouseDown('end', e)}
+            onClick={(e) => e.stopPropagation()}>
+            <div className="w-1 h-full bg-teal-400 group-hover:bg-teal-300 transition-colors rounded-full" />
+          </div>
+
+          {/* Region drag overlay */}
+          <div className="absolute top-0 bottom-0 z-10"
+            style={{
+              left: `${regionLeftPx}px`,
+              width: `${regionRightPx - regionLeftPx}px`,
+              cursor: dragging === 'region' ? 'grabbing' : 'grab',
+            }}
+            onMouseDown={(e) => handleMouseDown('region', e)}
+            onClick={(e) => e.stopPropagation()} />
+
+          {/* Playhead */}
+          <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-30 pointer-events-none"
+            style={{ left: `${playheadPx}px` }}>
+            <div className="absolute -top-0 left-1/2 -translate-x-1/2 w-2 h-2 bg-red-500 rounded-full" />
+          </div>
+        </div>
+      </div>
+
+      {/* Timestamp ruler */}
+      <div className="flex items-center justify-between text-xs font-mono text-gray-400 mt-1.5 px-1">
+        <span>{formatTimestamp(0)}</span>
+        {duration > 0 && <span>{formatTimestamp(duration / 2)}</span>}
+        <span>{formatTimestamp(duration)}</span>
       </div>
     </Card>
   );

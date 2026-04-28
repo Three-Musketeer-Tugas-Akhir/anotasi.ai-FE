@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Video as VideoIcon,
@@ -59,6 +59,18 @@ export function Sidebar({ activePath = '/' }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(true);
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+
+  // Listen for global events to collapse/expand from other components
+  useEffect(() => {
+    const handleCollapse = () => setIsOpen(false);
+    const handleExpand = () => setIsOpen(true);
+    window.addEventListener('collapse-main-sidebar', handleCollapse);
+    window.addEventListener('expand-main-sidebar', handleExpand);
+    return () => {
+      window.removeEventListener('collapse-main-sidebar', handleCollapse);
+      window.removeEventListener('expand-main-sidebar', handleExpand);
+    };
+  }, []);
 
   return (
     <aside

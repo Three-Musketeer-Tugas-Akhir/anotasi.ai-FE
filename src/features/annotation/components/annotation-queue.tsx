@@ -101,11 +101,18 @@ function formatFilename(name: string, maxLen = 40): string {
   return base.slice(0, maxLen - 3) + '…';
 }
 
-/** Group flat queue items into job-based groups. */
+/** Group flat queue items into job-based groups with segment deduplication. */
 function groupByJob(items: QueueItemResponse[]): JobGroup[] {
   const map = new Map<string, JobGroup>();
+  // Track seen (segment_id + transcript_text) to deduplicate
+  const seen = new Set<string>();
 
   for (const item of items) {
+    // Deduplicate: skip if same segment_id with identical transcript text
+    const dedupeKey = `${item.segment_id}::${item.transcript_text ?? ''}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
     let group = map.get(item.job_id);
     if (!group) {
       group = {
@@ -142,13 +149,15 @@ function getJobProgressColor(completed: number, total: number): string {
 interface AnnotationQueueProps {
   onSelectSegment: (segmentId: string, editId?: string | null) => void;
   selectedSegmentId: string | null;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 type TabView = 'queue' | 'submissions';
 
 // ── Component ──────────────────────────────────────────────────────
 
-export function AnnotationQueue({ onSelectSegment, selectedSegmentId }: AnnotationQueueProps) {
+export function AnnotationQueue({ onSelectSegment, selectedSegmentId, isCollapsed, onToggleCollapse }: AnnotationQueueProps) {
   const [tab, setTab] = useState<TabView>('queue');
 
   // Queue state
@@ -256,8 +265,46 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId }: Annotati
 
   // ── Render ────────────────────────────────────────────────────
 
+  // ── Collapsed view ────────────────────────────────────────────
+
+  if (isCollapsed) {
+    return (
+      <div className="w-12 min-w-12 h-full bg-white border-r border-gray-200 flex flex-col items-center py-3 gap-3 transition-all duration-300">
+        <button
+          onClick={onToggleCollapse}
+          className="w-9 h-9 rounded-lg bg-teal-50 text-teal-600 hover:bg-teal-100 flex items-center justify-center transition-colors"
+          title="Buka antrian"
+        >
+          <List size={18} />
+        </button>
+        {/* Compact progress */}
+        <div className="flex flex-col items-center gap-1 text-[9px] text-gray-400">
+          <span className="font-bold text-teal-600">{totalStats.completedCount}</span>
+          <span>/</span>
+          <span>{totalItems}</span>
+        </div>
+        {/* Mini vertical dots showing item statuses */}
+        <div className="flex flex-col gap-0.5 mt-1">
+          {items.slice(0, 12).map((item) => (
+            <div
+              key={item.id}
+              className={`w-2 h-2 rounded-full ${
+                item.segment_id === selectedSegmentId ? 'bg-teal-500 ring-1 ring-teal-300' :
+                item.status === 'COMPLETED' ? 'bg-emerald-400' :
+                item.has_active_work ? 'bg-amber-400' : 'bg-gray-200'
+              }`}
+            />
+          ))}
+          {items.length > 12 && (
+            <span className="text-[8px] text-gray-300 mt-0.5">+{items.length - 12}</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-[340px] min-w-[340px] h-full overflow-hidden bg-white border-r border-gray-200 flex flex-col">
+    <div className="w-[340px] min-w-[340px] h-full overflow-hidden bg-white border-r border-gray-200 flex flex-col transition-all duration-300">
       {/* Tab Switcher */}
       <div className="flex border-b border-gray-200 flex-shrink-0">
         <button
