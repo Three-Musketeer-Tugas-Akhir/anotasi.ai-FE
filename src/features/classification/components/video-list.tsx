@@ -100,7 +100,7 @@ export function VideoList({
       {/* List */}
       <div className="flex-1 overflow-y-auto">
         <div className="divide-y divide-gray-100">
-          {filteredJobs.map((job) => (
+          {jobs.map((job) => (
             <div
               key={job.job_id}
               onClick={() => onSelectJob(job.job_id)}
@@ -158,7 +158,7 @@ export function VideoList({
             </div>
           ))}
 
-          {filteredJobs.length === 0 && (
+          {jobs.length === 0 && (
             <div className="p-8 text-center text-gray-400 text-sm">
               Tidak ada video yang cocok dengan filter.
             </div>
