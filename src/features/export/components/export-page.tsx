@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DatasetExplorer } from './dataset-explorer';
 import {
   Table,
   TableBody,
@@ -23,6 +24,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   RefreshCw,
+  FolderOpen,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/core/api/axios-client';
@@ -53,6 +55,8 @@ interface JobListResponse {
 // ── Helpers ────────────────────────────────────────────────────────
 
 const DOWNLOADABLE_STATUSES = new Set([
+  'PENDING',
+  'ANNOTATED',
   'READY_TO_BE_NORMALIZED',
   'NORMALIZED',
   'READY_TO_EXPORT',
@@ -60,6 +64,10 @@ const DOWNLOADABLE_STATUSES = new Set([
 
 function getCurationBadge(status: string | null): { label: string; className: string } {
   switch (status) {
+    case 'PENDING':
+      return { label: 'Sedang Dianotasi', className: 'bg-amber-50 text-amber-700 border-amber-200' };
+    case 'ANNOTATED':
+      return { label: 'Selesai Dianotasi', className: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
     case 'READY_TO_BE_NORMALIZED':
       return { label: 'Siap Normalisasi', className: 'bg-blue-50 text-blue-700 border-blue-200' };
     case 'NORMALIZED':
@@ -88,6 +96,7 @@ function formatDate(dateStr: string | null): string {
 
 export function ExportPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [exploreJobId, setExploreJobId] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
@@ -110,10 +119,8 @@ export function ExportPage() {
 
   const jobs = data?.items ?? [];
 
-  // Only show jobs whose curation_status is downloadable
-  const downloadableJobs = jobs.filter((j) =>
-    j.curation_status && DOWNLOADABLE_STATUSES.has(j.curation_status),
-  );
+  // Show all jobs that are READY_FOR_ANNOTATION — filter by downloadable curation_status only for ZIP download button
+  const downloadableJobs = jobs;
 
   // Stats
   const totalDownloadable = downloadableJobs.length;
@@ -149,6 +156,10 @@ export function ExportPage() {
       setDownloadingId(null);
     }
   }, []);
+
+  if (exploreJobId) {
+    return <DatasetExplorer jobId={exploreJobId} onBack={() => setExploreJobId(null)} />;
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -246,7 +257,7 @@ export function ExportPage() {
               <TableHeader>
                 <TableRow className="bg-gray-50/50">
                   <TableHead className="w-12 text-center">#</TableHead>
-                  <TableHead>Job ID</TableHead>
+                  <TableHead>Nama File</TableHead>
                   <TableHead className="w-28 text-center">Segmen</TableHead>
                   <TableHead className="w-28 text-center">Kategori</TableHead>
                   <TableHead className="w-36 text-center">Status Kurasi</TableHead>
@@ -263,7 +274,14 @@ export function ExportPage() {
                     <TableRow key={job.id}>
                       <TableCell className="text-center text-gray-400 text-xs">{i + 1}</TableCell>
                       <TableCell>
-                        <span className="font-mono text-xs text-gray-700">{job.id.slice(0, 12)}...</span>
+                        <div className="flex flex-col">
+                          <span className="font-medium text-sm text-gray-800">
+                            {job.original_filename || 'Unknown File'}
+                          </span>
+                          <span className="font-mono text-[10px] text-gray-400">
+                            ID: {job.id.slice(0, 8)}...
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge variant="outline" className="text-xs font-mono">
@@ -288,22 +306,33 @@ export function ExportPage() {
                         {formatDate(job.created_at)}
                       </TableCell>
                       <TableCell className="text-center">
-                        <Button
-                          size="sm"
-                          className="h-8 bg-teal-600 hover:bg-teal-700 text-white text-xs"
-                          disabled={isDownloading}
-                          onClick={() => handleDownload(job.id)}
-                        >
-                          {isDownloading ? (
-                            <>
-                              <Loader2 size={12} className="mr-1 animate-spin" /> Downloading...
-                            </>
-                          ) : (
-                            <>
-                              <Download size={12} className="mr-1" /> Download ZIP
-                            </>
-                          )}
-                        </Button>
+                        <div className="flex items-center justify-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs text-teal-700 border-teal-200 hover:bg-teal-50"
+                            onClick={() => setExploreJobId(job.id)}
+                          >
+                            <FolderOpen size={12} className="mr-1" /> Explorer
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="h-8 bg-teal-600 hover:bg-teal-700 text-white text-xs disabled:opacity-40"
+                            disabled={isDownloading || !job.curation_status || !DOWNLOADABLE_STATUSES.has(job.curation_status)}
+                            onClick={() => handleDownload(job.id)}
+                            title={!job.curation_status || !DOWNLOADABLE_STATUSES.has(job.curation_status) ? 'Belum siap untuk diunduh' : 'Download seluruh Job (semua segmen)'}
+                          >
+                            {isDownloading ? (
+                              <>
+                                <Loader2 size={12} className="mr-1 animate-spin" /> Downloading...
+                              </>
+                            ) : (
+                              <>
+                                <Download size={12} className="mr-1" /> ZIP
+                              </>
+                            )}
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

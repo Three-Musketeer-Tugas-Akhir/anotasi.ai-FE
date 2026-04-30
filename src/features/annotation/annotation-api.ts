@@ -76,6 +76,12 @@ export const annotationApi = {
       .get<AnnotationEditListResponse>(`/annotations/${segmentId}/edits`)
       .then((r) => r.data),
 
+  /** POST /annotations/:segmentId/utterances/:utteranceIndex/crop — trigger physical crop */
+  cropUtterance: (segmentId: string, utteranceIndex: number) =>
+    apiClient
+      .post<{ status: string; message: string }>(`/annotations/${segmentId}/utterances/${utteranceIndex}/crop`)
+      .then((r) => r.data),
+
   // ═══════════════════════════════════════════════════════════════════
   // Draft & Preview
   // ═══════════════════════════════════════════════════════════════════

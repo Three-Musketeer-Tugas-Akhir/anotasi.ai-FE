@@ -18,6 +18,8 @@ export interface UtteranceCorrection {
   text: string;
   start: number;
   end: number;
+  cropped_video_path?: string;
+  status?: string;
 }
 
 // ── Queue ───────────────────────────────────────────────────────────

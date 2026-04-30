@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Play, Pause, Settings2, Video, Loader2, AlertTriangle } from 'lucide-react';
+import { Play, Pause, Settings2, Video, Loader2, AlertTriangle, Volume2, VolumeX } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +35,7 @@ export function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(true);
 
   // ── Sync State ─────────────────────────────────────────────────────────
   const lastReportedTimeRef = useRef(currentTime);
@@ -121,6 +122,7 @@ export function VideoPlayer({
               onClick={() => onPlayPause(!isPlaying)}
               onError={() => setVideoError('Gagal memuat video. Coba refresh halaman.')}
               preload="metadata"
+              muted={isMuted}
             >
               <track kind="captions" />
             </video>
@@ -175,6 +177,16 @@ export function VideoPlayer({
         <span className="text-sm font-mono text-gray-300 flex-1">
           {new Date(currentTime * 1000).toISOString().substr(14, 8)}
         </span>
+
+        {/* Volume toggle */}
+        <button
+          onClick={() => setIsMuted(!isMuted)}
+          className="w-8 h-8 rounded hover:bg-gray-700 flex items-center justify-center transition-colors flex-shrink-0 text-gray-300 hover:text-white"
+          aria-label={isMuted ? 'Unmute' : 'Mute'}
+          title={isMuted ? 'Unmute' : 'Mute'}
+        >
+          {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+        </button>
 
         {/* Speed selector */}
         <DropdownMenu>

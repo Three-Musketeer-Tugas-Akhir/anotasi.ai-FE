@@ -36,7 +36,7 @@ interface TimelineEditorProps {
   trimStart: number;
   trimEnd: number;
   onTrimChange: (start: number, end: number) => void;
-  activeUtterance?: { index: number; start: number; end: number } | null;
+  activeUtterance?: { index: number; start: number; end: number; status?: string } | null;
   allUtterances?: UtteranceCorrection[];
   onPrevUtterance?: () => void;
   onNextUtterance?: () => void;
@@ -95,6 +95,8 @@ export function TimelineEditor({
     return () => observer.disconnect();
   }, []);
 
+  const isLocked = activeUtterance?.status === 'OK';
+
   // ── Zoom helpers ──────────────────────────────────────────────
 
   const innerWidth = useMemo(() => outerWidth * zoom, [outerWidth, zoom]);
@@ -111,12 +113,28 @@ export function TimelineEditor({
     outerRef.current.scrollLeft = midPx - outerRef.current.clientWidth / 2;
   }, [zoom, activeUtterance, duration, innerWidth]);
 
+  // ── Compute Window [N-1.start, N+1.end] ───────────────────────
+  const { windowStart, windowEnd, windowDuration } = useMemo(() => {
+    if (!allUtterances || allUtterances.length === 0 || !activeUtterance) {
+      return { windowStart: 0, windowEnd: duration, windowDuration: duration };
+    }
+    const idx = activeUtterance.index;
+    const prev = allUtterances[idx - 1];
+    const next = allUtterances[idx + 1];
+    
+    const wStart = prev ? prev.start : activeUtterance.start;
+    const wEnd = next ? next.end : activeUtterance.end;
+    const wDur = Math.max(0.1, wEnd - wStart);
+    
+    return { windowStart: wStart, windowEnd: wEnd, windowDuration: wDur };
+  }, [allUtterances, activeUtterance, duration]);
+
   // ── Frame extraction ──────────────────────────────────────────
 
   const frameCount = useMemo(() => {
-    if (duration <= 0) return MIN_FRAMES;
-    return Math.min(MAX_FRAMES, Math.max(MIN_FRAMES, Math.ceil(duration)));
-  }, [duration]);
+    if (windowDuration <= 0) return MIN_FRAMES;
+    return Math.min(MAX_FRAMES, Math.max(MIN_FRAMES, Math.ceil(windowDuration)));
+  }, [windowDuration]);
 
   useEffect(() => {
     if (!videoUrl || duration <= 0) return;
@@ -148,11 +166,11 @@ export function TimelineEditor({
       canvas.height = THUMB_HEIGHT;
 
       const extracted: string[] = [];
-      const interval = duration / frameCount;
+      const interval = windowDuration / frameCount;
 
       for (let i = 0; i < frameCount; i++) {
         if (cancelled) return;
-        const seekTime = i * interval + interval / 2;
+        const seekTime = windowStart + i * interval + interval / 2;
         video.currentTime = Math.min(seekTime, duration - 0.01);
         await new Promise<void>((resolve) => {
           video.onseeked = () => {
@@ -190,21 +208,24 @@ export function TimelineEditor({
 
   const timeToInnerPx = useCallback(
     (time: number) => {
-      if (duration <= 0 || innerWidth <= 0) return 0;
-      return Math.max(0, Math.min(innerWidth, (time / duration) * innerWidth));
+      if (windowDuration <= 0 || innerWidth <= 0) return 0;
+      if (time < windowStart) return 0;
+      if (time > windowEnd) return innerWidth;
+      return ((time - windowStart) / windowDuration) * innerWidth;
     },
-    [duration, innerWidth]
+    [windowDuration, windowStart, windowEnd, innerWidth]
   );
 
   const clientXToTime = useCallback(
     (clientX: number) => {
-      if (!outerRef.current || duration <= 0 || innerWidth <= 0) return 0;
+      if (!outerRef.current || windowDuration <= 0 || innerWidth <= 0) return windowStart;
       const rect = outerRef.current.getBoundingClientRect();
       const scrollLeft = outerRef.current.scrollLeft;
       const innerX = clientX - rect.left + scrollLeft;
-      return Math.max(0, Math.min(duration, (innerX / innerWidth) * duration));
+      const t = windowStart + (innerX / innerWidth) * windowDuration;
+      return Math.max(windowStart, Math.min(windowEnd, t));
     },
-    [duration, innerWidth]
+    [windowDuration, windowStart, windowEnd, innerWidth]
   );
 
   // ── Click to seek ─────────────────────────────────────────────
@@ -223,11 +244,12 @@ export function TimelineEditor({
     (type: 'start' | 'end' | 'region', e: React.MouseEvent) => {
       e.stopPropagation();
       e.preventDefault();
+      if (isLocked) return;
       setDragging(type);
       dragStartClientX.current = e.clientX;
       dragStartValues.current = { start: trimStart, end: trimEnd };
     },
-    [trimStart, trimEnd]
+    [trimStart, trimEnd, isLocked]
   );
 
   useEffect(() => {
@@ -246,17 +268,17 @@ export function TimelineEditor({
       const origEnd = dragStartValues.current.end;
 
       if (dragging === 'start') {
-        const newStart = Math.max(0, Math.min(origEnd - 0.05, origStart + deltaTime));
+        const newStart = Math.max(windowStart, Math.min(origEnd - 0.05, origStart + deltaTime));
         onTrimChange(newStart, origEnd);
       } else if (dragging === 'end') {
-        const newEnd = Math.max(origStart + 0.05, Math.min(duration, origEnd + deltaTime));
+        const newEnd = Math.max(origStart + 0.05, Math.min(windowEnd, origEnd + deltaTime));
         onTrimChange(origStart, newEnd);
       } else {
         const regionDur = origEnd - origStart;
         let newStart = origStart + deltaTime;
         let newEnd = origEnd + deltaTime;
-        if (newStart < 0) { newStart = 0; newEnd = regionDur; }
-        if (newEnd > duration) { newEnd = duration; newStart = duration - regionDur; }
+        if (newStart < windowStart) { newStart = windowStart; newEnd = windowStart + regionDur; }
+        if (newEnd > windowEnd) { newEnd = windowEnd; newStart = windowEnd - regionDur; }
         onTrimChange(newStart, newEnd);
       }
     };
@@ -273,7 +295,7 @@ export function TimelineEditor({
   // ── Computed positions (in px on inner strip) ─────────────────
 
   const regionLeftPx = timeToInnerPx(trimStart);
-  const regionRightPx = timeToInnerPx(trimEnd > 0 ? trimEnd : duration);
+  const regionRightPx = timeToInnerPx(trimEnd > 0 ? trimEnd : windowEnd);
   const playheadPx = timeToInnerPx(currentTime);
 
   // ── Render ────────────────────────────────────────────────────
@@ -315,8 +337,8 @@ export function TimelineEditor({
         <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-gray-500">
           <span className="text-teal-600 font-semibold">{formatTimestamp(trimStart)}</span>
           <span className="text-gray-400">→</span>
-          <span className="text-teal-600 font-semibold">{formatTimestamp(trimEnd > 0 ? trimEnd : duration)}</span>
-          <span className="text-gray-400">({((trimEnd > 0 ? trimEnd : duration) - trimStart).toFixed(1)}s)</span>
+          <span className="text-teal-600 font-semibold">{formatTimestamp(trimEnd > 0 ? trimEnd : windowEnd)}</span>
+          <span className="text-gray-400">({((trimEnd > 0 ? trimEnd : windowEnd) - trimStart).toFixed(1)}s)</span>
         </div>
 
         {/* Zoom controls */}
@@ -384,41 +406,51 @@ export function TimelineEditor({
           {/* Background regions for other utterances */}
           {allUtterances && activeUtterance && allUtterances.map((u) => {
             if (u.utterance_index === activeUtterance.index) return null;
+            if (u.end <= windowStart || u.start >= windowEnd) return null;
+
             const left = timeToInnerPx(u.start);
             const width = timeToInnerPx(u.end) - left;
+            const isOk = u.status === 'OK';
+
             return (
               <div key={`bg-${u.utterance_index}`}
-                className="absolute top-0 bottom-0 border border-white/20 pointer-events-none"
-                style={{ left: `${left}px`, width: `${width}px`, background: 'rgba(255,255,255,0.08)' }} />
+                className={`absolute top-0 bottom-0 border pointer-events-none flex items-center justify-center ${isOk ? 'border-gray-400/50 bg-gray-500/30' : 'border-white/20 bg-white/5'}`}
+                style={{ left: `${left}px`, width: `${width}px` }}>
+                {isOk && <Badge variant="outline" className="text-[10px] scale-75 bg-gray-800/80 text-gray-200 border-gray-600 backdrop-blur-sm px-1.5">🔒 OK</Badge>}
+              </div>
             );
           })}
 
           {/* Active region border */}
-          <div className="absolute top-0 bottom-0 border-2 border-teal-400 pointer-events-none rounded-sm"
+          <div className={`absolute top-0 bottom-0 border-2 pointer-events-none rounded-sm ${isLocked ? 'border-gray-500 bg-gray-500/20' : 'border-teal-400'}`}
             style={{ left: `${regionLeftPx}px`, width: `${regionRightPx - regionLeftPx}px` }} />
 
           {/* Drag handle — start */}
-          <div className="absolute top-0 bottom-0 w-4 cursor-col-resize z-20 group flex items-center justify-center"
-            style={{ left: `${regionLeftPx - 8}px` }}
-            onMouseDown={(e) => handleMouseDown('start', e)}
-            onClick={(e) => e.stopPropagation()}>
-            <div className="w-1 h-full bg-teal-400 group-hover:bg-teal-300 transition-colors rounded-full" />
-          </div>
+          {!isLocked && (
+            <div className="absolute top-0 bottom-0 w-4 cursor-col-resize z-20 group flex items-center justify-center"
+              style={{ left: `${regionLeftPx - 8}px` }}
+              onMouseDown={(e) => handleMouseDown('start', e)}
+              onClick={(e) => e.stopPropagation()}>
+              <div className="w-1 h-full bg-teal-400 group-hover:bg-teal-300 transition-colors rounded-full" />
+            </div>
+          )}
 
           {/* Drag handle — end */}
-          <div className="absolute top-0 bottom-0 w-4 cursor-col-resize z-20 group flex items-center justify-center"
-            style={{ left: `${regionRightPx - 8}px` }}
-            onMouseDown={(e) => handleMouseDown('end', e)}
-            onClick={(e) => e.stopPropagation()}>
-            <div className="w-1 h-full bg-teal-400 group-hover:bg-teal-300 transition-colors rounded-full" />
-          </div>
+          {!isLocked && (
+            <div className="absolute top-0 bottom-0 w-4 cursor-col-resize z-20 group flex items-center justify-center"
+              style={{ left: `${regionRightPx - 8}px` }}
+              onMouseDown={(e) => handleMouseDown('end', e)}
+              onClick={(e) => e.stopPropagation()}>
+              <div className="w-1 h-full bg-teal-400 group-hover:bg-teal-300 transition-colors rounded-full" />
+            </div>
+          )}
 
           {/* Region drag overlay */}
           <div className="absolute top-0 bottom-0 z-10"
             style={{
               left: `${regionLeftPx}px`,
               width: `${regionRightPx - regionLeftPx}px`,
-              cursor: dragging === 'region' ? 'grabbing' : 'grab',
+              cursor: isLocked ? 'not-allowed' : (dragging === 'region' ? 'grabbing' : 'grab'),
             }}
             onMouseDown={(e) => handleMouseDown('region', e)}
             onClick={(e) => e.stopPropagation()} />
@@ -433,9 +465,9 @@ export function TimelineEditor({
 
       {/* Timestamp ruler */}
       <div className="flex items-center justify-between text-xs font-mono text-gray-400 mt-1.5 px-1">
-        <span>{formatTimestamp(0)}</span>
-        {duration > 0 && <span>{formatTimestamp(duration / 2)}</span>}
-        <span>{formatTimestamp(duration)}</span>
+        <span>{formatTimestamp(windowStart)}</span>
+        {windowDuration > 0 && <span>{formatTimestamp(windowStart + windowDuration / 2)}</span>}
+        <span>{formatTimestamp(windowEnd)}</span>
       </div>
     </Card>
   );

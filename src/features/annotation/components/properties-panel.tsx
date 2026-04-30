@@ -36,6 +36,7 @@ interface PropertiesPanelProps {
   onSelectUtterance: (index: number) => void;
   // Action bar props (merged)
   onSaveDraft: () => Promise<void>;
+  onMarkOk: (index: number) => Promise<void>;
   onSubmit: () => Promise<void>;
   onReset: () => Promise<void>;
   isSaving: boolean;
@@ -86,6 +87,7 @@ export function PropertiesPanel({
   activeUtteranceIndex,
   onSelectUtterance,
   onSaveDraft,
+  onMarkOk,
   onSubmit,
   onReset,
   isSaving,
@@ -167,10 +169,10 @@ export function PropertiesPanel({
         <div className="flex items-center justify-between text-xs mb-2">
           <span className="text-gray-600 font-medium flex items-center gap-1.5">
             <FileText size={12} className="text-teal-600" />
-            Progress Anotasi
+            Anda telah mengerjakan
           </span>
           <span className="font-semibold text-teal-700">
-            {editedCount}/{segment.transcripts.length} diedit
+            {editedCount} / {segment.transcripts.length} total video
           </span>
         </div>
 
@@ -227,35 +229,53 @@ export function PropertiesPanel({
           </div>
         )}
 
-        {/* Review status */}
-        {reviewBadge && (
-          <div className="mt-2 flex items-center gap-2">
-            <Badge variant="outline" className={`text-[11px] ${reviewBadge.className}`}>
-              {reviewBadge.label}
+        {/* Review status / Draft status */}
+        <div className="mt-2 flex items-center gap-2">
+          {reviewBadge ? (
+            <>
+              <Badge variant="outline" className={`text-[11px] ${reviewBadge.className}`}>
+                {reviewBadge.label}
+              </Badge>
+              {reviewFeedback && reviewStatus === 'REJECTED' && (
+                <span className="text-[11px] text-red-500 truncate">
+                  Feedback: {reviewFeedback}
+                </span>
+              )}
+            </>
+          ) : editedCount > 0 ? (
+            <Badge variant="outline" className="text-[11px] bg-amber-50 text-amber-700 border-amber-200">
+              Draft Tersimpan
             </Badge>
-            {reviewFeedback && reviewStatus === 'REJECTED' && (
-              <span className="text-[11px] text-red-500 truncate">
-                Feedback: {reviewFeedback}
-              </span>
-            )}
-          </div>
-        )}
+          ) : (
+             <Badge variant="outline" className="text-[11px] bg-gray-50 text-gray-500 border-gray-200">
+              Belum ada anotasi
+             </Badge>
+          )}
+        </div>
       </div>
 
       {/* ── Main editor area ── */}
-      <div className="flex-1 p-4 overflow-y-auto min-h-0">
+      <div className="flex-1 p-4 overflow-y-auto min-h-0 flex flex-col">
         {activeTranscript && activeEdit ? (
-          <div className="space-y-4">
+          <div className="flex-1 space-y-4 flex flex-col min-h-0">
             {/* Active utterance header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold bg-teal-600 text-white px-2 py-0.5 rounded">
-                  #{activeTranscript.utterance_index}
+                  Video ke-{activeTranscript.utterance_index}
                 </span>
-                <Badge variant="outline" className="text-[11px] px-1.5 py-0.5 bg-teal-50 text-teal-600 border-teal-200">
-                  <Crosshair size={10} className="mr-1" />
-                  Aktif
-                </Badge>
+                {activeEdit.status === 'OK' ? (
+                  <Badge variant="outline" className="text-[11px] px-1.5 py-0.5 bg-gray-100 text-gray-600 border-gray-300">
+                    🔒 LOCKED
+                  </Badge>
+                ) : (
+                  <>
+                    <Badge variant="outline" className="text-[11px] px-1.5 py-0.5 bg-teal-50 text-teal-600 border-teal-200">
+                      <Crosshair size={10} className="mr-1" />
+                      Aktif
+                    </Badge>
+                  </>
+                )}
                 {isModified && (
                   <Badge variant="outline" className="text-[11px] px-1.5 py-0.5 bg-amber-50 text-amber-600 border-amber-200">
                     <CheckCircle2 size={10} className="mr-1" />
@@ -293,7 +313,7 @@ export function PropertiesPanel({
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
               <div className="text-xs text-gray-500 mb-1.5 flex items-center gap-1.5 font-semibold uppercase tracking-wide">
                 <Volume2 size={12} />
-                Teks ASR (Referensi)
+                Teks Transkripsi
               </div>
               <p className="text-sm text-gray-700 leading-relaxed">
                 {activeTranscript.text || '(tidak ada teks)'}
@@ -301,17 +321,17 @@ export function PropertiesPanel({
             </div>
 
             {/* Correction textarea — prominent */}
-            <div>
+            <div className="flex-1 flex flex-col min-h-0">
               <div className="text-[11px] text-teal-700 mb-1.5 flex items-center gap-1 font-semibold uppercase tracking-wide">
                 <FileText size={10} />
-                Koreksi Teks
+                Glosa
               </div>
               <Textarea
                 value={activeEdit.text}
                 onChange={(e) => onUtteranceChange(activeUtteranceIndex!, { text: e.target.value })}
                 placeholder="Tulis koreksi teks bahasa isyarat..."
-                disabled={actionsDisabled}
-                className="text-sm leading-relaxed resize-none min-h-[100px] border-teal-200 focus-visible:ring-teal-500 bg-white"
+                disabled={actionsDisabled || activeEdit.status === 'OK'}
+                className="text-sm leading-relaxed resize-none flex-1 min-h-[120px] border-teal-200 focus-visible:ring-teal-500 bg-white"
               />
             </div>
           </div>
@@ -353,12 +373,12 @@ export function PropertiesPanel({
 
         <Button
           size="sm"
-          onClick={handleSubmit}
-          disabled={actionsDisabled || !canSubmit || submitting}
+          onClick={() => activeUtteranceIndex !== null && onMarkOk(activeUtteranceIndex)}
+          disabled={actionsDisabled || isSaving || !activeEdit || activeEdit.status === 'OK'}
           className="gap-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white"
         >
-          {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-          Submit
+          {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+          Tandai OK & Submit
         </Button>
       </div>
     </Card>

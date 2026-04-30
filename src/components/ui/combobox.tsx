@@ -53,13 +53,14 @@ export function Combobox({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+      <PopoverTrigger asChild suppressHydrationWarning>
         <Button
           variant="outline"
           role="combobox"
           aria-expanded={open}
           className={cn("w-[200px] justify-between bg-white text-slate-700 overflow-hidden", className)}
           disabled={disabled}
+          suppressHydrationWarning
         >
           <span className="truncate">
             {value && value !== "" && value !== "ALL"

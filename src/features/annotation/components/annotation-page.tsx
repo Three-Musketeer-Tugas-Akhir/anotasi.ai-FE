@@ -7,7 +7,6 @@ import { VideoPlayer } from './video-player';
 import { TimelineEditor } from './timeline-editor';
 import { PropertiesPanel } from './properties-panel';
 import { AnnotationQueue } from './annotation-queue';
-import { SyncWorkbench } from './sync-workbench';
 import { annotationApi } from '../annotation-api';
 import type { SegmentDetailResponse, UtteranceCorrection } from '../annotation-types';
 
@@ -40,10 +39,6 @@ export function AnnotationPage() {
   const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
   const [canSubmit, setCanSubmit] = useState(true);
   const [submitWarning, setSubmitWarning] = useState<string | null>(null);
-
-  // ── Sync State ────────────────────────────────────────────────
-  const [latestEditId, setLatestEditId] = useState<string | null>(null);
-  const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
   // ── Computed Values ───────────────────────────────────────────
   const activeUtterance = useMemo(() => {
@@ -97,12 +92,6 @@ export function AnnotationPage() {
         setActiveUtteranceIndex(null);
       }
 
-      // Auto-populate latestEditId from existing edit history
-      if (data.edit_history && data.edit_history.length > 0) {
-        const mostRecent = data.edit_history[data.edit_history.length - 1];
-        setLatestEditId(mostRecent.edit_id);
-      }
-
       // Load submission status
       try {
         const subStatus = await annotationApi.checkSubmissionStatus(segmentId);
@@ -145,8 +134,6 @@ export function AnnotationPage() {
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
-    setLatestEditId(editId ?? null);
-    setSyncStatus(null);
     // Auto-collapse both sidebars when segment is selected
     setSidebarCollapsed(true);
     window.dispatchEvent(new Event('collapse-main-sidebar'));
@@ -156,8 +143,6 @@ export function AnnotationPage() {
     setSelectedSegmentId(null);
     setSegment(null);
     setIsPlaying(false);
-    setLatestEditId(null);
-    setSyncStatus(null);
     setUtteranceEdits([]);
     setActiveUtteranceIndex(null);
     // Re-expand both sidebars
@@ -180,9 +165,51 @@ export function AnnotationPage() {
     if (activeUtteranceIndex === null) return;
     setUtteranceEdits((prev) => {
       const next = [...prev];
-      if (next[activeUtteranceIndex]) {
-        next[activeUtteranceIndex] = { ...next[activeUtteranceIndex], start, end };
+      const current = next[activeUtteranceIndex];
+      if (!current) return next;
+
+      let newStart = start;
+      let newEnd = end;
+      const prevUtterance = next[activeUtteranceIndex - 1];
+      const nextUtterance = next[activeUtteranceIndex + 1];
+
+      // Left Spillover & Hard Limit (N-1)
+      if (prevUtterance) {
+        if (prevUtterance.status === 'OK') {
+          // Hard limit: Start of N cannot precede end of N-1 if N-1 is OK
+          newStart = Math.max(newStart, prevUtterance.end);
+        } else {
+          // Spillover: If start of N precedes end of N-1, push N-1's end
+          if (newStart < prevUtterance.end) {
+            next[activeUtteranceIndex - 1] = { ...prevUtterance, end: newStart };
+            // Ensure N-1's end doesn't precede its own start
+            if (next[activeUtteranceIndex - 1].end <= next[activeUtteranceIndex - 1].start) {
+              next[activeUtteranceIndex - 1].end = next[activeUtteranceIndex - 1].start + 0.1;
+              newStart = next[activeUtteranceIndex - 1].end;
+            }
+          }
+        }
       }
+
+      // Right Spillover N+1 Logic & Hard Limit
+      if (nextUtterance) {
+        if (nextUtterance.status === 'OK') {
+          // Hard limit: End of N cannot exceed start of N+1 if N+1 is OK
+          newEnd = Math.min(newEnd, nextUtterance.start);
+        } else {
+          // Spillover: If end of N exceeds start of N+1, push N+1's start
+          if (newEnd > nextUtterance.start) {
+            next[activeUtteranceIndex + 1] = { ...nextUtterance, start: newEnd };
+            // Ensure N+1's start doesn't exceed its own end
+            if (next[activeUtteranceIndex + 1].start >= next[activeUtteranceIndex + 1].end) {
+              next[activeUtteranceIndex + 1].start = next[activeUtteranceIndex + 1].end - 0.1;
+              newEnd = next[activeUtteranceIndex + 1].start;
+            }
+          }
+        }
+      }
+
+      next[activeUtteranceIndex] = { ...current, start: newStart, end: newEnd };
       return next;
     });
   };
@@ -220,15 +247,39 @@ export function AnnotationPage() {
         utterances: utteranceEdits,
       });
       setActionMessage(result.message || 'Draft tersimpan');
-      if (result.edit_id) {
-        setLatestEditId(result.edit_id);
-      }
       await loadSegment(selectedSegmentId);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
         'Gagal menyimpan draft';
       setActionMessage(typeof msg === 'string' ? `❌ ${msg}` : '❌ Gagal menyimpan draft');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleMarkOk = async (index: number) => {
+    if (!selectedSegmentId || utteranceEdits.length === 0) return;
+    setIsSaving(true);
+    setActionMessage('Menyimpan perubahan ke draft...');
+    try {
+      // 1. Save draft to backend to persist N+1 spillover
+      await annotationApi.saveDraft(selectedSegmentId, {
+        utterances: utteranceEdits,
+      });
+      
+      // 2. Trigger On-The-Fly Crop
+      setActionMessage('✂️ Memotong video fisik...');
+      const cropResult = await annotationApi.cropUtterance(selectedSegmentId, index);
+      setActionMessage(`✅ ${cropResult.message || 'Video berhasil dipotong'}`);
+      
+      // 3. Reload segment to get cropped_video_path and updated status
+      await loadSegment(selectedSegmentId);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+        'Gagal memotong video';
+      setActionMessage(typeof msg === 'string' ? `❌ ${msg}` : '❌ Gagal memotong video');
     } finally {
       setIsSaving(false);
     }
@@ -280,6 +331,14 @@ export function AnnotationPage() {
     }
   };
 
+  // ── Hybrid Player Computed Properties ───────────────────────────
+  const useCroppedVideo = activeUtterance?.status === 'OK' && activeUtterance?.cropped_video_path;
+  const videoSrc = useCroppedVideo ? activeUtterance.cropped_video_path! : (segment?.video_url ?? '');
+  const playerTime = useCroppedVideo && activeUtterance ? Math.max(0, currentTime - activeUtterance.start) : currentTime;
+  const handlePlayerTimeUpdate = (t: number) => {
+    setCurrentTime(useCroppedVideo && activeUtterance ? t + activeUtterance.start : t);
+  };
+
   // ── Render ────────────────────────────────────────────────────
 
   return (
@@ -313,16 +372,6 @@ export function AnnotationPage() {
           </div>
           {/* Status indicators */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            {syncStatus && (
-              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
-                syncStatus === 'LOCKED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                syncStatus === 'SYNCED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                syncStatus === 'PARTIAL' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                'bg-gray-50 text-gray-500 border-gray-200'
-              }`}>
-                Sync: {syncStatus}
-              </span>
-            )}
             {actionMessage && (
               <div className="bg-gray-100 text-gray-700 text-xs px-3 py-1 rounded-lg max-w-xs truncate">
                 {actionMessage}
@@ -374,34 +423,45 @@ export function AnnotationPage() {
         ) : segment ? (
           <div className="flex-1 flex flex-col bg-gray-50 overflow-hidden gap-2 p-3">
 
-            {/* ── Top row: Video (left) + Editor (right) ── */}
+            {/* ── Main Workspace Area ── */}
             <div className="flex gap-2 min-h-0" style={{ flex: '1 1 auto' }}>
 
-              {/* Left: Video player — compact, fits video aspect ratio */}
-              <div className="flex flex-col gap-2" style={{ flex: '0 0 60%', minWidth: 0 }}>
+              {/* Left Column: Video + Filmstrip */}
+              <div className="flex flex-col gap-2 min-w-0" style={{ flex: '0 0 60%' }}>
                 <VideoPlayer
-                  src={segment.video_url}
+                  src={videoSrc}
                   isPlaying={isPlaying}
                   onPlayPause={setIsPlaying}
-                  currentTime={currentTime}
-                  onTimeUpdate={setCurrentTime}
+                  currentTime={playerTime}
+                  onTimeUpdate={handlePlayerTimeUpdate}
                   playbackRate={playbackRate}
                   onPlaybackRateChange={setPlaybackRate}
                   onDurationChange={setDuration}
                 />
 
-                {/* Sync Workbench under the video if active */}
-                {latestEditId && selectedSegmentId && (
-                  <SyncWorkbench
-                    editId={latestEditId}
-                    segmentId={selectedSegmentId}
-                    onSyncStatusChange={setSyncStatus}
+                {/* Filmstrip under the video */}
+                <div className="flex-shrink-0 mt-auto">
+                  <TimelineEditor
+                    videoUrl={segment.video_url}
+                    duration={duration}
+                    currentTime={currentTime}
+                    isPlaying={isPlaying}
+                    onTimeUpdate={setCurrentTime}
+                    trimStart={activeUtterance?.start ?? segmentStart}
+                    trimEnd={activeUtterance?.end ?? segmentEnd}
+                    onTrimChange={handleTrimChange}
+                    activeUtterance={activeUtterance ? { index: activeUtterance.utterance_index, start: activeUtterance.start, end: activeUtterance.end, status: activeUtterance.status } : null}
+                    allUtterances={utteranceEdits}
+                    onPrevUtterance={handlePrevUtterance}
+                    onNextUtterance={handleNextUtterance}
+                    utteranceCount={utteranceEdits.length}
+                    activeUtterancePosition={activeUtterancePosition}
                   />
-                )}
+                </div>
               </div>
 
-              {/* Right: Annotation editor panel */}
-              <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
+              {/* Right Column: Annotation editor panel */}
+              <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
                 <PropertiesPanel
                   segment={segment}
                   utteranceEdits={utteranceEdits}
@@ -409,6 +469,7 @@ export function AnnotationPage() {
                   activeUtteranceIndex={activeUtteranceIndex}
                   onSelectUtterance={handleSelectUtterance}
                   onSaveDraft={handleSaveDraft}
+                  onMarkOk={handleMarkOk}
                   onSubmit={handleSubmit}
                   onReset={handleReset}
                   isSaving={isSaving}
@@ -418,26 +479,6 @@ export function AnnotationPage() {
                   reviewFeedback={reviewFeedback}
                 />
               </div>
-            </div>
-
-            {/* ── Bottom: Full-width filmstrip timeline ── */}
-            <div className="flex-shrink-0">
-              <TimelineEditor
-                videoUrl={segment.video_url}
-                duration={duration}
-                currentTime={currentTime}
-                isPlaying={isPlaying}
-                onTimeUpdate={setCurrentTime}
-                trimStart={activeUtterance?.start ?? segmentStart}
-                trimEnd={activeUtterance?.end ?? segmentEnd}
-                onTrimChange={handleTrimChange}
-                activeUtterance={activeUtterance ? { index: activeUtterance.utterance_index, start: activeUtterance.start, end: activeUtterance.end } : null}
-                allUtterances={utteranceEdits}
-                onPrevUtterance={handlePrevUtterance}
-                onNextUtterance={handleNextUtterance}
-                utteranceCount={utteranceEdits.length}
-                activeUtterancePosition={activeUtterancePosition}
-              />
             </div>
 
           </div>
