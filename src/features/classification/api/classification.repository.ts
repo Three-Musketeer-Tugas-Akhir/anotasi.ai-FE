@@ -87,4 +87,41 @@ export const classificationRepository = {
     });
     return data;
   },
+
+  /**
+   * Start a YouTube video download in the background.
+   * POST /upload/youtube
+   */
+  startYoutubeDownload: async (
+    url: string,
+    category?: string,
+  ): Promise<{ download_id: string; url: string; status: string; message: string }> => {
+    const { data } = await apiClient.post('/upload/youtube', { url, category });
+    return data;
+  },
+
+  /**
+   * Get progress of a YouTube download.
+   * GET /upload/youtube/:downloadId
+   */
+  getYoutubeDownloadProgress: async (
+    downloadId: string,
+  ): Promise<{
+    download_id: string;
+    url: string;
+    status: string;
+    title: string | null;
+    filename: string | null;
+    file_size: number;
+    downloaded_bytes: number;
+    percent: number;
+    speed: string | null;
+    eta: string | null;
+    error: string | null;
+    job_id: string | null;
+    created_at: number;
+  }> => {
+    const { data } = await apiClient.get(`/upload/youtube/${downloadId}`);
+    return data;
+  },
 };

@@ -71,6 +71,20 @@ export const pipelineApi = {
       .delete<JobCancelResponse>(`/pipeline/jobs/${jobId}`)
       .then((r) => r.data),
 
+  /** POST /pipeline/jobs/:id/start — start processing for a single classified job */
+  startProcessing: (jobId: string) =>
+    apiClient
+      .post<{ job_id: string; status: string; message: string }>(`/pipeline/jobs/${jobId}/start`)
+      .then((r) => r.data),
+
+  /** POST /pipeline/jobs/start-classified — batch-start all classified-but-unprocessed jobs */
+  startAllClassified: () =>
+    apiClient
+      .post<{ started_count: number; errors: Array<{ job_id: string; error: string }>; message: string }>(
+        '/pipeline/jobs/start-classified',
+      )
+      .then((r) => r.data),
+
   // ═══════════════════════════════════════════════════════════════════
   // Stage Results (Protected via JWT)
   // ═══════════════════════════════════════════════════════════════════

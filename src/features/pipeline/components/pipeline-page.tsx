@@ -25,7 +25,6 @@ import type {
   JobListParams,
 } from '../types';
 import { JOB_STATUS, PROCESSING_STATUSES, TERMINAL_STATUSES } from '../types';
-import { UploadDialog } from './upload-dialog';
 import { JobDetailPanel } from './job-detail-panel';
 
 // ── Status display helpers ──────────────────────────────────────────
@@ -85,7 +84,9 @@ export function PipelinePage() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
+  
+  const [classifiedReady, setClassifiedReady] = useState<JobListItemResponse[]>([]);
+  const [startingBatch, setStartingBatch] = useState(false);
 
   const listPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -112,10 +113,22 @@ export function PipelinePage() {
     }
   }, [page, pageSize, statusFilter]);
 
+  const fetchClassifiedReady = useCallback(async () => {
+    try {
+      // Fetch all UPLOADED jobs and filter locally for those with category
+      const data = await pipelineApi.listJobs({ status: JOB_STATUS.UPLOADED, page_size: 100 });
+      const ready = data.items.filter((j) => j.category && j.category !== 'uncategorized');
+      setClassifiedReady(ready);
+    } catch (err) {
+      console.error('Failed to fetch ready jobs', err);
+    }
+  }, []);
+
   // Initial load
   useEffect(() => {
     fetchJobs();
-  }, [fetchJobs]);
+    fetchClassifiedReady();
+  }, [fetchJobs, fetchClassifiedReady]);
 
   // Poll list for updates (every 5 seconds if any job is processing)
   useEffect(() => {
@@ -142,6 +155,20 @@ export function PipelinePage() {
       setSelectedJobId(jobs[0].id);
     }
   }, [jobs, selectedJobId]);
+
+  const handleStartAll = async () => {
+    setStartingBatch(true);
+    try {
+      await pipelineApi.startAllClassified();
+      await fetchJobs();
+      await fetchClassifiedReady();
+    } catch (err) {
+      console.error(err);
+      alert('Gagal memulai pemrosesan batch.');
+    } finally {
+      setStartingBatch(false);
+    }
+  };
 
   // ── Computed ──────────────────────────────────────────────────
 
@@ -179,13 +206,27 @@ export function PipelinePage() {
                 </Badge>
               )}
             </div>
-            <Button
-              onClick={() => setUploadOpen(true)}
-              className="bg-teal-600 hover:bg-teal-700 text-white"
-            >
-              <Upload size={14} className="mr-1.5" />
-              Upload Video
-            </Button>
+            
+            {classifiedReady.length > 0 && (
+              <div className="flex items-center gap-3 bg-teal-50 border border-teal-200 rounded-lg px-3 py-1.5 shadow-sm">
+                <span className="text-sm font-medium text-teal-800">
+                  {classifiedReady.length} Video Siap Diproses
+                </span>
+                <Button
+                  onClick={handleStartAll}
+                  disabled={startingBatch}
+                  size="sm"
+                  className="bg-teal-600 hover:bg-teal-700 text-white h-7 text-xs px-3"
+                >
+                  {startingBatch ? (
+                    <Loader2 size={12} className="mr-1.5 animate-spin" />
+                  ) : (
+                    <Play size={12} className="mr-1.5" />
+                  )}
+                  Proses Semua
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -226,7 +267,7 @@ export function PipelinePage() {
           </div>
 
           {/* Job List */}
-          <ScrollArea className="flex-1">
+          <div className="flex-1 overflow-auto">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 size={20} className="text-teal-600 animate-spin" />
@@ -243,17 +284,10 @@ export function PipelinePage() {
               <div className="p-8 text-center">
                 <Video size={32} className="text-gray-300 mx-auto mb-3" />
                 <p className="text-sm font-medium text-gray-500">Belum ada video</p>
-                <p className="text-xs text-gray-400 mt-1">Upload video untuk memulai pipeline</p>
-                <Button
-                  size="sm"
-                  className="mt-3 bg-teal-600 hover:bg-teal-700 text-white"
-                  onClick={() => setUploadOpen(true)}
-                >
-                  <Upload size={12} className="mr-1" /> Upload
-                </Button>
+                <p className="text-xs text-gray-400 mt-1">Lakukan klasifikasi video di halaman Klasifikasi untuk memulai pipeline</p>
               </div>
             ) : (
-              <>
+              <div className="w-max min-w-full flex flex-col">
                 {jobs.map((job) => {
                   const sd = getStatusDisplay(job.status);
                   const isSelected = job.id === selectedJobId;
@@ -274,12 +308,14 @@ export function PipelinePage() {
                             isProcessing ? 'animate-pulse' : ''
                           }`} />
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-sm font-medium truncate ${isSelected ? 'text-teal-800' : 'text-gray-800'}`}>
-                            Job #{job.id.slice(0, 8)}
+                        <div className="flex-1">
+                          <p className={`text-sm font-medium whitespace-nowrap ${isSelected ? 'text-teal-800' : 'text-gray-800'}`} title={job.original_filename || `Job #${job.id.slice(0, 8)}`}>
+                            {job.original_filename || `Job #${job.id.slice(0, 8)}`}
                           </p>
-                          <div className="flex items-center gap-2 mt-0.5">
+                          <div className="flex items-center gap-2 mt-0.5 whitespace-nowrap">
                             <span className={`text-[10px] font-medium ${sd.textColor}`}>{sd.label}</span>
+                            <span className="text-[10px] text-gray-300">•</span>
+                            <span className="text-[10px] text-gray-400 font-mono">#{job.id.slice(0, 8)}</span>
                             {job.category && (
                               <>
                                 <span className="text-[10px] text-gray-300">•</span>
@@ -293,7 +329,7 @@ export function PipelinePage() {
                               </>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 mt-2">
+                          <div className="flex items-center gap-2 mt-2 w-full max-w-xs">
                             <Progress value={job.progress} className="flex-1 h-1.5" />
                             <span className="text-[10px] font-mono text-gray-400">{job.progress}%</span>
                           </div>
@@ -302,9 +338,9 @@ export function PipelinePage() {
                     </button>
                   );
                 })}
-              </>
+              </div>
             )}
-          </ScrollArea>
+          </div>
 
           {/* Pagination */}
           {totalPages > 1 && (
@@ -336,30 +372,20 @@ export function PipelinePage() {
 
         {/* ──── Right: Job Detail Panel ──── */}
         {selectedJobId ? (
-          <JobDetailPanel
-            key={selectedJobId}
-            jobId={selectedJobId}
-            onJobChanged={() => fetchJobs(true)}
-          />
-        ) : (
-          <div className="flex-1 flex items-center justify-center bg-gray-50">
-            <div className="text-center">
-              <Video size={48} className="text-gray-300 mx-auto mb-3" />
-              <p className="text-sm text-gray-500">Pilih job dari daftar di kiri</p>
-              <p className="text-xs text-gray-400 mt-1">atau upload video baru untuk memulai</p>
+          <JobDetailPanel 
+              jobId={selectedJobId} 
+              onJobChanged={() => {
+                fetchJobs(true);
+                fetchClassifiedReady();
+              }} 
+            />
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+              <Cog size={48} className="mb-4 text-gray-200" />
+              <p>Pilih job dari panel kiri untuk melihat detail</p>
             </div>
-          </div>
-        )}
+          )}
       </div>
-
-      {/* Upload Dialog */}
-      <UploadDialog
-        open={uploadOpen}
-        onOpenChange={setUploadOpen}
-        onJobCreated={() => {
-          fetchJobs();
-        }}
-      />
     </div>
   );
 }

@@ -71,7 +71,7 @@ export function AnnotationPage() {
     setActionMessage(null);
     try {
       // 1. Get queue to find all segments for this job
-      const queueData = await annotationApi.getQueue({ page: 1, page_size: 1000 });
+      const queueData = await annotationApi.getQueue({ page: 1, page_size: 100 });
       const jobItems = queueData.items.filter((i) => i.job_id === jobId);
       if (jobItems.length === 0) throw new Error('Job tidak ditemukan di antrian');
       

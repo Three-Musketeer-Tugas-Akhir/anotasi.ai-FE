@@ -484,13 +484,33 @@ export function JobDetailPanel({ jobId, onJobChanged }: JobDetailPanelProps) {
               className="w-[130px] h-8 text-xs"
             />
 
+            {job.status === JOB_STATUS.UPLOADED && (
+              <Button
+                size="sm"
+                className="bg-teal-600 hover:bg-teal-700 text-white h-8"
+                onClick={async () => {
+                  try {
+                    await pipelineApi.startProcessing(jobId);
+                    await onJobChanged(); // Refresh
+                  } catch (e) {
+                    console.error(e);
+                    alert("Gagal memulai proses. Pastikan kategori sudah dipilih.");
+                  }
+                }}
+                disabled={!job.category}
+              >
+                <Play size={14} className="mr-1.5" />
+                Mulai Proses
+              </Button>
+            )}
+
             {isProcessing && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="border-red-300 text-red-600 hover:bg-red-50"
+                    className="border-red-300 text-red-600 hover:bg-red-50 h-8"
                     onClick={handleCancel}
                     disabled={cancelling}
                   >

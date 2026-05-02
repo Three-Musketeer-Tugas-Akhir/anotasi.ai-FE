@@ -7,6 +7,7 @@
 
 export interface JobListItemResponse {
   id: string;
+  original_filename?: string | null;
   status: string;
   current_stage: string | null;
   category: string | null;
@@ -253,7 +254,6 @@ export const JOB_STATUS = {
 export type JobStatusType = (typeof JOB_STATUS)[keyof typeof JOB_STATUS];
 
 export const PROCESSING_STATUSES: Set<string> = new Set([
-  JOB_STATUS.UPLOADED,
   JOB_STATUS.QUEUED,
   JOB_STATUS.DETECTING,
   JOB_STATUS.TRANSCRIBING,
