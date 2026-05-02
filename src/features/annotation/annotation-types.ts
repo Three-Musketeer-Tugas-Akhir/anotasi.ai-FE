@@ -11,6 +11,7 @@ export interface TranscriptUtterance {
   start: number;
   end: number;
   confidence: number;
+  segment_id?: string;
 }
 
 export interface UtteranceCorrection {
@@ -20,6 +21,8 @@ export interface UtteranceCorrection {
   end: number;
   cropped_video_path?: string;
   status?: string;
+  segment_id?: string;
+  confidence?: number;
 }
 
 // ── Queue ───────────────────────────────────────────────────────────

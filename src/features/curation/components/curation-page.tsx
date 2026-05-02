@@ -157,8 +157,8 @@ export function CurationPage() {
       setActiveVideoId(videoId);
     } catch (err) {
       console.error('Failed to load segments for video:', videoId, err);
-      toast.error('Gagal Memuat Segmen', {
-        description: 'Tidak dapat memuat transkrip segmen untuk video ini.',
+      toast.error('Gagal Memuat Kalimat', {
+        description: 'Tidak dapat memuat kalimat untuk video ini.',
       });
     }
   }, [videos]);
@@ -194,7 +194,7 @@ export function CurationPage() {
       try {
         segments = await curationApi.getJobSegments(videoId);
       } catch {
-        toast.error('Gagal Memuat Segmen', { description: 'Tidak bisa memuat segmen untuk normalisasi.' });
+        toast.error('Gagal Memuat Kalimat', { description: 'Tidak bisa memuat kalimat untuk normalisasi.' });
         setVideos((prev) => prev.map((v) => (v.id === videoId ? { ...v, status: 'ANNOTATED' as CurationStatus } : v)));
         setNormalizing(false);
         return;
@@ -212,7 +212,7 @@ export function CurationPage() {
         ),
       );
       toast('Normalisasi Selesai', {
-        description: `${normalizedItems.length} segmen berhasil dinormalisasi.`,
+        description: `${normalizedItems.length} kalimat berhasil dinormalisasi.`,
       });
     } catch (err) {
       console.error('Normalization failed:', err);
@@ -354,7 +354,7 @@ export function CurationPage() {
                     <TableHead className="text-center w-12">#</TableHead>
                     <TableHead>Video</TableHead>
                     <TableHead className="w-32">Kategori</TableHead>
-                    <TableHead className="w-28 text-center">Segmen</TableHead>
+                    <TableHead className="w-28 text-center">Kalimat</TableHead>
                     <TableHead className="w-48 text-center">Status</TableHead>
                     <TableHead className="w-56 text-center">Aksi</TableHead>
                   </TableRow>
@@ -438,7 +438,7 @@ export function CurationPage() {
             <h2 className="font-bold text-slate-800 text-base">{activeVideo.filename}</h2>
             <p className="text-[11px] font-medium text-slate-500">
               {activeVideo.category && <><CategoryBadge category={activeVideo.category} /> · </>}
-              {activeVideo.segmentCount} segmen
+              {activeVideo.segmentCount} kalimat
             </p>
           </div>
           <div className="ml-2"><CurationStatusBadge status={activeVideo.status} /></div>
@@ -467,7 +467,7 @@ export function CurationPage() {
         <div className="mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
           <AlertTriangle size={14} className="text-amber-600 flex-shrink-0" />
           <p className="text-xs text-amber-700">
-            <strong>{emptyNormalizedCount} segmen</strong> menghasilkan teks kosong setelah normalisasi (kemungkinan hanya berisi filler words). Anda dapat mengedit manual sebelum approve.
+            <strong>{emptyNormalizedCount} kalimat</strong> menghasilkan teks kosong setelah normalisasi (kemungkinan hanya berisi filler words). Anda dapat mengedit manual sebelum approve.
           </p>
         </div>
       )}
@@ -479,7 +479,7 @@ export function CurationPage() {
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-3">
                 <Loader2 size={24} className="text-teal-600 animate-spin mx-auto" />
-                <p className="text-sm text-slate-500">Memuat segmen transkrip...</p>
+                <p className="text-sm text-slate-500">Memuat kalimat transkrip...</p>
               </div>
             </div>
           ) : (

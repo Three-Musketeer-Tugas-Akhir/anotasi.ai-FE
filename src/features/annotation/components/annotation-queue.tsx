@@ -147,8 +147,8 @@ function getJobProgressColor(completed: number, total: number): string {
 // ── Props ──────────────────────────────────────────────────────────
 
 interface AnnotationQueueProps {
-  onSelectSegment: (segmentId: string, editId?: string | null) => void;
-  selectedSegmentId: string | null;
+  onSelectJob: (jobId: string) => void;
+  selectedJobId: string | null;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -157,7 +157,7 @@ type TabView = 'queue' | 'submissions';
 
 // ── Component ──────────────────────────────────────────────────────
 
-export function AnnotationQueue({ onSelectSegment, selectedSegmentId, isCollapsed, onToggleCollapse }: AnnotationQueueProps) {
+export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onToggleCollapse }: AnnotationQueueProps) {
   const [tab, setTab] = useState<TabView>('queue');
 
   // Queue state
@@ -169,8 +169,7 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId, isCollapse
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Expanded state (which jobs are expanded)
-  const [expandedJobs, setExpandedJobs] = useState<Record<string, boolean>>({});
+
 
   // Submissions state
   const [submissions, setSubmissions] = useState<ReviewStatusResponse[]>([]);
@@ -190,15 +189,7 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId, isCollapse
     return { draftCount, newCount, completedCount };
   }, [items]);
 
-  // Auto-expand the job group that contains the selected segment
-  useEffect(() => {
-    if (selectedSegmentId) {
-      const parentJob = items.find((i) => i.segment_id === selectedSegmentId);
-      if (parentJob) {
-        setExpandedJobs((prev) => ({ ...prev, [parentJob.job_id]: true }));
-      }
-    }
-  }, [selectedSegmentId, items]);
+
 
   // ── Fetch Queue ───────────────────────────────────────────────
 
@@ -259,9 +250,7 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId, isCollapse
 
   // ── Handlers ──────────────────────────────────────────────────
 
-  const toggleJob = (jobId: string) => {
-    setExpandedJobs((prev) => ({ ...prev, [jobId]: !prev[jobId] }));
-  };
+
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -289,7 +278,7 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId, isCollapse
             <div
               key={item.id}
               className={`w-2 h-2 rounded-full ${
-                item.segment_id === selectedSegmentId ? 'bg-teal-500 ring-1 ring-teal-300' :
+                item.job_id === selectedJobId ? 'bg-teal-500 ring-1 ring-teal-300' :
                 item.status === 'COMPLETED' ? 'bg-emerald-400' :
                 item.has_active_work ? 'bg-amber-400' : 'bg-gray-200'
               }`}
@@ -402,10 +391,8 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId, isCollapse
                   <JobCard
                     key={group.jobId}
                     group={group}
-                    isExpanded={!!expandedJobs[group.jobId]}
-                    onToggle={() => toggleJob(group.jobId)}
-                    selectedSegmentId={selectedSegmentId}
-                    onSelectSegment={onSelectSegment}
+                    isSelected={group.jobId === selectedJobId}
+                    onSelectJob={onSelectJob}
                   />
                 ))}
               </div>
@@ -451,7 +438,7 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId, isCollapse
               return (
                 <button
                   key={sub.review_id}
-                  onClick={() => onSelectSegment(sub.segment_id)}
+                  onClick={() => onSelectJob(sub.segment_id)} /* Note: The backend still treats submission by segment_id, but if user clicks submission we might need to route to job or handle it differently. Keep as is for now or find the job_id. */
                   className="block w-full text-left px-4 py-3.5 border-b border-gray-100 hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-1">
@@ -486,41 +473,34 @@ export function AnnotationQueue({ onSelectSegment, selectedSegmentId, isCollapse
 
 function JobCard({
   group,
-  isExpanded,
-  onToggle,
-  selectedSegmentId,
-  onSelectSegment,
+  isSelected,
+  onSelectJob,
 }: {
   group: JobGroup;
-  isExpanded: boolean;
-  onToggle: () => void;
-  selectedSegmentId: string | null;
-  onSelectSegment: (segmentId: string, editId?: string | null) => void;
+  isSelected: boolean;
+  onSelectJob: (jobId: string) => void;
 }) {
   const progressPct = group.totalSegments > 0 ? (group.completedSegments / group.totalSegments) * 100 : 0;
-  const hasSelectedChild = group.segments.some((s) => s.segment_id === selectedSegmentId);
 
   return (
     <div
       className={`rounded-xl border overflow-hidden transition-all ${
-        hasSelectedChild
+        isSelected
           ? 'border-teal-300 shadow-sm ring-1 ring-teal-200'
-          : 'border-gray-200 shadow-sm'
+          : 'border-gray-200 shadow-sm hover:border-teal-200'
       }`}
     >
-      {/* ── Job Header (collapsible) ── */}
       <button
-        onClick={onToggle}
+        onClick={() => onSelectJob(group.jobId)}
         className={`w-full flex items-start gap-3 px-3.5 py-3 text-left transition-colors ${
-          hasSelectedChild
-            ? 'bg-teal-50/60 hover:bg-teal-50'
+          isSelected
+            ? 'bg-teal-50/60'
             : 'bg-white hover:bg-gray-50/80'
         }`}
       >
-        {/* Icon */}
         <div
           className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
-            hasSelectedChild
+            isSelected
               ? 'bg-teal-100 text-teal-600'
               : 'bg-slate-100 text-slate-500'
           }`}
@@ -528,23 +508,20 @@ function JobCard({
           <Newspaper size={16} />
         </div>
 
-        {/* Info */}
         <div className="flex-1 min-w-0">
-          {/* Title — News filename */}
           <p
             className={`text-[13px] font-semibold leading-snug ${
-              hasSelectedChild ? 'text-teal-800' : 'text-gray-800'
+              isSelected ? 'text-teal-800' : 'text-gray-800'
             }`}
             title={group.originalFilename}
           >
             {formatFilename(group.originalFilename)}
           </p>
 
-          {/* Meta badges */}
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
             <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-gray-50 text-gray-500 border-gray-200">
               <Layers size={8} className="mr-0.5" />
-              {group.totalSegments} segmen
+              {group.totalSegments} kalimat
             </Badge>
             {group.newSegments > 0 && (
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-emerald-50 text-emerald-600 border-emerald-200">
@@ -560,7 +537,6 @@ function JobCard({
             )}
           </div>
 
-          {/* Progress bar */}
           <div className="mt-2 flex items-center gap-2">
             <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
               <div
@@ -573,118 +549,7 @@ function JobCard({
             </span>
           </div>
         </div>
-
-        {/* Expand/Collapse chevron */}
-        <div className={`text-gray-400 flex-shrink-0 mt-1 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
-          <ChevronDown size={16} />
-        </div>
       </button>
-
-      {/* ── Expanded: Segment (Transcript) Cards ── */}
-      {isExpanded && (
-        <div className="border-t border-gray-100 bg-gray-50/40">
-          {/* Breadcrumb-style context bar */}
-          <div className="px-3.5 py-1.5 flex items-center gap-1.5 text-[10px] text-gray-400 border-b border-gray-100 bg-white/60">
-            <Video size={10} className="text-teal-500" />
-            <span className="font-medium text-gray-500 truncate" title={group.originalFilename}>
-              {formatFilename(group.originalFilename, 30)}
-            </span>
-            <span className="text-gray-300">·</span>
-            <span>{group.totalSegments} transkrip</span>
-          </div>
-
-          {/* Transcript cards */}
-          <div className="p-2 space-y-1">
-            {group.segments.map((item, idx) => {
-              const isSelected = item.segment_id === selectedSegmentId;
-              const sBadge = getStatusBadge(item.status);
-              const editBadge = getEditStatusBadge(item);
-
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => onSelectSegment(item.segment_id, item.edit_id)}
-                  className={`block w-full text-left rounded-lg px-3 py-2.5 transition-all ${
-                    isSelected
-                      ? 'bg-teal-50 border border-teal-300 shadow-sm'
-                      : 'bg-white border border-gray-100 hover:border-gray-200 hover:bg-gray-50/80'
-                  }`}
-                >
-                  <div className="flex items-start gap-2.5">
-                    {/* Segment index pill */}
-                    <div
-                      className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 text-[10px] font-bold mt-0.5 ${
-                        isSelected
-                          ? 'bg-teal-600 text-white'
-                          : item.status === QUEUE_STATUS.COMPLETED
-                            ? 'bg-emerald-100 text-emerald-600'
-                            : 'bg-gray-100 text-gray-500'
-                      }`}
-                    >
-                      {idx + 1}
-                    </div>
-
-                    {/* Content */}
-                    <div className="min-w-0 flex-1">
-                      {/* Transcript preview text */}
-                      {item.transcript_text ? (
-                        <p className={`text-[11px] leading-relaxed line-clamp-2 ${isSelected ? 'text-teal-900' : 'text-gray-700'}`}>
-                          &ldquo;{item.transcript_text}&rdquo;
-                        </p>
-                      ) : (
-                        <p className="text-[11px] text-gray-400 italic">
-                          (tidak ada transkripsi)
-                        </p>
-                      )}
-
-                      {/* Badges row */}
-                      <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                        {/* Edit status badge */}
-                        {editBadge && (
-                          <Badge variant="outline" className={`text-[8px] px-1 py-0 gap-0.5 ${editBadge.color}`}>
-                            {editBadge.icon} {editBadge.label}
-                          </Badge>
-                        )}
-                        {/* Queue status badge */}
-                        <Badge variant="outline" className={`text-[8px] px-1 py-0 ${sBadge.color}`}>
-                          {sBadge.label}
-                        </Badge>
-                        {/* Utterance count */}
-                        {item.utterance_count > 0 && (
-                          <Badge variant="outline" className="text-[8px] px-1 py-0 bg-gray-50 text-gray-500 border-gray-200">
-                            <List size={7} className="mr-0.5" />
-                            {item.utterance_count}
-                          </Badge>
-                        )}
-                        {/* ASR confidence */}
-                        {item.asr_confidence !== null && (
-                          <Badge variant="outline" className="text-[8px] px-1 py-0 bg-gray-50 text-gray-500 border-gray-200">
-                            <Shield size={7} className="mr-0.5" />
-                            {Math.round(item.asr_confidence * 100)}%
-                          </Badge>
-                        )}
-                      </div>
-
-                      {/* Last edited info */}
-                      {item.last_edited_at && (
-                        <p className="text-[9px] text-gray-400 mt-1 flex items-center gap-0.5">
-                          <Clock size={8} />
-                          Diedit {formatTimeAgo(item.last_edited_at)}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Confidence dot */}
-                    <div className="mt-1.5 flex-shrink-0">
-                      <div className={`w-2 h-2 rounded-full ${getConfidenceColor(item.asr_confidence)}`} />
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

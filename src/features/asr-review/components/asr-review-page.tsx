@@ -1,49 +1,34 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Volume2,
   AlertTriangle,
   CheckCircle2,
   Loader2,
   RefreshCw,
-  Shield,
   Play,
   Pause,
-  Square,
   FileText,
   ChevronLeft,
-  ChevronRight,
   Layers,
+  Save,
+  Flag,
+  ShieldCheck,
+  ArrowRight,
+  Search,
 } from 'lucide-react';
-import { env } from '@/core/config/env';
-import { pipelineApi } from '@/features/pipeline/pipeline-api';
+import { voiceAnnotationApi } from '../voice-annotation-api';
 import type {
-  Stage2ResultsResponse,
-  Stage2SegmentResult,
-  Stage2Utterance,
-} from '@/features/pipeline/types';
+  VoiceAnnotationJob,
+  VoiceAnnotationJobSummary,
+  VoiceAnnotationUtterance,
+} from '../voice-annotation-types';
 
 // ── Helpers ────────────────────────────────────────────────────────
-
-function formatTimestamp(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  const ms = Math.floor((seconds % 1) * 1000);
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
-}
 
 function formatTimeShort(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -51,281 +36,81 @@ function formatTimeShort(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function getConfidenceBadge(score: number): { color: string; label: string } {
-  if (score >= 0.9) return { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Tinggi' };
-  if (score >= 0.7) return { color: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Sedang' };
-  return { color: 'bg-red-50 text-red-700 border-red-200', label: 'Rendah' };
-}
+// ── Highlighted Text Component ─────────────────────────────────────
 
-function buildAudioUrl(jobId: string, segmentId: string): string {
-  return `${env.API_URL}/assets/jobs/${jobId}/audio/${segmentId}.wav`;
-}
-
-// Utterance colors for the timeline regions
-const UTT_COLORS = [
-  'rgba(20, 184, 166, 0.3)',  // teal
-  'rgba(59, 130, 246, 0.3)',  // blue
-  'rgba(168, 85, 247, 0.3)',  // purple
-  'rgba(249, 115, 22, 0.3)',  // orange
-  'rgba(236, 72, 153, 0.3)',  // pink
-  'rgba(34, 197, 94, 0.3)',   // green
-];
-
-const UTT_COLORS_ACTIVE = [
-  'rgba(20, 184, 166, 0.55)',
-  'rgba(59, 130, 246, 0.55)',
-  'rgba(168, 85, 247, 0.55)',
-  'rgba(249, 115, 22, 0.55)',
-  'rgba(236, 72, 153, 0.55)',
-  'rgba(34, 197, 94, 0.55)',
-];
-
-// ── Waveform Timeline ──────────────────────────────────────────────
-
-function WaveformTimeline({
-  audioUrl,
-  utterances,
-  currentTime,
-  duration,
-  playingUttIdx,
-  hoveredUttIdx,
-  onSeek,
-  onHoverUtt,
-  tablePage,
-  pageSize,
+function HighlightedText({
+  text,
+  flaggedWords,
 }: {
-  audioUrl: string;
-  utterances: Stage2Utterance[];
-  currentTime: number;
-  duration: number;
-  playingUttIdx: number | null;
-  hoveredUttIdx: number | null;
-  onSeek: (time: number) => void;
-  onHoverUtt: (idx: number | null) => void;
-  tablePage: number;
-  pageSize: number;
+  text: string;
+  flaggedWords: string[];
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [waveformData, setWaveformData] = useState<Float32Array | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  if (!flaggedWords || flaggedWords.length === 0) {
+    return <span>{text}</span>;
+  }
 
-  // Decode WAV into waveform data
-  useEffect(() => {
-    setIsLoading(true);
-    setWaveformData(null);
-
-    const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-
-    fetch(audioUrl)
-      .then((r) => r.arrayBuffer())
-      .then((buf) => audioCtx.decodeAudioData(buf))
-      .then((decoded) => {
-        const rawData = decoded.getChannelData(0);
-        // Downsample to ~800 points for performance
-        const samples = 800;
-        const blockSize = Math.max(1, Math.floor(rawData.length / samples));
-        const filtered = new Float32Array(samples);
-        for (let i = 0; i < samples; i++) {
-          let sum = 0;
-          const start = i * blockSize;
-          for (let j = 0; j < blockSize; j++) {
-            sum += Math.abs(rawData[start + j] || 0);
-          }
-          filtered[i] = sum / blockSize;
-        }
-        // Normalize
-        const max = Math.max(...filtered) || 1;
-        for (let i = 0; i < filtered.length; i++) {
-          filtered[i] = filtered[i] / max;
-        }
-        setWaveformData(filtered);
-        setIsLoading(false);
-      })
-      .catch(() => {
-        // If decode fails, generate placeholder waveform
-        const samples = 800;
-        const placeholder = new Float32Array(samples);
-        for (let i = 0; i < samples; i++) {
-          placeholder[i] = 0.1 + Math.random() * 0.5;
-        }
-        setWaveformData(placeholder);
-        setIsLoading(false);
-      });
-
-    return () => { audioCtx.close(); };
-  }, [audioUrl]);
-
-  // Draw waveform
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container || !waveformData) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const rect = container.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.scale(dpr, dpr);
-
-    const w = rect.width;
-    const h = rect.height;
-    const timelineH = h - 20; // Reserve 20px for time axis
-    const totalDur = duration || 1;
-
-    // Identify current page range
-    const pageStartIdx = (tablePage - 1) * pageSize;
-    const pageEndIdx = pageStartIdx + pageSize;
-
-    // Background
-    ctx.fillStyle = '#0f172a'; // slate-900
-    ctx.fillRect(0, 0, w, h);
-
-    // 1. Draw non-current page boxes ("Bagian #x")
-    const totalPages = Math.ceil(utterances.length / pageSize);
-    for (let p = 1; p <= totalPages; p++) {
-      if (p === tablePage) continue;
-      
-      const startIdx = (p - 1) * pageSize;
-      const endIdx = Math.min(startIdx + pageSize, utterances.length) - 1;
-      const pStart = utterances[startIdx].start;
-      const pEnd = utterances[endIdx].end;
-      
-      const x1 = (pStart / totalDur) * w;
-      const x2 = (pEnd / totalDur) * w;
-      
-      // Grey box
-      ctx.fillStyle = 'rgba(71, 85, 105, 0.4)'; // slate-600
-      ctx.fillRect(x1 + 1, 0, x2 - x1 - 2, timelineH);
-      
-      // Label
-      if (x2 - x1 > 40) {
-        ctx.fillStyle = 'rgba(148, 163, 184, 0.8)'; // slate-400
-        ctx.font = '10px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText(`Bagian #${p}`, (x1 + x2) / 2, timelineH / 2 + 4);
-      }
-    }
-
-    // 2. Draw active page utterance regions
-    for (let i = pageStartIdx; i < pageEndIdx && i < utterances.length; i++) {
-      const utt = utterances[i];
-      const x1 = (utt.start / totalDur) * w;
-      const x2 = (utt.end / totalDur) * w;
-      const isActive = i === playingUttIdx;
-      const isHovered = i === hoveredUttIdx;
-      const colorArr = (isActive || isHovered) ? UTT_COLORS_ACTIVE : UTT_COLORS;
-      ctx.fillStyle = colorArr[i % colorArr.length];
-      ctx.fillRect(x1, 0, x2 - x1, timelineH);
-
-      // Utterance label
-      if (x2 - x1 > 20) {
-        ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.font = 'bold 9px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${i + 1}`, (x1 + x2) / 2, 12);
-      }
-    }
-
-    // 3. Draw waveform bars
-    const barW = Math.max(1, (w / waveformData.length) - 0.5);
-    const activeStart = utterances[pageStartIdx]?.start ?? 0;
-    const activeEnd = utterances[Math.min(pageEndIdx - 1, utterances.length - 1)]?.end ?? 0;
-
-    for (let i = 0; i < waveformData.length; i++) {
-      const x = (i / waveformData.length) * w;
-      const amplitude = waveformData[i];
-      const barH = amplitude * (timelineH - 8);
-      const y = (timelineH / 2) - (barH / 2);
-
-      const timeAtBar = (i / waveformData.length) * totalDur;
-      
-      // Fast check: is this bar inside the currently active page?
-      if (timeAtBar >= activeStart && timeAtBar <= activeEnd) {
-        // Find exact active utterance for highlight color (faster logic)
-        let isActiveOrHovered = false;
-        if (playingUttIdx !== null && timeAtBar >= utterances[playingUttIdx].start && timeAtBar <= utterances[playingUttIdx].end) {
-          isActiveOrHovered = true;
-        } else if (hoveredUttIdx !== null && timeAtBar >= utterances[hoveredUttIdx].start && timeAtBar <= utterances[hoveredUttIdx].end) {
-          isActiveOrHovered = true;
-        }
-        ctx.fillStyle = isActiveOrHovered ? 'rgba(20, 184, 166, 0.95)' : 'rgba(20, 184, 166, 0.7)';
-      } else {
-        ctx.fillStyle = 'rgba(148, 163, 184, 0.2)'; // semi-transparent slate for non-active pages
-      }
-      ctx.fillRect(x, y + 4, barW, barH);
-    }
-
-    // Time axis
-    ctx.fillStyle = '#1e293b'; // slate-800
-    ctx.fillRect(0, timelineH, w, 20);
-
-    // Time markers
-    const step = totalDur > 120 ? 30 : totalDur > 30 ? 10 : 5;
-    for (let t = 0; t <= totalDur; t += step) {
-      const x = (t / totalDur) * w;
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.5)';
-      ctx.fillRect(x, timelineH, 1, 4);
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
-      ctx.font = '9px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(formatTimeShort(t), x, timelineH + 14);
-    }
-
-    // Playhead
-    if (currentTime > 0 && currentTime <= totalDur) {
-      const px = (currentTime / totalDur) * w;
-      ctx.fillStyle = '#ef4444'; // red-500
-      ctx.fillRect(px - 1, 0, 2, timelineH);
-      // Playhead triangle
-      ctx.beginPath();
-      ctx.moveTo(px - 5, 0);
-      ctx.lineTo(px + 5, 0);
-      ctx.lineTo(px, 6);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }, [waveformData, currentTime, duration, utterances, playingUttIdx, hoveredUttIdx, tablePage, pageSize]);
-
-  // Handle click to seek
-  const handleClick = (e: React.MouseEvent) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect || !duration) return;
-    const x = e.clientX - rect.left;
-    const time = (x / rect.width) * duration;
-    onSeek(Math.max(0, Math.min(time, duration)));
-  };
-
-  // Handle mouse move for hover detection
-  const handleMouseMove = (e: React.MouseEvent) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect || !duration) return;
-    const x = e.clientX - rect.left;
-    const time = (x / rect.width) * duration;
-    const uttIdx = utterances.findIndex((u) => time >= u.start && time <= u.end);
-    onHoverUtt(uttIdx >= 0 ? uttIdx : null);
-  };
+  const flaggedSet = new Set(flaggedWords.map((w) => w.toLowerCase()));
+  const words = text.split(/(\s+)/);
 
   return (
-    <div
-      ref={containerRef}
-      className="relative w-full h-[88px] rounded-lg overflow-hidden cursor-crosshair"
-      onClick={handleClick}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => onHoverUtt(null)}
-    >
-      {isLoading ? (
-        <div className="absolute inset-0 bg-slate-900 flex items-center justify-center">
-          <Loader2 size={16} className="text-teal-500 animate-spin" />
-          <span className="text-[10px] text-slate-400 ml-2">Memuat waveform...</span>
+    <span>
+      {words.map((word, idx) => {
+        const clean = word.replace(/[^\w]/g, '').toLowerCase();
+        if (flaggedSet.has(clean)) {
+          return (
+            <span
+              key={idx}
+              className="bg-red-100 text-red-700 px-0.5 rounded font-semibold border-b-2 border-red-400"
+            >
+              {word}
+            </span>
+          );
+        }
+        return <span key={idx}>{word}</span>;
+      })}
+    </span>
+  );
+}
+
+// ── Progress Bar ───────────────────────────────────────────────────
+
+function ProgressBar({
+  clean,
+  total,
+  flagged,
+}: {
+  clean: number;
+  total: number;
+  flagged: number;
+}) {
+  const pct = total > 0 ? (clean / total) * 100 : 0;
+  const allClean = flagged === 0 && total > 0;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-semibold text-gray-700">
+          Progres Validasi
+        </span>
+        <span className={`font-bold ${allClean ? 'text-emerald-600' : 'text-amber-600'}`}>
+          {clean} / {total} clean
+        </span>
+      </div>
+      <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${
+            allClean
+              ? 'bg-gradient-to-r from-emerald-400 to-emerald-500'
+              : 'bg-gradient-to-r from-amber-400 to-amber-500'
+          }`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {allClean && (
+        <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-semibold mt-1">
+          <ShieldCheck size={14} />
+          Semua kalimat telah tervalidasi — siap masuk Anotasi JBI
         </div>
-      ) : (
-        <canvas ref={canvasRef} className="absolute inset-0" />
       )}
     </div>
   );
@@ -335,13 +120,13 @@ function WaveformTimeline({
 
 function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
   const [loading, setLoading] = useState(true);
-  const [jobs, setJobs] = useState<{ id: string; status: string; total_segments: number; created_at: string | null }[]>([]);
+  const [jobs, setJobs] = useState<VoiceAnnotationJob[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const data = await pipelineApi.listJobs({ status: 'READY_FOR_ANNOTATION', page: 1, page_size: 50 });
+        const data = await voiceAnnotationApi.getJobs({ page: 1, page_size: 50 });
         setJobs(data.items);
       } catch {
         setError('Gagal memuat daftar job');
@@ -372,8 +157,10 @@ function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
     return (
       <div className="p-12 text-center">
         <FileText size={40} className="text-gray-300 mx-auto mb-3" />
-        <p className="text-sm font-medium text-gray-500">Belum ada job yang selesai diproses</p>
-        <p className="text-xs text-gray-400 mt-1">Upload dan proses video terlebih dahulu di halaman Pipeline</p>
+        <p className="text-sm font-medium text-gray-500">Belum ada job yang memerlukan anotasi suara</p>
+        <p className="text-xs text-gray-400 mt-1">
+          Job akan muncul setelah tahap cropping selesai dan terdeteksi kata-kata yang perlu divalidasi
+        </p>
       </div>
     );
   }
@@ -382,85 +169,209 @@ function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
     <div className="p-6 space-y-4">
       <div className="text-center mb-6">
         <Layers size={32} className="text-teal-500 mx-auto mb-2" />
-        <h2 className="text-lg font-bold text-gray-800">Pilih Job untuk Review ASR</h2>
-        <p className="text-sm text-gray-500 mt-1">Pilih salah satu video yang sudah selesai diproses</p>
+        <h2 className="text-lg font-bold text-gray-800">Pilih Job untuk Anotasi Suara</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          Validasi transkripsi ASR sebelum masuk tahap Anotasi JBI
+        </p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {jobs.map((job) => (
-          <button
-            key={job.id}
-            onClick={() => onSelectJob(job.id)}
-            className="bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-teal-300 hover:bg-teal-50/30 hover:shadow-sm transition-all group"
-          >
-            <p className="text-sm font-bold text-gray-800 font-mono group-hover:text-teal-700 transition-colors">
-              Job #{job.id.slice(0, 8)}
-            </p>
-            <div className="flex items-center gap-2 mt-2">
-              <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
-                <CheckCircle2 size={8} className="mr-0.5" /> Selesai
-              </Badge>
-              <span className="text-[10px] text-gray-400">{job.total_segments} segmen</span>
-            </div>
-            {job.created_at && (
-              <p className="text-[10px] text-gray-400 mt-1.5">
-                {new Date(job.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+        {jobs.map((job) => {
+          const allClean = job.flagged_count === 0 && job.total_utterances > 0;
+          const pct = job.total_utterances > 0
+            ? Math.round((job.clean_count / job.total_utterances) * 100)
+            : 0;
+
+          return (
+            <button
+              key={job.job_id}
+              onClick={() => onSelectJob(job.job_id)}
+              className="bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-teal-300 hover:bg-teal-50/30 hover:shadow-sm transition-all group"
+            >
+              <p className="text-sm font-bold text-gray-800 group-hover:text-teal-700 transition-colors truncate">
+                {job.original_filename}
               </p>
-            )}
-          </button>
-        ))}
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                {allClean ? (
+                  <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                    <CheckCircle2 size={8} className="mr-0.5" /> Semua Clean
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">
+                    <Flag size={8} className="mr-0.5" /> {job.flagged_count} flagged
+                  </Badge>
+                )}
+                <span className="text-[10px] text-gray-400">
+                  {job.total_utterances} kalimat • {pct}% clean
+                </span>
+              </div>
+
+              {/* Mini progress bar */}
+              <div className="mt-2.5 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${allClean ? 'bg-emerald-400' : 'bg-amber-400'}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+
+              {job.created_at && (
+                <p className="text-[10px] text-gray-400 mt-1.5">
+                  {new Date(job.created_at).toLocaleDateString('id-ID', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                </p>
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// ── Expandable Text Component ──────────────────────────────────────
+// ── Utterance Row ──────────────────────────────────────────────────
 
-function ExpandableText({ text }: { text: string }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isTruncated, setIsTruncated] = useState(false);
-  const textRef = useRef<HTMLDivElement>(null);
+function UtteranceRow({
+  utterance,
+  onSave,
+  isSaving,
+}: {
+  utterance: VoiceAnnotationUtterance;
+  onSave: (id: string, newText: string) => Promise<void>;
+  isSaving: boolean;
+}) {
+  const [editText, setEditText] = useState(utterance.ground_truth_text);
+  const [isDirty, setIsDirty] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Sync when parent data changes (e.g. after save)
   useEffect(() => {
-    const el = textRef.current;
-    if (!el) return;
+    setEditText(utterance.ground_truth_text);
+    setIsDirty(false);
+  }, [utterance.ground_truth_text]);
 
-    const checkTruncation = () => {
-      // If we are not expanded, we can check if scrollHeight > clientHeight
-      // to determine if it's truncated by the line clamp.
-      if (!isExpanded) {
-        setIsTruncated(el.scrollHeight > el.clientHeight);
-      }
-    };
+  const handleChange = (val: string) => {
+    setEditText(val);
+    setIsDirty(val !== utterance.ground_truth_text);
+  };
 
-    checkTruncation();
+  const handleSave = async () => {
+    await onSave(utterance.id, editText);
+    setIsDirty(false);
+  };
 
-    const observer = new ResizeObserver(checkTruncation);
-    observer.observe(el);
+  const statusColor =
+    utterance.voice_annotation_status === 'CLEAN'
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      : utterance.voice_annotation_status === 'FLAGGED'
+        ? 'bg-red-50 text-red-700 border-red-200'
+        : 'bg-gray-50 text-gray-600 border-gray-200';
 
-    return () => observer.disconnect();
-  }, [text, isExpanded]);
+  const statusIcon =
+    utterance.voice_annotation_status === 'CLEAN' ? (
+      <CheckCircle2 size={10} />
+    ) : utterance.voice_annotation_status === 'FLAGGED' ? (
+      <Flag size={10} />
+    ) : null;
 
   return (
-    <div className="flex flex-col items-start w-full">
-      <div
-        ref={textRef}
-        className={`text-sm text-gray-800 leading-relaxed overflow-hidden text-wrap break-words w-full ${
-          !isExpanded ? 'line-clamp-2' : ''
-        }`}
-        style={{
-          wordBreak: 'break-word',
-        }}
-      >
-        {text}
+    <div
+      className={`bg-white border rounded-xl overflow-hidden transition-all ${
+        utterance.has_flag
+          ? 'border-red-200 shadow-sm shadow-red-50'
+          : 'border-gray-200'
+      }`}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50/50 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-gray-600">
+            #{utterance.global_index}
+          </span>
+          <span className="text-[10px] text-gray-400 font-mono">
+            {formatTimeShort(utterance.start)} – {formatTimeShort(utterance.end)}
+          </span>
+          <Badge variant="outline" className={`text-[10px] ${statusColor}`}>
+            {statusIcon}
+            <span className="ml-0.5">{utterance.voice_annotation_status}</span>
+          </Badge>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {isDirty && (
+            <span className="text-[10px] text-amber-500 font-medium">
+              Belum disimpan
+            </span>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className={`h-7 text-[11px] ${
+              isDirty
+                ? 'border-teal-300 text-teal-700 hover:bg-teal-50'
+                : 'text-gray-400 cursor-not-allowed'
+            }`}
+            disabled={!isDirty || isSaving}
+            onClick={handleSave}
+          >
+            {isSaving ? (
+              <Loader2 size={12} className="mr-1 animate-spin" />
+            ) : (
+              <Save size={12} className="mr-1" />
+            )}
+            Simpan
+          </Button>
+        </div>
       </div>
-      {(isTruncated || isExpanded) && (
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="text-[10px] text-teal-600 hover:text-teal-800 font-medium mt-1 transition-colors"
-        >
-          {isExpanded ? 'Sembunyikan' : 'Tampilkan selengkapnya...'}
-        </button>
-      )}
+
+      {/* Body: 2-column layout */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-gray-100">
+        {/* Left: ASR Original (read-only) */}
+        <div className="p-3 space-y-1.5">
+          <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+            Transkripsi ASR (asli)
+          </div>
+          <div className="text-sm text-gray-500 leading-relaxed bg-gray-50 rounded-lg p-2.5 min-h-[52px]">
+            {utterance.asr_text || '–'}
+          </div>
+        </div>
+
+        {/* Right: Ground Truth (editable) */}
+        <div className="p-3 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] font-semibold text-teal-600 uppercase tracking-wider">
+              Ground Truth (edit)
+            </div>
+            {utterance.flagged_words.length > 0 && (
+              <div className="flex items-center gap-1 text-[10px] text-red-500 font-medium">
+                <Flag size={9} />
+                {utterance.flagged_words.length} kata tidak dikenal
+              </div>
+            )}
+          </div>
+          <textarea
+            ref={textareaRef}
+            value={editText}
+            onChange={(e) => handleChange(e.target.value)}
+            rows={2}
+            className="w-full text-sm text-gray-800 leading-relaxed bg-white border border-gray-200 rounded-lg p-2.5 min-h-[52px] resize-none focus:outline-none focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
+          />
+          {/* Flagged words display */}
+          {utterance.flagged_words.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {utterance.flagged_words.map((word) => (
+                <span
+                  key={word}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200"
+                >
+                  <AlertTriangle size={8} className="mr-0.5" />
+                  {word}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -468,46 +379,32 @@ function ExpandableText({ text }: { text: string }) {
 // ── Main Component ─────────────────────────────────────────────────
 
 export function AsrReviewPage() {
-  const searchParams = useSearchParams();
-  const urlJobId = searchParams.get('job_id');
-
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(urlJobId);
-  const [stage2Data, setStage2Data] = useState<Stage2ResultsResponse | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [jobSummary, setJobSummary] = useState<VoiceAnnotationJobSummary | null>(null);
+  const [utterances, setUtterances] = useState<VoiceAnnotationUtterance[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeSegmentIdx, setActiveSegmentIdx] = useState(0);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [filterMode, setFilterMode] = useState<'all' | 'flagged'>('all');
+  const [searchText, setSearchText] = useState('');
 
-  // Audio playback state (shared across all utterances)
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const rafRef = useRef<number>(0);
-  const [playingUttIdx, setPlayingUttIdx] = useState<number | null>(null);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [audioDuration, setAudioDuration] = useState(0);
-  const [hoveredUttIdx, setHoveredUttIdx] = useState<number | null>(null);
+  // ── Fetch data for selected job ──
 
-  // Table pagination & expand state
-  const [tablePage, setTablePage] = useState(1);
-  const TABLE_PAGE_SIZE = 20;
-
-  // Sync URL param
-  useEffect(() => {
-    if (urlJobId && urlJobId !== selectedJobId) {
-      setSelectedJobId(urlJobId);
-    }
-  }, [urlJobId]);
-
-  // Fetch stage2 data when job is selected
-  const fetchStage2 = useCallback(async (jobId: string) => {
+  const fetchJobData = useCallback(async (jobId: string) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await pipelineApi.getStage2Results(jobId);
-      setStage2Data(data);
-      setActiveSegmentIdx(0);
+      const [summary, uttData] = await Promise.all([
+        voiceAnnotationApi.getJobSummary(jobId),
+        voiceAnnotationApi.getUtterances(jobId),
+      ]);
+      setJobSummary(summary);
+      setUtterances(uttData.utterances);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Gagal memuat hasil ASR';
-      setError(typeof msg === 'string' ? msg : 'Gagal memuat hasil ASR');
-      setStage2Data(null);
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || 'Gagal memuat data anotasi suara';
+      setError(typeof msg === 'string' ? msg : 'Gagal memuat data');
     } finally {
       setLoading(false);
     }
@@ -515,172 +412,122 @@ export function AsrReviewPage() {
 
   useEffect(() => {
     if (selectedJobId) {
-      fetchStage2(selectedJobId);
+      fetchJobData(selectedJobId);
     }
-  }, [selectedJobId, fetchStage2]);
+  }, [selectedJobId, fetchJobData]);
 
-  // Reset playback + table state when segment changes
-  useEffect(() => {
-    stopPlayback();
-    setCurrentTime(0);
-    setAudioDuration(0);
-    setTablePage(1);
-  }, [activeSegmentIdx]);
+  // ── Save handler ──
 
-  const handleJobSelect = (jobId: string) => {
-    setSelectedJobId(jobId);
-    window.history.replaceState(null, '', `/asr-review?job_id=${jobId}`);
-  };
+  const handleSave = useCallback(
+    async (voiceAnnotationId: string, newText: string) => {
+      if (!selectedJobId) return;
+      setSavingId(voiceAnnotationId);
+      try {
+        const result = await voiceAnnotationApi.updateGroundTruth(voiceAnnotationId, {
+          ground_truth_text: newText,
+        });
 
-  // ── Audio Control (single shared player) ──
+        // Update local state optimistically
+        setUtterances((prev) =>
+          prev.map((u) =>
+            u.id === voiceAnnotationId
+              ? {
+                  ...u,
+                  ground_truth_text: result.ground_truth_text,
+                  flagged_words: result.flagged_words,
+                  has_flag: result.has_flag,
+                  voice_annotation_status: result.voice_annotation_status as VoiceAnnotationUtterance['voice_annotation_status'],
+                }
+              : u,
+          ),
+        );
 
-  const segments = stage2Data?.results ?? [];
-  const activeSegment = segments[activeSegmentIdx] ?? null;
-  const audioUrl = selectedJobId && activeSegment
-    ? buildAudioUrl(selectedJobId, activeSegment.segment_id)
-    : '';
-
-  // Create/update audio element
-  useEffect(() => {
-    if (!audioUrl) return;
-
-    const audio = new Audio(audioUrl);
-    audio.preload = 'metadata';
-    audioRef.current = audio;
-
-    const onMeta = () => setAudioDuration(audio.duration);
-    const onEnd = () => {
-      setPlayingUttIdx(null);
-      cancelAnimationFrame(rafRef.current);
-    };
-    audio.addEventListener('loadedmetadata', onMeta);
-    audio.addEventListener('ended', onEnd);
-
-    return () => {
-      audio.pause();
-      audio.removeEventListener('loadedmetadata', onMeta);
-      audio.removeEventListener('ended', onEnd);
-      cancelAnimationFrame(rafRef.current);
-      audioRef.current = null;
-    };
-  }, [audioUrl]);
-
-  const startTimeTracking = useCallback(() => {
-    const track = () => {
-      const audio = audioRef.current;
-      if (!audio) return;
-      setCurrentTime(audio.currentTime);
-      rafRef.current = requestAnimationFrame(track);
-    };
-    rafRef.current = requestAnimationFrame(track);
-  }, []);
-
-  const playUtterance = useCallback((uttIdx: number) => {
-    const audio = audioRef.current;
-    if (!audio || !activeSegment) return;
-
-    const utt = activeSegment.utterances[uttIdx];
-    if (!utt) return;
-
-    // Stop any current playback
-    audio.pause();
-    cancelAnimationFrame(rafRef.current);
-
-    // Seek and play
-    audio.currentTime = utt.start;
-    audio.play().catch(() => {});
-    setPlayingUttIdx(uttIdx);
-    setCurrentTime(utt.start);
-
-    // Track time and stop at end
-    const trackAndLimit = () => {
-      if (!audioRef.current) return;
-      setCurrentTime(audioRef.current.currentTime);
-      if (audioRef.current.currentTime >= utt.end) {
-        audioRef.current.pause();
-        setPlayingUttIdx(null);
-        return;
+        // Update job summary
+        setJobSummary((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: result.job_status,
+                clean_count: result.job_clean_count,
+                flagged_count: result.job_flagged_count,
+                is_gate_passed: result.job_flagged_count === 0,
+              }
+            : prev,
+        );
+      } catch (err) {
+        console.error('Failed to save ground truth:', err);
+      } finally {
+        setSavingId(null);
       }
-      rafRef.current = requestAnimationFrame(trackAndLimit);
-    };
-    rafRef.current = requestAnimationFrame(trackAndLimit);
-  }, [activeSegment]);
+    },
+    [selectedJobId],
+  );
 
-  const stopPlayback = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
+  // ── Filter utterances ──
+
+  const filteredUtterances = useMemo(() => {
+    let items = utterances;
+    if (filterMode === 'flagged') {
+      items = items.filter((u) => u.has_flag);
     }
-    cancelAnimationFrame(rafRef.current);
-    setPlayingUttIdx(null);
-  }, []);
-
-  const handleSeek = useCallback((time: number) => {
-    const audio = audioRef.current;
-    if (!audio || !activeSegment) return;
-
-    audio.currentTime = time;
-    setCurrentTime(time);
-
-    // Find which utterance this falls in
-    const uttIdx = activeSegment.utterances.findIndex((u) => time >= u.start && time <= u.end);
-    if (uttIdx >= 0) {
-      playUtterance(uttIdx);
+    if (searchText.trim()) {
+      const q = searchText.toLowerCase();
+      items = items.filter(
+        (u) =>
+          u.ground_truth_text.toLowerCase().includes(q) ||
+          u.asr_text.toLowerCase().includes(q) ||
+          u.flagged_words.some((w) => w.toLowerCase().includes(q)),
+      );
     }
-  }, [activeSegment, playUtterance]);
-
-  // Compute total duration from utterances (fallback if audio not loaded)
-  const totalDuration = useMemo(() => {
-    if (audioDuration > 0) return audioDuration;
-    if (!activeSegment) return 0;
-    const maxEnd = Math.max(...activeSegment.utterances.map((u) => u.end), 0);
-    return maxEnd + 1;
-  }, [audioDuration, activeSegment]);
+    return items;
+  }, [utterances, filterMode, searchText]);
 
   // ── No job selected → show picker ──
+
   if (!selectedJobId) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <Volume2 size={22} className="text-teal-600" />
-            ASR Review
+            Anotasi Suara
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Review hasil transkripsi otomatis (Whisper ASR) per video
+            Validasi transkripsi ASR untuk menghasilkan Ground Truth sebelum Anotasi JBI
           </p>
         </header>
         <ScrollArea className="flex-1">
-          <JobPicker onSelectJob={handleJobSelect} />
+          <JobPicker onSelectJob={setSelectedJobId} />
         </ScrollArea>
       </div>
     );
   }
 
-  // ── Job selected → show ASR results ──
+  // ── Job selected → annotation workspace ──
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
               <Volume2 size={22} className="text-teal-600" />
-              ASR Review
+              Anotasi Suara
             </h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Job <span className="font-mono text-gray-700">{selectedJobId.slice(0, 8)}...</span> — Hasil transkripsi Whisper ASR
+            <p className="text-sm text-gray-500 mt-0.5 truncate">
+              {jobSummary?.original_filename || selectedJobId.slice(0, 8) + '...'}
             </p>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-shrink-0">
             <Button
               variant="outline"
               size="sm"
               className="text-xs"
               onClick={() => {
-                stopPlayback();
                 setSelectedJobId(null);
-                window.history.replaceState(null, '', '/asr-review');
+                setJobSummary(null);
+                setUtterances([]);
               }}
             >
               <ChevronLeft size={14} className="mr-1" />
@@ -690,7 +537,7 @@ export function AsrReviewPage() {
               variant="outline"
               size="sm"
               className="text-xs"
-              onClick={() => fetchStage2(selectedJobId)}
+              onClick={() => fetchJobData(selectedJobId)}
             >
               <RefreshCw size={14} className="mr-1" />
               Refresh
@@ -711,249 +558,94 @@ export function AsrReviewPage() {
         <div className="p-8 text-center flex-1 flex flex-col items-center justify-center">
           <AlertTriangle size={28} className="text-red-400 mb-2" />
           <p className="text-sm text-red-600 mb-3">{error}</p>
-          <Button variant="outline" size="sm" onClick={() => fetchStage2(selectedJobId)}>Coba Lagi</Button>
+          <Button variant="outline" size="sm" onClick={() => fetchJobData(selectedJobId)}>
+            Coba Lagi
+          </Button>
         </div>
       )}
 
       {/* Content */}
-      {!loading && !error && stage2Data && (
-        <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-          {/* Segment Tabs */}
-          <div className="bg-white border-b border-gray-200 px-6 py-2 flex-shrink-0">
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex-shrink-0 mr-1">
-                Segmen:
-              </span>
-              {segments.map((seg, idx) => (
+      {!loading && !error && jobSummary && (
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-6 space-y-4 max-w-5xl mx-auto">
+            {/* Progress Bar */}
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+              <ProgressBar
+                clean={jobSummary.clean_count}
+                total={jobSummary.total_utterances}
+                flagged={jobSummary.flagged_count}
+              />
+            </div>
+
+            {/* Filter / Search Bar */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
                 <button
-                  key={seg.segment_id}
-                  onClick={() => { stopPlayback(); setActiveSegmentIdx(idx); }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex-shrink-0 ${
-                    idx === activeSegmentIdx
+                  onClick={() => setFilterMode('all')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    filterMode === 'all'
                       ? 'bg-teal-600 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      : 'text-gray-500 hover:bg-gray-100'
                   }`}
                 >
-                  #{idx + 1}
-                  <span className="ml-1 opacity-70">({seg.utterances.length})</span>
+                  Semua ({utterances.length})
                 </button>
-              ))}
+                <button
+                  onClick={() => setFilterMode('flagged')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    filterMode === 'flagged'
+                      ? 'bg-red-500 text-white shadow-sm'
+                      : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                >
+                  <Flag size={10} className="inline mr-1" />
+                  Flagged ({utterances.filter((u) => u.has_flag).length})
+                </button>
+              </div>
+
+              <div className="relative flex-1 max-w-xs">
+                <Search
+                  size={14}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+                <input
+                  type="text"
+                  placeholder="Cari kata..."
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-200 focus:border-teal-400"
+                />
+              </div>
+
+              <span className="text-[10px] text-gray-400 ml-auto">
+                Menampilkan {filteredUtterances.length} dari {utterances.length} kalimat
+              </span>
+            </div>
+
+            {/* Utterance List */}
+            <div className="space-y-3">
+              {filteredUtterances.length === 0 ? (
+                <div className="p-12 text-center border border-gray-200 rounded-xl bg-white">
+                  <CheckCircle2 size={36} className="text-emerald-400 mx-auto mb-2" />
+                  <p className="text-sm font-medium text-gray-600">
+                    {filterMode === 'flagged'
+                      ? 'Tidak ada kalimat yang flagged'
+                      : 'Tidak ada kalimat ditemukan'}
+                  </p>
+                </div>
+              ) : (
+                filteredUtterances.map((utt) => (
+                  <UtteranceRow
+                    key={utt.id}
+                    utterance={utt}
+                    onSave={handleSave}
+                    isSaving={savingId === utt.id}
+                  />
+                ))
+              )}
             </div>
           </div>
-
-          {/* DataTable */}
-          {activeSegment && (
-            <ScrollArea className="flex-1 min-h-0">
-              <div className="p-6 space-y-4">
-                {/* Segment Info */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
-                    <FileText size={9} className="mr-1" />
-                    Segmen #{activeSegmentIdx + 1} — {activeSegment.utterances.length} kalimat
-                  </Badge>
-                  {activeSegment.asr_review_flag && (
-                    <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">
-                      <AlertTriangle size={9} className="mr-1" />
-                      Perlu Review
-                    </Badge>
-                  )}
-                  <span className="text-[10px] text-gray-400 font-mono">
-                    Durasi: {formatTimeShort(totalDuration)}
-                  </span>
-                  {playingUttIdx !== null && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 text-[10px] border-red-200 text-red-600 hover:bg-red-50 ml-auto"
-                      onClick={stopPlayback}
-                    >
-                      <Square size={8} className="mr-1" /> Stop
-                    </Button>
-                  )}
-                </div>
-
-                {/* Waveform Timeline */}
-                <WaveformTimeline
-                  audioUrl={audioUrl}
-                  utterances={activeSegment.utterances}
-                  currentTime={currentTime}
-                  duration={totalDuration}
-                  playingUttIdx={playingUttIdx}
-                  hoveredUttIdx={hoveredUttIdx}
-                  onSeek={handleSeek}
-                  onHoverUtt={setHoveredUttIdx}
-                  tablePage={tablePage}
-                  pageSize={TABLE_PAGE_SIZE}
-                />
-
-                {/* Table with client-side pagination */}
-                {(() => {
-                  const allUtts = activeSegment.utterances;
-                  const totalUtts = allUtts.length;
-                  const totalTablePages = Math.max(1, Math.ceil(totalUtts / TABLE_PAGE_SIZE));
-                  const pageStart = (tablePage - 1) * TABLE_PAGE_SIZE;
-                  const pageEnd = Math.min(pageStart + TABLE_PAGE_SIZE, totalUtts);
-                  const pageUtts = allUtts.slice(pageStart, pageEnd);
-
-                  return (
-                    <>
-                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-slate-50/80">
-                              <TableHead className="w-12 text-center">#</TableHead>
-                              <TableHead className="w-48">Nama Data</TableHead>
-                              <TableHead className="w-28 text-center">Start</TableHead>
-                              <TableHead className="w-28 text-center">End</TableHead>
-                              <TableHead>Kalimat ASR</TableHead>
-                              <TableHead className="w-20 text-center">Conf.</TableHead>
-                              <TableHead className="w-16 text-center">Play</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {pageUtts.map((utt, localIdx) => {
-                              const globalIdx = pageStart + localIdx;
-                              const conf = getConfidenceBadge(utt.confidence);
-                              const isPlaying = playingUttIdx === globalIdx;
-                              const isHovered = hoveredUttIdx === globalIdx;
-                              const isOtherPlaying = playingUttIdx !== null && playingUttIdx !== globalIdx;
-
-                              return (
-                                <TableRow
-                                  key={utt.id}
-                                  className={`transition-colors ${
-                                    isPlaying
-                                      ? 'bg-teal-50/60'
-                                      : isHovered
-                                        ? 'bg-blue-50/40'
-                                        : 'hover:bg-gray-50/50'
-                                  }`}
-                                  onMouseEnter={() => setHoveredUttIdx(globalIdx)}
-                                  onMouseLeave={() => setHoveredUttIdx(null)}
-                                >
-                                  <TableCell className="text-center text-xs text-gray-400 font-mono align-top pt-3">
-                                    {globalIdx + 1}
-                                  </TableCell>
-                                  <TableCell className="align-top pt-3">
-                                    <span className="text-xs font-mono text-gray-600">
-                                      INEWS_BS_XXXXXX_{(globalIdx + 1).toString().padStart(4, '0')}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell className="text-center align-top pt-3">
-                                    <span className="text-xs font-mono text-gray-700">{formatTimestamp(utt.start)}</span>
-                                  </TableCell>
-                                  <TableCell className="text-center align-top pt-3">
-                                    <span className="text-xs font-mono text-gray-700">{formatTimestamp(utt.end)}</span>
-                                  </TableCell>
-                                  <TableCell className="align-top pt-3 max-w-sm">
-                                    <ExpandableText text={utt.text} />
-                                  </TableCell>
-                                  <TableCell className="text-center align-top pt-3">
-                                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${conf.color}`}>
-                                      <Shield size={8} className="mr-0.5" />
-                                      {(utt.confidence * 100).toFixed(0)}%
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="align-top pt-3">
-                                    <div className="flex items-center justify-center">
-                                      <button
-                                        onClick={() => isPlaying ? stopPlayback() : playUtterance(globalIdx)}
-                                        disabled={isOtherPlaying}
-                                        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                                          isPlaying
-                                            ? 'bg-teal-600 text-white shadow-md animate-pulse'
-                                            : isOtherPlaying
-                                              ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                                              : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
-                                        }`}
-                                        title={isPlaying ? 'Pause' : isOtherPlaying ? 'Sedang memutar lainnya' : 'Play'}
-                                      >
-                                        {isPlaying ? <Pause size={12} /> : <Play size={12} className="ml-0.5" />}
-                                      </button>
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-
-                      {/* Pagination */}
-                      {totalTablePages > 1 && (
-                        <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-2.5">
-                          <span className="text-xs text-gray-500">
-                            Menampilkan {pageStart + 1}–{pageEnd} dari {totalUtts} kalimat
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={tablePage <= 1}
-                              onClick={() => setTablePage((p) => p - 1)}
-                              className="h-7 w-7 p-0"
-                            >
-                              <ChevronLeft size={14} />
-                            </Button>
-                            {Array.from({ length: totalTablePages }, (_, i) => i + 1).map((p) => (
-                              <button
-                                key={p}
-                                onClick={() => setTablePage(p)}
-                                className={`h-7 min-w-[28px] rounded text-xs font-semibold transition-colors ${
-                                  p === tablePage
-                                    ? 'bg-teal-600 text-white'
-                                    : 'text-gray-500 hover:bg-gray-100'
-                                }`}
-                              >
-                                {p}
-                              </button>
-                            ))}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={tablePage >= totalTablePages}
-                              onClick={() => setTablePage((p) => p + 1)}
-                              className="h-7 w-7 p-0"
-                            >
-                              <ChevronRight size={14} />
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-
-                {/* Segment navigation */}
-                <div className="flex items-center justify-between">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={activeSegmentIdx <= 0}
-                    onClick={() => { stopPlayback(); setActiveSegmentIdx((i) => i - 1); }}
-                    className="text-xs"
-                  >
-                    <ChevronLeft size={14} className="mr-1" />
-                    Segmen Sebelumnya
-                  </Button>
-                  <span className="text-xs text-gray-500">
-                    Segmen {activeSegmentIdx + 1} dari {segments.length}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={activeSegmentIdx >= segments.length - 1}
-                    onClick={() => { stopPlayback(); setActiveSegmentIdx((i) => i + 1); }}
-                    className="text-xs"
-                  >
-                    Segmen Berikutnya
-                    <ChevronRight size={14} className="ml-1" />
-                  </Button>
-                </div>
-              </div>
-            </ScrollArea>
-          )}
-        </div>
+        </ScrollArea>
       )}
     </div>
   );

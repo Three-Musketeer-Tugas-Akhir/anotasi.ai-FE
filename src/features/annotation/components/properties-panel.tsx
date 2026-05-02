@@ -20,21 +20,14 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import type {
-  SegmentDetailResponse,
-  TranscriptUtterance,
-  UtteranceCorrection,
-} from '../annotation-types';
-
-// ── Types ──────────────────────────────────────────────────────────
+import type { TranscriptUtterance, UtteranceCorrection } from '../annotation-types';
 
 interface PropertiesPanelProps {
-  segment: SegmentDetailResponse;
+  originalUtterances: TranscriptUtterance[];
   utteranceEdits: UtteranceCorrection[];
   onUtteranceChange: (index: number, updates: Partial<UtteranceCorrection>) => void;
   activeUtteranceIndex: number | null;
   onSelectUtterance: (index: number) => void;
-  // Action bar props (merged)
   onSaveDraft: () => Promise<void>;
   onMarkOk: (index: number) => Promise<void>;
   onSubmit: () => Promise<void>;
@@ -46,8 +39,6 @@ interface PropertiesPanelProps {
   reviewFeedback: string | null;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────
-
 function formatTs(s: number | null): string {
   if (s === null || s === undefined) return '--:--';
   const m = Math.floor(s / 60);
@@ -56,8 +47,8 @@ function formatTs(s: number | null): string {
   return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
 }
 
-function getConfidenceBadge(score: number | null): { label: string; className: string } {
-  if (score === null) return { label: 'N/A', className: 'bg-gray-100 text-gray-500 border-gray-200' };
+function getConfidenceBadge(score: number | null | undefined): { label: string; className: string } {
+  if (score === null || score === undefined) return { label: 'N/A', className: 'bg-gray-100 text-gray-500 border-gray-200' };
   if (score >= 0.9) return { label: `${Math.round(score * 100)}%`, className: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
   if (score >= 0.5) return { label: `${Math.round(score * 100)}%`, className: 'bg-amber-50 text-amber-700 border-amber-200' };
   return { label: `${Math.round(score * 100)}%`, className: 'bg-red-50 text-red-700 border-red-200' };
@@ -78,10 +69,8 @@ function getReviewBadge(status: string | null): { label: string; className: stri
   }
 }
 
-// ── Component ──────────────────────────────────────────────────────
-
 export function PropertiesPanel({
-  segment,
+  originalUtterances,
   utteranceEdits,
   onUtteranceChange,
   activeUtteranceIndex,
@@ -104,9 +93,8 @@ export function PropertiesPanel({
   const isReviewed = reviewStatus === 'APPROVED' || reviewStatus === 'REJECTED';
   const actionsDisabled = isPendingReview || isReviewed;
 
-  // ── Pagination for progress dots ─────────────────────────────
   const PAGE_SIZE = 15;
-  const totalPages = Math.ceil(segment.transcripts.length / PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(utteranceEdits.length / PAGE_SIZE));
   const [dotPage, setDotPage] = useState(0);
 
   useEffect(() => {
@@ -115,19 +103,17 @@ export function PropertiesPanel({
     }
   }, [activeUtteranceIndex]);
 
-  const pagedTranscripts = useMemo(() => {
+  const pagedEdits = useMemo(() => {
     const start = dotPage * PAGE_SIZE;
-    return segment.transcripts.slice(start, start + PAGE_SIZE).map((t, i) => ({
-      t,
+    return utteranceEdits.slice(start, start + PAGE_SIZE).map((edit, i) => ({
+      edit,
       idx: start + i,
     }));
-  }, [dotPage, segment.transcripts]);
+  }, [dotPage, utteranceEdits]);
 
-
-  // Get active utterance data
-  const activeTranscript: TranscriptUtterance | null =
-    activeUtteranceIndex !== null && activeUtteranceIndex < segment.transcripts.length
-      ? segment.transcripts[activeUtteranceIndex]
+  const activeOriginal: TranscriptUtterance | null =
+    activeUtteranceIndex !== null && activeUtteranceIndex < originalUtterances.length
+      ? originalUtterances[activeUtteranceIndex]
       : null;
 
   const activeEdit: UtteranceCorrection | null =
@@ -135,18 +121,17 @@ export function PropertiesPanel({
       ? utteranceEdits[activeUtteranceIndex]
       : null;
 
-  const isModified = activeTranscript && activeEdit
-    ? (activeEdit.text !== activeTranscript.text || activeEdit.start !== activeTranscript.start || activeEdit.end !== activeTranscript.end)
+  const isModified = activeOriginal && activeEdit
+    ? (activeEdit.text !== activeOriginal.text || activeEdit.start !== activeOriginal.start || activeEdit.end !== activeOriginal.end)
     : false;
 
-  // Count edited utterances
-  const editedCount = segment.transcripts.reduce((count, t, idx) => {
-    const edit = utteranceEdits[idx];
-    if (!edit) return count;
-    return count + (edit.text !== t.text || edit.start !== t.start || edit.end !== t.end ? 1 : 0);
+  const okCount = utteranceEdits.filter((u) => u.status === 'OK').length;
+  const editedCount = utteranceEdits.reduce((count, edit, idx) => {
+    const orig = originalUtterances[idx];
+    if (!orig) return count;
+    return count + (edit.text !== orig.text || edit.start !== orig.start || edit.end !== orig.end ? 1 : 0);
   }, 0);
 
-  // Handlers
   const handleReset = async () => {
     if (!confirm('Reset semua edit? Data akan kembali ke ASR original.')) return;
     setResetting(true);
@@ -160,25 +145,22 @@ export function PropertiesPanel({
     try { await onSubmit(); } finally { setSubmitting(false); }
   };
 
-  const confBadge = activeTranscript ? getConfidenceBadge(activeTranscript.confidence) : null;
+  const confBadge = activeEdit ? getConfidenceBadge(activeEdit.confidence) : null;
 
   return (
     <Card className="border-gray-200 shadow-sm bg-white flex flex-col h-full overflow-hidden">
-      {/* ── Progress bar + dots ── */}
       <div className="px-4 pt-3 pb-2 border-b border-gray-100 bg-gray-50/80 flex-shrink-0">
         <div className="flex items-center justify-between text-xs mb-2">
           <span className="text-gray-600 font-medium flex items-center gap-1.5">
-            <FileText size={12} className="text-teal-600" />
-            Anda telah mengerjakan
+            <CheckCircle2 size={12} className="text-teal-600" />
+            Terselesaikan
           </span>
           <span className="font-semibold text-teal-700">
-            {editedCount} / {segment.transcripts.length} total video
+            {okCount} / {utteranceEdits.length} kalimat
           </span>
         </div>
 
-        {/* Progress dots — paginated, clickable */}
         <div className="flex items-center gap-1.5">
-          {/* Prev page */}
           <button
             onClick={() => setDotPage((p) => Math.max(0, p - 1))}
             disabled={dotPage === 0}
@@ -188,30 +170,31 @@ export function PropertiesPanel({
             <ChevronLeft size={12} />
           </button>
 
-          {/* Dots for current page */}
           <div className="flex gap-1 flex-1">
-            {pagedTranscripts.map(({ t, idx }) => {
-              const edit = utteranceEdits[idx];
-              const modified = edit && (edit.text !== t.text || edit.start !== t.start || edit.end !== t.end);
+            {pagedEdits.map(({ edit, idx }) => {
+              const orig = originalUtterances[idx];
+              const modified = orig && (edit.text !== orig.text || edit.start !== orig.start || edit.end !== orig.end);
               const isActive = idx === activeUtteranceIndex;
+              const isOk = edit.status === 'OK';
               return (
                 <button
-                  key={t.utterance_index}
+                  key={`${edit.segment_id}-${edit.utterance_index}`}
                   onClick={() => onSelectUtterance(idx)}
                   className={`h-2.5 flex-1 rounded-full transition-all cursor-pointer ${
                     isActive
                       ? 'bg-teal-500 ring-2 ring-teal-300 ring-offset-1 scale-110'
-                      : modified
-                        ? 'bg-amber-400 hover:bg-teal-400'
-                        : 'bg-gray-200 hover:bg-teal-300'
+                      : isOk
+                        ? 'bg-emerald-400 hover:bg-emerald-500'
+                        : modified
+                          ? 'bg-amber-400 hover:bg-amber-500'
+                          : 'bg-gray-200 hover:bg-teal-300'
                   }`}
-                  title={`Utterance #${t.utterance_index}${modified ? ' ✓ diedit' : ''}`}
+                  title={`Kalimat ${idx + 1}${isOk ? ' ✓ Selesai' : modified ? ' • Diedit' : ''}`}
                 />
               );
             })}
           </div>
 
-          {/* Next page */}
           <button
             onClick={() => setDotPage((p) => Math.min(totalPages - 1, p + 1))}
             disabled={dotPage >= totalPages - 1}
@@ -222,14 +205,12 @@ export function PropertiesPanel({
           </button>
         </div>
 
-        {/* Page indicator */}
         {totalPages > 1 && (
           <div className="text-xs text-gray-500 font-medium text-right mt-1.5">
-            Hal {dotPage + 1}/{totalPages} · {dotPage * PAGE_SIZE + 1}–{Math.min((dotPage + 1) * PAGE_SIZE, segment.transcripts.length)} dari {segment.transcripts.length}
+            Hal {dotPage + 1}/{totalPages} · {dotPage * PAGE_SIZE + 1}–{Math.min((dotPage + 1) * PAGE_SIZE, utteranceEdits.length)} dari {utteranceEdits.length}
           </div>
         )}
 
-        {/* Review status / Draft status */}
         <div className="mt-2 flex items-center gap-2">
           {reviewBadge ? (
             <>
@@ -254,15 +235,13 @@ export function PropertiesPanel({
         </div>
       </div>
 
-      {/* ── Main editor area ── */}
       <div className="flex-1 p-4 overflow-y-auto min-h-0 flex flex-col">
-        {activeTranscript && activeEdit ? (
+        {activeEdit ? (
           <div className="flex-1 space-y-4 flex flex-col min-h-0">
-            {/* Active utterance header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold bg-teal-600 text-white px-2 py-0.5 rounded">
-                  Video ke-{activeTranscript.utterance_index}
+                  Kalimat ke-{activeUtteranceIndex! + 1}
                 </span>
                 {activeEdit.status === 'OK' ? (
                   <Badge variant="outline" className="text-[11px] px-1.5 py-0.5 bg-gray-100 text-gray-600 border-gray-300">
@@ -276,7 +255,7 @@ export function PropertiesPanel({
                     </Badge>
                   </>
                 )}
-                {isModified && (
+                {isModified && activeEdit.status !== 'OK' && (
                   <Badge variant="outline" className="text-[11px] px-1.5 py-0.5 bg-amber-50 text-amber-600 border-amber-200">
                     <CheckCircle2 size={10} className="mr-1" />
                     Diedit
@@ -291,7 +270,6 @@ export function PropertiesPanel({
               )}
             </div>
 
-            {/* Timestamps — read-only */}
             <div className="flex items-center gap-2 text-xs">
               <Clock size={12} className="text-teal-600" />
               <span className="font-mono text-teal-700 font-semibold text-sm">
@@ -309,18 +287,16 @@ export function PropertiesPanel({
               </span>
             </div>
 
-            {/* ASR Reference — large, clear */}
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
               <div className="text-xs text-gray-500 mb-1.5 flex items-center gap-1.5 font-semibold uppercase tracking-wide">
                 <Volume2 size={12} />
                 Teks Transkripsi
               </div>
               <p className="text-sm text-gray-700 leading-relaxed">
-                {activeTranscript.text || '(tidak ada teks)'}
+                {activeOriginal?.text || '(tidak ada teks)'}
               </p>
             </div>
 
-            {/* Correction textarea — prominent */}
             <div className="flex-1 flex flex-col min-h-0">
               <div className="text-[11px] text-teal-700 mb-1.5 flex items-center gap-1 font-semibold uppercase tracking-wide">
                 <FileText size={10} />
@@ -339,13 +315,12 @@ export function PropertiesPanel({
           <div className="flex items-center justify-center h-full text-gray-400">
             <div className="text-center">
               <AlertTriangle size={24} className="mx-auto mb-2 opacity-40" />
-              <p className="text-xs">Pilih utterance dari timeline atau progress dots di atas</p>
+              <p className="text-xs">Pilih kalimat dari timeline atau progress dots di atas</p>
             </div>
           </div>
         )}
       </div>
 
-      {/* ── Action buttons ── */}
       <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center gap-2 flex-shrink-0">
         <Button
           variant="outline"
@@ -378,7 +353,17 @@ export function PropertiesPanel({
           className="gap-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white"
         >
           {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-          Tandai OK & Submit
+          Tandai OK
+        </Button>
+
+        <Button
+          size="sm"
+          onClick={handleSubmit}
+          disabled={actionsDisabled || isSaving || !canSubmit}
+          className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white ml-2"
+        >
+          {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+          Submit Job
         </Button>
       </div>
     </Card>
