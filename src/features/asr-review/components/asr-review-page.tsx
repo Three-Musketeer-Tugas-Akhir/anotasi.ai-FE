@@ -36,9 +36,9 @@ function formatTimeShort(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// ── Highlighted Text Component ─────────────────────────────────────
+// ── Highlighted Overlay Component ───────────────────────────────────
 
-function HighlightedText({
+function HighlightedOverlay({
   text,
   flaggedWords,
 }: {
@@ -50,23 +50,30 @@ function HighlightedText({
   }
 
   const flaggedSet = new Set(flaggedWords.map((w) => w.toLowerCase()));
-  const words = text.split(/(\s+)/);
+  // Split by words but preserve whitespace for exact overlapping
+  const parts = text.split(/([\s\n]+)/);
 
   return (
     <span>
-      {words.map((word, idx) => {
-        const clean = word.replace(/[^\w]/g, '').toLowerCase();
-        if (flaggedSet.has(clean)) {
+      {parts.map((part, idx) => {
+        // If it's just whitespace, render it as-is
+        if (/^[\s\n]+$/.test(part)) {
+          return <span key={idx}>{part}</span>;
+        }
+
+        const clean = part.replace(/[^\w]/g, '').toLowerCase();
+        if (clean && flaggedSet.has(clean)) {
           return (
             <span
               key={idx}
-              className="bg-red-100 text-red-700 px-0.5 rounded font-semibold border-b-2 border-red-400"
+              className="bg-red-100/60 border-b-2 border-red-500 rounded-sm"
+              style={{ color: 'transparent' }}
             >
-              {word}
+              {part}
             </span>
           );
         }
-        return <span key={idx}>{word}</span>;
+        return <span key={idx} style={{ color: 'transparent' }}>{part}</span>;
       })}
     </span>
   );
@@ -93,7 +100,7 @@ function ProgressBar({
           Progres Validasi
         </span>
         <span className={`font-bold ${allClean ? 'text-emerald-600' : 'text-amber-600'}`}>
-          {clean} / {total} clean
+          {clean} / {total} OK
         </span>
       </div>
       <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
@@ -109,7 +116,7 @@ function ProgressBar({
       {allClean && (
         <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-semibold mt-1">
           <ShieldCheck size={14} />
-          Semua kalimat telah tervalidasi — siap masuk Anotasi JBI
+          Semua kalimat telah tervalidasi (OK) — siap masuk Anotasi JBI
         </div>
       )}
     </div>
@@ -193,15 +200,15 @@ function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 {allClean ? (
                   <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
-                    <CheckCircle2 size={8} className="mr-0.5" /> Semua Clean
+                    <CheckCircle2 size={8} className="mr-0.5" /> Semua OK
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">
-                    <Flag size={8} className="mr-0.5" /> {job.flagged_count} flagged
+                    <Flag size={8} className="mr-0.5" /> {job.flagged_count} warning
                   </Badge>
                 )}
                 <span className="text-[10px] text-gray-400">
-                  {job.total_utterances} kalimat • {pct}% clean
+                  {job.total_utterances} kalimat • {pct}% OK
                 </span>
               </div>
 
@@ -238,7 +245,7 @@ function UtteranceRow({
   isSaving,
 }: {
   utterance: VoiceAnnotationUtterance;
-  onSave: (id: string, newText: string) => Promise<void>;
+  onSave: (id: string, newText: string, isUnflagged?: boolean) => Promise<void>;
   isSaving: boolean;
 }) {
   const [editText, setEditText] = useState(utterance.ground_truth_text);
@@ -294,7 +301,9 @@ function UtteranceRow({
           </span>
           <Badge variant="outline" className={`text-[10px] ${statusColor}`}>
             {statusIcon}
-            <span className="ml-0.5">{utterance.voice_annotation_status}</span>
+            <span className="ml-0.5">
+              {utterance.voice_annotation_status === 'CLEAN' ? 'OK' : utterance.voice_annotation_status}
+            </span>
           </Badge>
         </div>
         <div className="flex items-center gap-1.5">
@@ -302,6 +311,18 @@ function UtteranceRow({
             <span className="text-[10px] text-amber-500 font-medium">
               Belum disimpan
             </span>
+          )}
+          {utterance.has_flag && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-[11px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+              disabled={isSaving}
+              onClick={() => onSave(utterance.id, editText, true)}
+            >
+              <CheckCircle2 size={12} className="mr-1" />
+              Unflag (Sudah Benar)
+            </Button>
           )}
           <Button
             variant="outline"
@@ -314,7 +335,7 @@ function UtteranceRow({
             disabled={!isDirty || isSaving}
             onClick={handleSave}
           >
-            {isSaving ? (
+            {isSaving && isDirty ? (
               <Loader2 size={12} className="mr-1 animate-spin" />
             ) : (
               <Save size={12} className="mr-1" />
@@ -349,25 +370,39 @@ function UtteranceRow({
               </div>
             )}
           </div>
-          <textarea
-            ref={textareaRef}
-            value={editText}
-            onChange={(e) => handleChange(e.target.value)}
-            rows={2}
-            className="w-full text-sm text-gray-800 leading-relaxed bg-white border border-gray-200 rounded-lg p-2.5 min-h-[52px] resize-none focus:outline-none focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
-          />
-          {/* Flagged words display */}
+          <div className="relative">
+            {/* Background highlight layer */}
+            <div
+              className="absolute inset-0 pointer-events-none p-2.5 whitespace-pre-wrap break-words font-inherit text-sm leading-relaxed text-transparent z-0"
+              aria-hidden="true"
+            >
+              <HighlightedOverlay text={editText} flaggedWords={utterance.flagged_words} />
+            </div>
+            
+            {/* Transparent Textarea */}
+            <textarea
+              ref={textareaRef}
+              value={editText}
+              onChange={(e) => handleChange(e.target.value)}
+              rows={2}
+              className="relative z-10 w-full text-sm text-gray-800 leading-relaxed bg-transparent border border-gray-200 rounded-lg p-2.5 min-h-[52px] resize-none focus:outline-none focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all caret-black"
+            />
+          </div>
+          
+          {/* Flagged words display (optional, can keep as a summary) */}
           {utterance.flagged_words.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1">
-              {utterance.flagged_words.map((word) => (
-                <span
-                  key={word}
-                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200"
-                >
-                  <AlertTriangle size={8} className="mr-0.5" />
-                  {word}
-                </span>
-              ))}
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-[10px] text-gray-400 font-medium">Kata warning:</span>
+              <div className="flex flex-wrap gap-1">
+                {utterance.flagged_words.map((word) => (
+                  <span
+                    key={word}
+                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-50 text-red-600 border border-red-100"
+                  >
+                    {word}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -419,12 +454,13 @@ export function AsrReviewPage() {
   // ── Save handler ──
 
   const handleSave = useCallback(
-    async (voiceAnnotationId: string, newText: string) => {
+    async (voiceAnnotationId: string, newText: string, isUnflagged?: boolean) => {
       if (!selectedJobId) return;
       setSavingId(voiceAnnotationId);
       try {
         const result = await voiceAnnotationApi.updateGroundTruth(voiceAnnotationId, {
           ground_truth_text: newText,
+          is_unflagged: isUnflagged,
         });
 
         // Update local state optimistically

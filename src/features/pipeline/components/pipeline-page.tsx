@@ -18,6 +18,7 @@ import {
   Video,
   ChevronLeft,
   ChevronRight,
+  Play,
 } from 'lucide-react';
 import { pipelineApi } from '../pipeline-api';
 import type {
@@ -87,6 +88,7 @@ export function PipelinePage() {
   
   const [classifiedReady, setClassifiedReady] = useState<JobListItemResponse[]>([]);
   const [startingBatch, setStartingBatch] = useState(false);
+  const [listRefreshTrigger, setListRefreshTrigger] = useState<number>(0);
 
   const listPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -103,6 +105,7 @@ export function PipelinePage() {
       setTotalJobs(data.total);
       setTotalPages(data.total_pages);
       setError(null);
+      setListRefreshTrigger(Date.now());
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
@@ -374,6 +377,7 @@ export function PipelinePage() {
         {selectedJobId ? (
           <JobDetailPanel 
               jobId={selectedJobId} 
+              listRefreshTrigger={listRefreshTrigger}
               onJobChanged={() => {
                 fetchJobs(true);
                 fetchClassifiedReady();

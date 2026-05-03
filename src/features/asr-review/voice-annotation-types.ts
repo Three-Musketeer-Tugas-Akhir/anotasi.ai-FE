@@ -61,6 +61,7 @@ export interface VoiceAnnotationUtteranceListResponse {
 
 export interface UpdateGroundTruthRequest {
   ground_truth_text: string;
+  is_unflagged?: boolean;
 }
 
 export interface UpdateGroundTruthResponse {

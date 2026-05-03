@@ -78,6 +78,7 @@ interface StageInfo {
 interface JobDetailPanelProps {
   jobId: string;
   onJobChanged: () => void;
+  listRefreshTrigger?: number;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -91,22 +92,26 @@ function mapJobToStages(job: JobStatusDetailResponse): StageInfo[] {
 
     const currentOrder =
       s === JOB_STATUS.DETECTING ? 1
-      : s === JOB_STATUS.TRANSCRIBING ? 2
-      : s === JOB_STATUS.CROPPING ? 3
-      : s === JOB_STATUS.READY_FOR_ANNOTATION ? 4
+      : (s === JOB_STATUS.TRANSCRIBING || s === JOB_STATUS.ASR_COMPLETED) ? 2
+      : (s === JOB_STATUS.CROPPING || s === JOB_STATUS.CROPPING_IN_PROGRESS) ? 3
+      : (s === JOB_STATUS.READY_FOR_ANNOTATION || s === JOB_STATUS.NEEDS_VOICE_ANNOTATION) ? 4
       : 0;
 
-    if (s === JOB_STATUS.FAILED) {
+    if (s === JOB_STATUS.FAILED || s === JOB_STATUS.CROPPING_FAILED) {
       if (stage === 'detection' && stageOrder === 1) return 'failed';
       if (stage === 'asr' && stageOrder === 2) return 'failed';
-      if (stage === 'cropping' && stageOrder === 3) return 'failed';
-      if (stageOrder < currentOrder || (stage === 'detection' && stageOrder < 1) ||
-          (stage === 'asr' && stageOrder < 2) ||
-          (stage === 'cropping' && stageOrder < 3)) return 'done';
+      // If s === CROPPING_FAILED or stage === cropping, mark stage 3 as failed
+      if ((stage === 'cropping' || s === JOB_STATUS.CROPPING_FAILED) && stageOrder === 3) return 'failed';
+      
+      // If the stage that failed is later than this stageOrder, mark this stage as done
+      if (s === JOB_STATUS.CROPPING_FAILED && stageOrder < 3) return 'done';
+      if (stage === 'asr' && stageOrder < 2) return 'done';
+      if (stage === 'cropping' && stageOrder < 3) return 'done';
+      
       return 'pending';
     }
 
-    if (stageOrder < currentOrder) return 'done';
+    if (currentOrder > 0 && stageOrder < currentOrder) return 'done';
     if (stageOrder === currentOrder) return 'processing';
     if (currentOrder === 4) return 'done';
     return 'pending';
@@ -266,7 +271,7 @@ function VideoPreviewModal({
 
 // ── Main Component ──────────────────────────────────────────────────
 
-export function JobDetailPanel({ jobId, onJobChanged }: JobDetailPanelProps) {
+export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobDetailPanelProps) {
   const [job, setJob] = useState<JobStatusDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -280,6 +285,7 @@ export function JobDetailPanel({ jobId, onJobChanged }: JobDetailPanelProps) {
   const [stage2, setStage2] = useState<Stage2ResultsResponse | null>(null);
   const [stage3, setStage3] = useState<Stage3ResultsResponse | null>(null);
   const [stageLoading, setStageLoading] = useState<Record<number, boolean>>({});
+  const [stageErrors, setStageErrors] = useState<Record<number, string>>({});
 
   // ── Video Preview Modal ─────────────────────────────────────────
   const [previewVideo, setPreviewVideo] = useState<{
@@ -310,6 +316,7 @@ export function JobDetailPanel({ jobId, onJobChanged }: JobDetailPanelProps) {
 
   const fetchStageResults = useCallback(async (stageNum: 1 | 2 | 3) => {
     setStageLoading((prev) => ({ ...prev, [stageNum]: true }));
+    setStageErrors((prev) => ({ ...prev, [stageNum]: '' }));
     try {
       if (stageNum === 1) {
         const data = await pipelineApi.getStage1Results(jobId);
@@ -321,8 +328,11 @@ export function JobDetailPanel({ jobId, onJobChanged }: JobDetailPanelProps) {
         const data = await pipelineApi.getStage3Results(jobId);
         setStage3(data);
       }
-    } catch {
-      // Stage not ready yet — silently ignore (400)
+    } catch (err: any) {
+      // Stage not ready yet or error
+      const msg = err?.response?.data?.detail?.error?.message || err.message || 'Unknown error';
+      setStageErrors((prev) => ({ ...prev, [stageNum]: msg }));
+      console.error(`Error fetching stage ${stageNum}:`, err);
     } finally {
       setStageLoading((prev) => ({ ...prev, [stageNum]: false }));
     }
@@ -335,9 +345,10 @@ export function JobDetailPanel({ jobId, onJobChanged }: JobDetailPanelProps) {
     const prev = prevStatusRef.current;
 
     // Determine which stages are now complete based on current status
-    const stage1Done = s === JOB_STATUS.TRANSCRIBING || s === JOB_STATUS.CROPPING || s === JOB_STATUS.READY_FOR_ANNOTATION;
-    const stage2Done = s === JOB_STATUS.CROPPING || s === JOB_STATUS.READY_FOR_ANNOTATION;
-    const stage3Done = s === JOB_STATUS.READY_FOR_ANNOTATION;
+    const stages = mapJobToStages(job);
+    const stage1Done = stages.find(st => st.stageNumber === 1)?.status === 'done';
+    const stage2Done = stages.find(st => st.stageNumber === 2)?.status === 'done';
+    const stage3Done = stages.find(st => st.stageNumber === 3)?.status === 'done';
 
     // Fetch results for stages that just became done (we haven't cached yet)
     if (stage1Done && !stage1) fetchStageResults(1);
@@ -363,6 +374,13 @@ export function JobDetailPanel({ jobId, onJobChanged }: JobDetailPanelProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
+
+  // Refetch when external list updates
+  useEffect(() => {
+    if (listRefreshTrigger && jobId) {
+      fetchJob();
+    }
+  }, [listRefreshTrigger, jobId, fetchJob]);
 
   // Start/stop polling based on status
   useEffect(() => {
@@ -566,6 +584,7 @@ export function JobDetailPanel({ jobId, onJobChanged }: JobDetailPanelProps) {
             stage2={stage2}
             stage3={stage3}
             stageLoading={!!stageLoading[stage.stageNumber]}
+            stageErrors={stageErrors}
             onPreviewVideo={(url, title, subtitle) =>
               setPreviewVideo({ url, title, subtitle })
             }
@@ -652,6 +671,7 @@ function StageSection({
   stage2,
   stage3,
   stageLoading,
+  stageErrors,
   onPreviewVideo,
 }: {
   stage: StageInfo;
@@ -662,6 +682,7 @@ function StageSection({
   stage2: Stage2ResultsResponse | null;
   stage3: Stage3ResultsResponse | null;
   stageLoading: boolean;
+  stageErrors: Record<number, string>;
   onPreviewVideo: (url: string, title: string, subtitle?: string) => void;
 }) {
   const sc = stageStatusConfig[stage.status];
@@ -734,11 +755,11 @@ function StageSection({
           )}
 
           {stage.status === 'done' && !stageLoading && stage.stageNumber === 1 && (
-            <Stage1Content results={stage1} onPreviewVideo={onPreviewVideo} />
+            <Stage1Content results={stage1} error={stageErrors[1]} onPreviewVideo={onPreviewVideo} />
           )}
 
           {stage.status === 'done' && !stageLoading && stage.stageNumber === 2 && (
-            <Stage2Content results={stage2} jobId={jobId} />
+            <Stage2Content results={stage2} error={stageErrors[2]} jobId={jobId} />
           )}
 
           {stage.status === 'done' && !stageLoading && stage.stageNumber === 3 && (
@@ -754,11 +775,22 @@ function StageSection({
 
 function Stage1Content({
   results,
+  error,
   onPreviewVideo,
 }: {
   results: Stage1ResultsResponse | null;
+  error?: string;
   onPreviewVideo: (url: string, title: string, subtitle?: string) => void;
 }) {
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-4 text-red-600">
+        <AlertTriangle size={16} className="mr-2" />
+        <span className="text-sm">Gagal memuat hasil: {error}</span>
+      </div>
+    );
+  }
+
   if (!results || results.results.length === 0) {
     return (
       <div className="flex items-center justify-center py-4 text-emerald-600">
@@ -821,13 +853,24 @@ function Stage1Content({
 
 function Stage2Content({
   results,
+  error,
   jobId,
 }: {
   results: Stage2ResultsResponse | null;
+  error?: string;
   jobId: string;
 }) {
   const [expandedSegments, setExpandedSegments] = useState<Record<string, boolean>>({});
   const PREVIEW_LIMIT = 5;
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-4 text-red-600">
+        <AlertTriangle size={16} className="mr-2" />
+        <span className="text-sm">Gagal memuat hasil: {error}</span>
+      </div>
+    );
+  }
 
   if (!results || results.results.length === 0) {
     return (
