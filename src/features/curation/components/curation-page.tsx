@@ -110,15 +110,25 @@ export function CurationPage() {
 
       // Map backend jobs → CurationVideo with empty segments initially.
       // Segments are loaded when the user opens a video for curation.
-      const mapped: CurationVideo[] = jobs.map((job) => ({
-        id: job.job_id,
-        filename: job.video_title || 'Untitled Video',
-        source: extractSource(job.video_title),
-        category: (job.category === 'SIBI' || job.category === 'BISINDO') ? job.category : null,
-        segmentCount: 0, // Will be updated when segments are loaded
-        status: 'ANNOTATED' as CurationStatus,
-        segments: [],
-      }));
+      const mapped: CurationVideo[] = jobs.map((job) => {
+        // Derive CurationStatus from backend curation_status field
+        let curationStatus: CurationStatus = 'ANNOTATED';
+        const cs = job.curation_status;
+        if (cs === 'READY_TO_EXPORT') curationStatus = 'READY_TO_EXPORT';
+        else if (cs === 'NORMALIZED') curationStatus = 'NORMALIZED';
+        else if (cs === 'NORMALIZING') curationStatus = 'NORMALIZING';
+        else if (cs === 'READY_TO_BE_NORMALIZED') curationStatus = 'READY_TO_BE_NORMALIZED';
+
+        return {
+          id: job.job_id,
+          filename: job.video_title || 'Untitled Video',
+          source: extractSource(job.video_title),
+          category: (job.category === 'SIBI' || job.category === 'BISINDO') ? job.category : null,
+          segmentCount: 0, // Will be updated when segments are loaded
+          status: curationStatus,
+          segments: [],
+        };
+      });
 
       setVideos(mapped);
     } catch (err) {

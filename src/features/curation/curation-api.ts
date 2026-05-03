@@ -7,6 +7,7 @@ import type { CurationSegment } from './types';
 interface RawCurationJob {
   job_id: string;
   status: string;
+  curation_status: string | null;
   video_title: string | null;
   category: string | null;
   progress: unknown;
