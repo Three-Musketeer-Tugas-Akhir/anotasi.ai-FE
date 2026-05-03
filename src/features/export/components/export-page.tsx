@@ -29,7 +29,6 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/core/api/axios-client';
 import { pipelineApi } from '@/features/pipeline/pipeline-api';
-import { env } from '@/core/config/env';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -126,23 +125,19 @@ export function ExportPage() {
   const totalDownloadable = downloadableJobs.length;
   const normalizedCount = downloadableJobs.filter((j) => j.curation_status === 'NORMALIZED' || j.curation_status === 'READY_TO_EXPORT').length;
 
-  // Download handler using streamed blob
+  // Download handler — uses apiClient so JWT token is automatically included via interceptor
   const handleDownload = useCallback(async (jobId: string) => {
     setDownloadingId(jobId);
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-      const response = await fetch(`${env.API_URL}/pipeline/jobs/${jobId}/dataset/download`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!response.ok) {
-        throw new Error('Download gagal');
-      }
-      const blob = await response.blob();
-      const contentDisposition = response.headers.get('content-disposition');
-      const filenameMatch = contentDisposition?.match(/filename="?(.+?)"?$/);
-      const filename = filenameMatch?.[1] || `dataset_${jobId.slice(0, 8)}.zip`;
+      const response = await apiClient.get(
+        `/pipeline/jobs/${jobId}/dataset/download`,
+        { responseType: 'blob' },
+      );
+      const disposition = (response.headers['content-disposition'] as string) || '';
+      const match = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
+      const filename = match ? match[1].replace(/[\"']/g, '').trim() : `dataset_${jobId.slice(0, 8)}.zip`;
 
-      const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
@@ -152,6 +147,7 @@ export function ExportPage() {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Download failed:', err);
+      alert('Gagal mengunduh dataset. Pastikan Anda sudah login.');
     } finally {
       setDownloadingId(null);
     }

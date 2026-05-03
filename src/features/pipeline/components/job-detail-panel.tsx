@@ -272,6 +272,8 @@ function VideoPreviewModal({
 // ── Main Component ──────────────────────────────────────────────────
 
 export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobDetailPanelProps) {
+  const [starting, setStarting] = useState(false);
+  const [downloadingDataset, setDownloadingDataset] = useState(false);
   const [job, setJob] = useState<JobStatusDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -507,18 +509,31 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                 size="sm"
                 className="bg-teal-600 hover:bg-teal-700 text-white h-8"
                 onClick={async () => {
+                  if (!job.category) {
+                    alert('Pilih kategori (SIBI / BISINDO) terlebih dahulu.');
+                    return;
+                  }
+                  setStarting(true);
                   try {
                     await pipelineApi.startProcessing(jobId);
-                    await onJobChanged(); // Refresh
+                    // Refresh both the detail panel AND the parent list
+                    await fetchJob();
+                    onJobChanged();
                   } catch (e) {
                     console.error(e);
-                    alert("Gagal memulai proses. Pastikan kategori sudah dipilih.");
+                    alert('Gagal memulai proses. Pastikan kategori sudah dipilih.');
+                  } finally {
+                    setStarting(false);
                   }
                 }}
-                disabled={!job.category}
+                disabled={!job.category || starting}
               >
-                <Play size={14} className="mr-1.5" />
-                Mulai Proses
+                {starting ? (
+                  <Loader2 size={14} className="mr-1.5 animate-spin" />
+                ) : (
+                  <Play size={14} className="mr-1.5" />
+                )}
+                {starting ? 'Memulai...' : 'Mulai Proses'}
               </Button>
             )}
 
@@ -615,19 +630,43 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                   <ExternalLink size={14} className="mr-1.5" /> Buka Annotation
                 </a>
               </Button>
-              {(job.curation_status === 'READY_TO_BE_NORMALIZED' || job.curation_status === 'NORMALIZED') && (
+              {(job.curation_status === 'READY_TO_BE_NORMALIZED' || job.curation_status === 'NORMALIZED' || job.curation_status === 'READY_TO_EXPORT') && (
                 <Button
                   variant="outline"
                   className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                  asChild
+                  disabled={downloadingDataset}
+                  onClick={async () => {
+                    setDownloadingDataset(true);
+                    try {
+                      const { apiClient } = await import('@/core/api/axios-client');
+                      const response = await apiClient.get(
+                        `/pipeline/jobs/${jobId}/dataset/download`,
+                        { responseType: 'blob' },
+                      );
+                      const url = window.URL.createObjectURL(new Blob([response.data]));
+                      const link = document.createElement('a');
+                      link.href = url;
+                      const disposition = response.headers['content-disposition'] || '';
+                      const match = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
+                      link.download = match ? match[1].replace(/["\']/g, '') : `dataset-${jobId}.zip`;
+                      document.body.appendChild(link);
+                      link.click();
+                      link.remove();
+                      window.URL.revokeObjectURL(url);
+                    } catch (e) {
+                      console.error(e);
+                      alert('Gagal mengunduh dataset.');
+                    } finally {
+                      setDownloadingDataset(false);
+                    }
+                  }}
                 >
-                  <a
-                    href={pipelineApi.getDatasetDownloadUrl(jobId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Download size={14} className="mr-1.5" /> Download Dataset
-                  </a>
+                  {downloadingDataset ? (
+                    <Loader2 size={14} className="mr-1.5 animate-spin" />
+                  ) : (
+                    <Download size={14} className="mr-1.5" />
+                  )}
+                  {downloadingDataset ? 'Mengunduh...' : 'Download Dataset'}
                 </Button>
               )}
             </div>
