@@ -30,11 +30,8 @@ interface PropertiesPanelProps {
   onSelectUtterance: (index: number) => void;
   onSaveDraft: () => Promise<void>;
   onMarkOk: (index: number) => Promise<void>;
-  onSubmit: () => Promise<void>;
   onReset: () => Promise<void>;
   isSaving: boolean;
-  canSubmit: boolean;
-  submitWarning: string | null;
   reviewStatus: string | null;
   reviewFeedback: string | null;
 }
@@ -77,16 +74,12 @@ export function PropertiesPanel({
   onSelectUtterance,
   onSaveDraft,
   onMarkOk,
-  onSubmit,
   onReset,
   isSaving,
-  canSubmit,
-  submitWarning,
   reviewStatus,
   reviewFeedback,
 }: PropertiesPanelProps) {
   const [resetting, setResetting] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
 
   const reviewBadge = getReviewBadge(reviewStatus);
   const isPendingReview = reviewStatus === 'SUBMITTED' || reviewStatus === 'PENDING';
@@ -138,13 +131,6 @@ export function PropertiesPanel({
     try { await onReset(); } finally { setResetting(false); }
   };
 
-  const handleSubmit = async () => {
-    if (submitWarning && !confirm(submitWarning + '\n\nLanjutkan submit?')) return;
-    if (!confirm('Submit anotasi untuk review oleh kurator?')) return;
-    setSubmitting(true);
-    try { await onSubmit(); } finally { setSubmitting(false); }
-  };
-
   const confBadge = activeEdit ? getConfidenceBadge(activeEdit.confidence) : null;
 
   return (
@@ -180,15 +166,14 @@ export function PropertiesPanel({
                 <button
                   key={`${edit.segment_id}-${edit.utterance_index}`}
                   onClick={() => onSelectUtterance(idx)}
-                  className={`h-2.5 flex-1 rounded-full transition-all cursor-pointer ${
-                    isActive
+                  className={`h-2.5 flex-1 rounded-full transition-all cursor-pointer ${isActive
                       ? 'bg-teal-500 ring-2 ring-teal-300 ring-offset-1 scale-110'
                       : isOk
                         ? 'bg-emerald-400 hover:bg-emerald-500'
                         : modified
                           ? 'bg-amber-400 hover:bg-amber-500'
                           : 'bg-gray-200 hover:bg-teal-300'
-                  }`}
+                    }`}
                   title={`Kalimat ${idx + 1}${isOk ? ' ✓ Selesai' : modified ? ' • Diedit' : ''}`}
                 />
               );
@@ -228,9 +213,9 @@ export function PropertiesPanel({
               Draft Tersimpan
             </Badge>
           ) : (
-             <Badge variant="outline" className="text-[11px] bg-gray-50 text-gray-500 border-gray-200">
+            <Badge variant="outline" className="text-[11px] bg-gray-50 text-gray-500 border-gray-200">
               Belum ada anotasi
-             </Badge>
+            </Badge>
           )}
         </div>
       </div>
@@ -290,7 +275,7 @@ export function PropertiesPanel({
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
               <div className="text-xs text-gray-500 mb-1.5 flex items-center gap-1.5 font-semibold uppercase tracking-wide">
                 <Volume2 size={12} />
-                Teks Transkripsi
+                Teks Transkripsi (GT)
               </div>
               <p className="text-sm text-gray-700 leading-relaxed">
                 {activeOriginal?.text || '(tidak ada teks)'}
@@ -354,16 +339,6 @@ export function PropertiesPanel({
         >
           {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
           Tandai OK
-        </Button>
-
-        <Button
-          size="sm"
-          onClick={handleSubmit}
-          disabled={actionsDisabled || isSaving || !canSubmit}
-          className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white ml-2"
-        >
-          {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-          Submit Job
         </Button>
       </div>
     </Card>

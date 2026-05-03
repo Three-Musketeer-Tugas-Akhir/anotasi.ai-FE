@@ -188,22 +188,9 @@ export function CurationPage() {
     const targetVideo = videos.find((v) => v.id === videoId);
     if (!targetVideo) { setNormalizing(false); return; }
 
-    // Make sure segments are loaded
-    let segments = targetVideo.segments;
-    if (segments.length === 0) {
-      try {
-        segments = await curationApi.getJobSegments(videoId);
-      } catch {
-        toast.error('Gagal Memuat Kalimat', { description: 'Tidak bisa memuat kalimat untuk normalisasi.' });
-        setVideos((prev) => prev.map((v) => (v.id === videoId ? { ...v, status: 'ANNOTATED' as CurationStatus } : v)));
-        setNormalizing(false);
-        return;
-      }
-    }
-
     try {
-      // Pass category for SIBI-specific normalization rules
-      const normalizedItems = await curationApi.normalizeSegments(segments, targetVideo.category);
+      // Use the new job-level endpoint
+      const normalizedItems = await curationApi.autoNormalize(videoId);
       setVideos((prev) =>
         prev.map((v) =>
           v.id === videoId
@@ -225,14 +212,14 @@ export function CurationPage() {
     }
   }, [videos]);
 
-  const handleSegmentEdit = useCallback((videoId: string, segmentId: string, newText: string) => {
+  const handleSegmentEdit = useCallback((videoId: string, segmentId: string, field: 'normalizedText' | 'normalizedGlosa', newText: string) => {
     setVideos((prev) =>
       prev.map((v) => {
         if (v.id !== videoId) return v;
         return {
           ...v,
           segments: v.segments.map((seg) =>
-            seg.id === segmentId ? { ...seg, normalizedText: newText, isEdited: true } : seg,
+            seg.id === segmentId ? { ...seg, [field]: newText, isEdited: true } : seg,
           ),
         };
       }),
@@ -241,6 +228,14 @@ export function CurationPage() {
 
   const handleApprove = useCallback(async (videoId: string) => {
     try {
+      const video = videos.find((v) => v.id === videoId);
+      if (!video) return;
+
+      // Apply normalization overrides if any, or just persist the auto-normalized state
+      if (video.segments.some(s => s.normalizedText !== undefined)) {
+        await curationApi.applyNormalization(videoId, video.segments);
+      }
+
       await curationApi.approveVideo(videoId);
       setVideos((prev) =>
         prev.map((v) =>
@@ -257,7 +252,7 @@ export function CurationPage() {
         description: 'Terjadi kesalahan saat menyetujui video. Pastikan Anda memiliki akses curator/admin.',
       });
     }
-  }, []);
+  }, [videos]);
 
   // ── Loading State ──────────────────────────────────────────────────
 
@@ -421,9 +416,9 @@ export function CurationPage() {
 
   // ── Workspace View ─────────────────────────────────────────────────
 
-  const hasNormalized = activeVideo.segments.some((s) => s.normalizedText.length > 0);
+  const hasNormalized = activeVideo.segments.some((s) => s.normalizedText?.length > 0 || s.normalizedGlosa?.length > 0);
   const isApproved = activeVideo.status === 'READY_TO_EXPORT';
-  const emptyNormalizedCount = activeVideo.segments.filter((s) => s.normalizedText === '' && hasNormalized).length;
+  const emptyNormalizedCount = activeVideo.segments.filter((s) => (s.normalizedText === '' || s.normalizedGlosa === '') && hasNormalized).length;
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
@@ -498,58 +493,72 @@ export function CurationPage() {
                     <TableRow className="bg-slate-50 text-xs font-bold uppercase tracking-wider">
                       <TableHead className="text-center w-12 text-slate-400">#</TableHead>
                       <TableHead className="w-[45%]">
-                        <span className="flex items-center gap-1.5 text-amber-700"><FileText size={14} /> Before (Teks Asli)</span>
+                        <span className="flex items-center gap-1.5 text-slate-700"><FileText size={14} /> Ground Truth Transkrip</span>
                       </TableHead>
-                      <TableHead className="w-8 text-center"></TableHead>
                       <TableHead className="w-[45%]">
-                        <span className="flex items-center gap-1.5 text-teal-700"><Wand2 size={14} /> After (Hasil Normalisasi)</span>
+                        <span className="flex items-center gap-1.5 text-slate-700"><Wand2 size={14} /> Glosa (Label Anotasi)</span>
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody className="text-sm">
                     {activeVideo.segments.map((seg, i) => (
-                      <TableRow key={seg.id} className={seg.isEdited ? 'bg-teal-50/20' : ''}>
+                      <TableRow key={seg.id} className={seg.isEdited ? 'bg-teal-50/10' : ''}>
                         <TableCell className="text-center text-slate-400 font-mono align-top pt-5">{i + 1}</TableCell>
+                        
+                        {/* Transcript Column */}
                         <TableCell className="align-top">
-                          <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-3.5 text-sm text-slate-700 leading-relaxed">
-                            {seg.originalText || <span className="text-slate-400 italic">Teks kosong</span>}
+                          <div className="space-y-2">
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-sm text-slate-600 leading-relaxed">
+                              <div className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><ArrowRight size={10} /> Asli</div>
+                              {seg.originalText || <span className="text-slate-400 italic">Teks kosong</span>}
+                            </div>
+                            {hasNormalized && (
+                              <div className="relative">
+                                <div className="text-[10px] font-bold text-teal-600 uppercase mb-1 flex items-center gap-1"><CheckCircle2 size={10} /> Normalisasi</div>
+                                <textarea
+                                  value={seg.normalizedText}
+                                  onChange={(e) => handleSegmentEdit(activeVideo.id, seg.id, 'normalizedText', e.target.value)}
+                                  disabled={isApproved}
+                                  className={`w-full min-h-[64px] p-3 text-sm leading-relaxed rounded-lg resize-none outline-none transition-all border ${
+                                    seg.normalizedText === ''
+                                      ? 'border-amber-300 bg-amber-50/30'
+                                      : seg.isEdited
+                                      ? 'border-teal-400 bg-teal-50/50 focus:ring-2 focus:ring-teal-500/30'
+                                      : 'border-slate-200 bg-white focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20'
+                                  } ${isApproved ? 'opacity-70 cursor-not-allowed bg-slate-100 text-slate-500' : 'text-slate-800'}`}
+                                />
+                              </div>
+                            )}
                           </div>
                         </TableCell>
-                        <TableCell className="text-center align-top pt-8">
-                          <ArrowRight size={18} className="text-slate-300 mx-auto" />
-                        </TableCell>
+
+                        {/* Glosa Column */}
                         <TableCell className="align-top">
-                          {hasNormalized ? (
-                            <div className="relative">
-                              <textarea
-                                value={seg.normalizedText}
-                                onChange={(e) => handleSegmentEdit(activeVideo.id, seg.id, e.target.value)}
-                                disabled={isApproved}
-                                className={`w-full min-h-[72px] p-3.5 text-sm leading-relaxed rounded-lg resize-none outline-none transition-all border ${
-                                  seg.normalizedText === ''
-                                    ? 'border-amber-300 bg-amber-50/30'
-                                    : seg.isEdited
-                                    ? 'border-teal-400 bg-teal-50/50 focus:ring-2 focus:ring-teal-500/30'
-                                    : 'border-slate-200 bg-slate-50 focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-500/20'
-                                } ${isApproved ? 'opacity-70 cursor-not-allowed bg-slate-100 text-slate-500' : 'text-slate-800'}`}
-                              />
-                              {seg.isEdited && (
-                                <span className="absolute -top-2.5 -right-2 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm">
-                                  Diedit Manual
-                                </span>
-                              )}
-                              {seg.normalizedText === '' && !seg.isEdited && (
-                                <span className="absolute -top-2.5 -right-2 bg-amber-100 text-amber-700 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm">
-                                  Kosong
-                                </span>
-                              )}
+                          <div className="space-y-2">
+                            <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-3.5 text-sm text-amber-800 leading-relaxed">
+                              <div className="text-[10px] font-bold text-amber-600/70 uppercase mb-1 flex items-center gap-1"><ArrowRight size={10} /> Asli</div>
+                              {seg.originalGlosa || <span className="text-amber-600/50 italic">Teks kosong</span>}
                             </div>
-                          ) : (
-                            <div className="bg-slate-50 border border-slate-200 border-dashed rounded-lg p-3.5 text-sm text-slate-400 italic flex items-center justify-center h-[72px]">
-                              Klik &quot;Auto-Normalize&quot; untuk memproses...
-                            </div>
-                          )}
+                            {hasNormalized && (
+                              <div className="relative">
+                                <div className="text-[10px] font-bold text-teal-600 uppercase mb-1 flex items-center gap-1"><CheckCircle2 size={10} /> Normalisasi (SIBI)</div>
+                                <textarea
+                                  value={seg.normalizedGlosa}
+                                  onChange={(e) => handleSegmentEdit(activeVideo.id, seg.id, 'normalizedGlosa', e.target.value)}
+                                  disabled={isApproved}
+                                  className={`w-full min-h-[64px] p-3 text-sm leading-relaxed rounded-lg resize-none outline-none transition-all border ${
+                                    seg.normalizedGlosa === ''
+                                      ? 'border-amber-300 bg-amber-50/30'
+                                      : seg.isEdited
+                                      ? 'border-teal-400 bg-teal-50/50 focus:ring-2 focus:ring-teal-500/30'
+                                      : 'border-slate-200 bg-white focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20'
+                                  } ${isApproved ? 'opacity-70 cursor-not-allowed bg-slate-100 text-slate-500' : 'text-slate-800'}`}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </TableCell>
+
                       </TableRow>
                     ))}
                   </TableBody>

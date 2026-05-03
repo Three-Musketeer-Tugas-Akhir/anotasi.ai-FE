@@ -23,43 +23,36 @@ interface RawJobListResponse {
   offset: number;
 }
 
-/** Utterance from Stage 2 (ASR) results */
-interface Stage2Utterance {
-  id: string;
+/** Auto-normalize response shapes */
+interface NormalizedUtteranceResponse {
   utterance_index: number;
-  text: string;
+  segment_id: string;
+  original_transcript: string;
+  normalized_transcript: string;
+  original_glosa: string;
+  normalized_glosa: string;
   start: number;
   end: number;
-  confidence: number;
-  url: string | null;
-  status: string;
 }
 
-interface Stage2SegmentResult {
+interface AutoNormalizeApiResponse {
+  job_id: string;
+  total_ok_utterances: number;
+  items: NormalizedUtteranceResponse[];
+}
+
+/** Apply normalization shapes */
+interface NormalizedUtteranceOverride {
+  utterance_index: number;
   segment_id: string;
-  asr_review_flag: boolean;
-  utterances: Stage2Utterance[];
+  normalized_transcript?: string;
+  normalized_glosa?: string;
 }
 
-interface Stage2ResultsResponse {
-  id: string;
-  results: Stage2SegmentResult[];
-}
-
-/** Normalize request/response */
-interface NormalizeRequestItem {
-  id: string;
-  original_text: string;
-}
-
-interface NormalizeResponseItem {
-  id: string;
-  original_text: string;
-  normalized_text: string;
-}
-
-interface NormalizeApiResponse {
-  items: NormalizeResponseItem[];
+interface ApplyNormalizationApiResponse {
+  job_id: string;
+  utterances_updated: number;
+  curation_status: string;
 }
 
 /** Approve response */
@@ -85,57 +78,80 @@ export const curationApi = {
   },
 
   /**
-   * Fetch ASR transcript segments for a completed job.
-   * Uses Stage 2 (ASR) results to get the transcript text per segment.
+   * Fetch current normalization state (segments) for a job.
    */
   getJobSegments: async (jobId: string): Promise<CurationSegment[]> => {
-    const { data } = await apiClient.get<Stage2ResultsResponse>(
-      `/pipeline/jobs/${jobId}/stage2/results`,
+    const { data } = await apiClient.get<AutoNormalizeApiResponse>(
+      `/normalization/segments/${jobId}`,
     );
 
-    // Flatten all utterances from all segments into a flat list of CurationSegments
-    const segments: CurationSegment[] = [];
-    for (const segmentResult of data.results) {
-      for (const utt of segmentResult.utterances) {
-        segments.push({
-          id: utt.id,
-          originalText: utt.text,
-          normalizedText: '',
-          isEdited: false,
-        });
-      }
-    }
-    return segments;
+    return data.items.map((item) => ({
+      id: `${item.segment_id}-${item.utterance_index}`,
+      segmentId: item.segment_id,
+      utteranceIndex: item.utterance_index,
+      originalText: item.original_transcript,
+      normalizedText: item.normalized_transcript,
+      originalGlosa: item.original_glosa,
+      normalizedGlosa: item.normalized_glosa,
+      start: item.start,
+      end: item.end,
+      isEdited: false,
+    }));
   },
 
   /**
-   * Send raw text segments to the backend for auto-normalization.
-   * Optionally pass category=SIBI for SIBI-specific rules.
+   * Auto-normalize all OK-status utterances for a job.
+   * Calls the new job-level endpoint that handles everything server-side:
+   * - Fetches OK utterances from annotation edits
+   * - Pulls ground truth from voice annotations
+   * - Normalizes transcript (universal pipeline) and glosa (SIBI pipeline)
+   * - Returns before/after preview (read-only, nothing persisted)
    */
-  normalizeSegments: async (
-    items: CurationSegment[],
-    category?: 'SIBI' | 'BISINDO' | null,
-  ): Promise<CurationSegment[]> => {
-    // Map the FE shape to the BE shape
-    const payload: NormalizeRequestItem[] = items.map((i) => ({
-      id: i.id,
-      original_text: i.originalText,
-    }));
+  autoNormalize: async (jobId: string): Promise<CurationSegment[]> => {
+    const { data } = await apiClient.post<AutoNormalizeApiResponse>(
+      `/normalization/auto-normalize/${jobId}`,
+    );
 
-    // Build URL with optional category query param
-    const url = category === 'SIBI'
-      ? '/curation/normalize?category=SIBI'
-      : '/curation/normalize';
-
-    const res = await apiClient.post<NormalizeApiResponse>(url, { items: payload });
-
-    // Map back BE shape to FE shape
-    return res.data.items.map((i) => ({
-      id: i.id,
-      originalText: i.original_text,
-      normalizedText: i.normalized_text,
+    return data.items.map((item) => ({
+      id: `${item.segment_id}-${item.utterance_index}`,
+      segmentId: item.segment_id,
+      utteranceIndex: item.utterance_index,
+      originalText: item.original_transcript,
+      normalizedText: item.normalized_transcript,
+      originalGlosa: item.original_glosa,
+      normalizedGlosa: item.normalized_glosa,
+      start: item.start,
+      end: item.end,
       isEdited: false,
     }));
+  },
+
+  /**
+   * Apply (persist) normalization results.
+   * Optionally pass manual overrides for specific utterances.
+   */
+  applyNormalization: async (
+    jobId: string,
+    overrides?: CurationSegment[],
+  ): Promise<ApplyNormalizationApiResponse> => {
+    // Build overrides from segments that were manually edited
+    const payload: { overrides?: NormalizedUtteranceOverride[] } = {};
+    if (overrides && overrides.length > 0) {
+      payload.overrides = overrides
+        .filter((s) => s.isEdited)
+        .map((s) => ({
+          utterance_index: s.utteranceIndex,
+          segment_id: s.segmentId,
+          normalized_transcript: s.normalizedText,
+          normalized_glosa: s.normalizedGlosa,
+        }));
+    }
+
+    const { data } = await apiClient.post<ApplyNormalizationApiResponse>(
+      `/normalization/apply/${jobId}`,
+      payload,
+    );
+    return data;
   },
 
   /**
@@ -144,17 +160,6 @@ export const curationApi = {
    */
   approveVideo: async (videoId: string): Promise<ApproveApiResponse> => {
     const { data } = await apiClient.post<ApproveApiResponse>('/curation/approve', {
-      video_id: videoId,
-    });
-    return data;
-  },
-
-  /**
-   * Mark a video as normalized (transition from READY_TO_BE_NORMALIZED → NORMALIZED).
-   * This step is optional — curator can also approve directly to skip normalization.
-   */
-  markAsNormalized: async (videoId: string): Promise<ApproveApiResponse> => {
-    const { data } = await apiClient.post<ApproveApiResponse>('/curation/normalize-status', {
       video_id: videoId,
     });
     return data;

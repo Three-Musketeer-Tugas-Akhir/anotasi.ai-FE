@@ -39,8 +39,6 @@ export function AnnotationPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [reviewStatus, setReviewStatus] = useState<string | null>(null);
   const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
-  const [canSubmit, setCanSubmit] = useState(true);
-  const [submitWarning, setSubmitWarning] = useState<string | null>(null);
 
   // ── Computed Values ───────────────────────────────────────────
   const activeUtterance = useMemo(() => {
@@ -132,17 +130,7 @@ export function AnnotationPage() {
       setUtteranceEdits(allEdits);
       setActiveUtteranceIndex(allEdits.length > 0 ? 0 : null);
 
-      // For status/submit logic, we check the first segment as a representative.
-      // In a real multi-segment submit, backend might need an update, but we work around it here.
-      try {
-        const subStatus = await annotationApi.checkSubmissionStatus(jobItems[0].segment_id);
-        setCanSubmit(subStatus.can_submit);
-        setSubmitWarning(subStatus.warning ?? null);
-      } catch {
-        setCanSubmit(true);
-        setSubmitWarning(null);
-      }
-
+      // Review status
       try {
         const revStatus = await annotationApi.getReviewStatus(jobItems[0].segment_id);
         setReviewStatus(revStatus.status);
@@ -341,23 +329,7 @@ export function AnnotationPage() {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!selectedJobId) return;
-    try {
-      const segmentIds = Array.from(new Set(utteranceEdits.map((u) => u.segment_id).filter(Boolean))) as string[];
-      await Promise.all(segmentIds.map(async (sid) => {
-        const status = await annotationApi.checkSubmissionStatus(sid);
-        const confirmNoChanges = !status.has_edits;
-        return annotationApi.submitForReview(sid, { confirm_no_changes: confirmNoChanges });
-      }));
 
-      setActionMessage(`✅ Berhasil submit ke kurator`);
-      await loadJob(selectedJobId);
-    } catch (err: unknown) {
-      const msg = (err as any)?.response?.data?.detail || 'Gagal submit anotasi';
-      setActionMessage(typeof msg === 'string' ? `❌ ${msg}` : '❌ Gagal submit anotasi');
-    }
-  };
 
   // ── Hybrid Player Computed Properties ───────────────────────────
   const useCroppedVideo = activeUtterance?.status === 'OK' && activeUtterance?.cropped_video_path;
@@ -481,11 +453,8 @@ export function AnnotationPage() {
                   onSelectUtterance={handleSelectUtterance}
                   onSaveDraft={handleSaveDraft}
                   onMarkOk={handleMarkOk}
-                  onSubmit={handleSubmit}
                   onReset={handleReset}
                   isSaving={isSaving}
-                  canSubmit={canSubmit}
-                  submitWarning={submitWarning}
                   reviewStatus={reviewStatus}
                   reviewFeedback={reviewFeedback}
                 />

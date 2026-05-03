@@ -14,14 +14,27 @@ export type CurationStatus =
 
 // ── Domain Models ──────────────────────────────────────────────────
 
-/** A single text segment within a video's transcript */
+/** A single utterance in the normalization workflow */
 export interface CurationSegment {
   id: string;
-  /** Original text (Before column – CUR-04) */
+  segmentId: string;
+  utteranceIndex: number;
+
+  /** Ground truth transcript — before */
   originalText: string;
-  /** Text after auto-normalization (After column – CUR-04) */
+  /** Ground truth transcript — after normalization */
   normalizedText: string;
-  /** Whether the curator has manually edited the normalizedText */
+
+  /** Glosa (annotator label) — before */
+  originalGlosa: string;
+  /** Glosa — after SIBI normalization */
+  normalizedGlosa: string;
+
+  /** Timing */
+  start: number;
+  end: number;
+
+  /** Whether the curator has manually edited any normalized field */
   isEdited: boolean;
 }
 
