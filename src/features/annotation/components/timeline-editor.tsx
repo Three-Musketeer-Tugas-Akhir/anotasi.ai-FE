@@ -329,7 +329,7 @@ export function TimelineEditor({
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <Film size={14} className="text-teal-600 flex-shrink-0" />
           <span className="text-sm font-semibold text-gray-700 truncate">
-            {activeUtterance ? `Utterance #${activeUtterance.index}` : 'Filmstrip Timeline'}
+            {activeUtterance ? `Kalimat ke-${activeUtterance.index + 1}` : 'Filmstrip Timeline'}
           </span>
         </div>
 
@@ -404,7 +404,7 @@ export function TimelineEditor({
             style={{ left: `${regionRightPx}px`, right: 0 }} />
 
           {/* Background regions for other utterances */}
-          {allUtterances && activeUtterance && allUtterances.map((u) => {
+          {allUtterances && activeUtterance && allUtterances.map((u, idx) => {
             if (u.utterance_index === activeUtterance.index) return null;
             if (u.end <= windowStart || u.start >= windowEnd) return null;
 
@@ -413,7 +413,7 @@ export function TimelineEditor({
             const isOk = u.status === 'OK';
 
             return (
-              <div key={`bg-${u.utterance_index}`}
+              <div key={`bg-${u.utterance_index}-${idx}`}
                 className={`absolute top-0 bottom-0 border pointer-events-none flex items-center justify-center ${isOk ? 'border-gray-400/50 bg-gray-500/30' : 'border-white/20 bg-white/5'}`}
                 style={{ left: `${left}px`, width: `${width}px` }}>
                 {isOk && <Badge variant="outline" className="text-[10px] scale-75 bg-gray-800/80 text-gray-200 border-gray-600 backdrop-blur-sm px-1.5">🔒 OK</Badge>}

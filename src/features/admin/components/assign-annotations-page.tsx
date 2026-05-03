@@ -53,7 +53,7 @@ export function AssignAnnotationsPage() {
     <div className="container mx-auto p-6 max-w-7xl">
       <div className="mb-6 flex flex-col gap-2">
         <h1 className="text-2xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
-          <LayoutDashboard className="text-indigo-600" />
+          <LayoutDashboard className="text-teal-600" />
           Distribusi Tugas JBI
         </h1>
         <p className="text-sm text-gray-500">
@@ -66,7 +66,7 @@ export function AssignAnnotationsPage() {
         <Card className="lg:col-span-2 shadow-sm border-gray-200">
           <CardHeader className="bg-gray-50/50 border-b border-gray-100 pb-4">
             <CardTitle className="text-lg flex items-center gap-2">
-              <Video className="w-5 h-5 text-indigo-500" />
+              <Video className="w-5 h-5 text-teal-500" />
               Job Siap Dialokasikan
             </CardTitle>
             <CardDescription>Pilih job dengan status READY_FOR_ANNOTATION</CardDescription>
@@ -89,7 +89,7 @@ export function AssignAnnotationsPage() {
                     onClick={() => setSelectedJobId(job.job_id)}
                     className={`p-4 cursor-pointer transition-colors ${
                       selectedJobId === job.job_id
-                        ? 'bg-indigo-50 border-l-4 border-indigo-500'
+                        ? 'bg-teal-50 border-l-4 border-teal-500'
                         : 'hover:bg-gray-50 border-l-4 border-transparent'
                     }`}
                   >
@@ -100,7 +100,7 @@ export function AssignAnnotationsPage() {
                         </div>
                         <div className="text-xs text-gray-500 font-mono mt-1">ID: {job.job_id.slice(0,8)}...</div>
                       </div>
-                      <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700">
+                      <Badge variant="outline" className="text-[10px] bg-teal-50 text-teal-700">
                         {job.status}
                       </Badge>
                     </div>
@@ -123,9 +123,9 @@ export function AssignAnnotationsPage() {
         {/* Right Column: Assign & Status */}
         <div className="space-y-6">
           <Card className="shadow-sm border-gray-200">
-            <CardHeader className="bg-indigo-50/50 border-b border-indigo-100 pb-4">
+            <CardHeader className="bg-teal-50/50 border-b border-teal-100 pb-4">
               <CardTitle className="text-lg flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-indigo-600" />
+                <UserCheck className="w-5 h-5 text-teal-600" />
                 Penugasan
               </CardTitle>
               <CardDescription>Pilih annotator untuk job yang ditandai</CardDescription>
@@ -151,8 +151,8 @@ export function AssignAnnotationsPage() {
                             onClick={() => setSelectedAnnotatorId(user.id)}
                             className={`p-2 rounded-md border text-sm cursor-pointer transition-all ${
                               selectedAnnotatorId === user.id
-                                ? 'bg-indigo-600 text-white border-indigo-600 font-medium shadow-md'
-                                : 'bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50'
+                                ? 'bg-teal-600 text-white border-teal-600 font-medium shadow-md'
+                                : 'bg-white text-gray-700 border-gray-200 hover:border-teal-300 hover:bg-teal-50'
                             }`}
                           >
                             <div className="flex justify-between items-center">
@@ -164,7 +164,7 @@ export function AssignAnnotationsPage() {
                     )}
                   </div>
                   <Button
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+                    className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold"
                     disabled={!selectedAnnotatorId || assignMutation.isPending}
                     onClick={handleAssign}
                   >
