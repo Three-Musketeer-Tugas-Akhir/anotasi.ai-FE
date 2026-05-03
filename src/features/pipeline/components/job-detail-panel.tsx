@@ -946,7 +946,13 @@ function Stage2Content({
             {/* Expanded: Preview Utterances */}
             {isExpanded && (
               <div className="px-4 pb-3 border-t border-gray-200 space-y-1.5 pt-2">
-                {previewUtts.map((utt) => (
+                {previewUtts.map((utt) => {
+                  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+                  const proxiedAudioUrl = utt.audio_url && token
+                    ? `/proxy-segment?url=${encodeURIComponent(utt.audio_url)}&token=${token}#t=${utt.start},${utt.end}`
+                    : null;
+
+                  return (
                   <div key={utt.id} className="bg-white rounded-lg border border-gray-100 p-2.5">
                     <p className="text-sm text-gray-800 leading-relaxed line-clamp-1">
                       &ldquo;{utt.text}&rdquo;
@@ -959,11 +965,12 @@ function Stage2Content({
                         {(utt.confidence * 100).toFixed(0)}%
                       </Badge>
                     </div>
-                    {utt.audio_url && (
-                      <audio src={utt.audio_url} controls className="w-full h-7 mt-1.5" />
+                    {proxiedAudioUrl && (
+                      <audio src={proxiedAudioUrl} controls className="w-full h-7 mt-1.5" />
                     )}
                   </div>
-                ))}
+                  );
+                })}
 
                 {/* "Lihat Selengkapnya" */}
                 <div className="flex justify-center pt-1">

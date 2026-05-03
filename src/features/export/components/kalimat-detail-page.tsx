@@ -126,11 +126,18 @@ export function KalimatDetailPage({ jobId, segmentId, kalimatIndex }: KalimatDet
                   <Music size={18} /> Audio WAV
                 </div>
                 <div className="bg-gray-100 rounded-lg p-6 flex flex-col items-center justify-center border border-gray-200">
-                  {utterance.audio_url ? (
-                    <audio src={utterance.audio_url} controls className="w-full" />
-                  ) : (
-                    <span className="text-sm text-gray-500">Audio belum tersedia</span>
-                  )}
+                  {(() => {
+                    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+                    const proxiedAudioUrl = utterance.audio_url && token
+                      ? `/proxy-segment?url=${encodeURIComponent(utterance.audio_url)}&token=${token}#t=${utterance.start},${utterance.end}`
+                      : null;
+                      
+                    return proxiedAudioUrl ? (
+                      <audio src={proxiedAudioUrl} controls className="w-full" />
+                    ) : (
+                      <span className="text-sm text-gray-500">Audio belum tersedia</span>
+                    );
+                  })()}
                 </div>
               </CardContent>
             </Card>
