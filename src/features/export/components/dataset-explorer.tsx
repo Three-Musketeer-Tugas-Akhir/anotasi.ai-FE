@@ -25,8 +25,12 @@ interface ExplorerUtterance {
   utterance_index: number;
   status: string | null;
   asr_text: string;
+  gt_text: string;
+  norm_transcript: string;
   glosa_text: string;
+  norm_glosa: string;
   cropped_video_url: string | null;
+  audio_url: string | null;
   start: number;
   end: number;
 }
@@ -121,7 +125,30 @@ export function DatasetExplorer({ jobId, onBack }: DatasetExplorerProps) {
             variant="secondary" 
             className="text-xs px-4 bg-teal-50 text-teal-700 hover:bg-teal-100 border-teal-200"
             disabled={flatUtterances.length === 0}
-            onClick={() => alert('Download Job ZIP will be implemented in future.')}
+            onClick={() => {
+              const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/pipeline/jobs/${jobId}/dataset/download`;
+              const token = localStorage.getItem('token');
+              // Create an invisible iframe/link to trigger download with token in headers if possible, 
+              // but since standard browser download doesn't support Auth header, we might need to use a temporary token
+              // or open in a new tab if cookie-based. Assuming we can just open it or fetch it.
+              // For simplicity, we can fetch it as blob.
+              fetch(url, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              }).then(res => res.blob()).then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${data.original_filename}_dataset.zip`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+              }).catch(err => {
+                console.error("Failed to download", err);
+                alert("Failed to download ZIP");
+              });
+            }}
           >
             Download ZIP
           </Button>
@@ -187,8 +214,8 @@ export function DatasetExplorer({ jobId, onBack }: DatasetExplorerProps) {
                           <Music size={14} /> Audio WAV
                         </div>
                         <div className="bg-gray-100 rounded-lg p-2.5 flex flex-col items-center justify-center">
-                          {utt.cropped_video_url ? (
-                            <audio src={utt.cropped_video_url} controls className="w-full h-8" />
+                          {utt.audio_url ? (
+                            <audio src={utt.audio_url} controls className="w-full h-8" />
                           ) : (
                             <span className="text-xs text-gray-500">Audio belum tersedia</span>
                           )}
@@ -199,29 +226,55 @@ export function DatasetExplorer({ jobId, onBack }: DatasetExplorerProps) {
 
                   {/* Kanan: Transkripsi & Glosa */}
                   <div className="flex flex-col gap-3">
-                    {/* Transcription Card */}
-                    <Card className="shadow-none border-teal-100/50 flex-1 flex flex-col">
-                      <CardContent className="p-2.5 flex flex-col gap-2 flex-1">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
-                          <FileText size={14} /> Transkripsi (ASR)
-                        </div>
-                        <div className="flex-1 bg-gray-50 border border-gray-100 rounded-lg p-3 text-sm text-gray-700 line-clamp-4">
-                          {utt.asr_text || '-'}
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <div className="grid grid-cols-2 gap-3 flex-1">
+                      {/* Transcription Card */}
+                      <Card className="shadow-none border-teal-100/50 flex-1 flex flex-col">
+                        <CardContent className="p-2.5 flex flex-col gap-2 flex-1">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
+                            <FileText size={14} /> Transkripsi (GT)
+                          </div>
+                          <div className="flex-1 bg-gray-50 border border-gray-100 rounded-lg p-3 text-sm text-gray-700 line-clamp-4">
+                            {utt.gt_text || '-'}
+                          </div>
+                        </CardContent>
+                      </Card>
 
-                    {/* Glosa Card */}
-                    <Card className="shadow-none border-teal-100/50 flex-1 flex flex-col">
-                      <CardContent className="p-2.5 flex flex-col gap-2 flex-1">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
-                          <MessageSquareText size={14} /> Glosa (Annotator)
-                        </div>
-                        <div className="flex-1 bg-teal-50/50 border border-teal-100 rounded-lg p-3 text-sm text-teal-900 font-medium line-clamp-4">
-                          {utt.glosa_text || '-'}
-                        </div>
-                      </CardContent>
-                    </Card>
+                      {/* Normalized Transcription Card */}
+                      <Card className="shadow-none border-teal-100/50 flex-1 flex flex-col">
+                        <CardContent className="p-2.5 flex flex-col gap-2 flex-1">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
+                            <FileText size={14} /> Transkripsi Normal
+                          </div>
+                          <div className="flex-1 bg-green-50/50 border border-green-100 rounded-lg p-3 text-sm text-green-900 line-clamp-4">
+                            {utt.norm_transcript || '-'}
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Glosa Card */}
+                      <Card className="shadow-none border-teal-100/50 flex-1 flex flex-col">
+                        <CardContent className="p-2.5 flex flex-col gap-2 flex-1">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
+                            <MessageSquareText size={14} /> Glosa Asli
+                          </div>
+                          <div className="flex-1 bg-teal-50/50 border border-teal-100 rounded-lg p-3 text-sm text-teal-900 font-medium line-clamp-4">
+                            {utt.glosa_text || '-'}
+                          </div>
+                        </CardContent>
+                      </Card>
+                      
+                      {/* Normalized Glosa Card */}
+                      <Card className="shadow-none border-teal-100/50 flex-1 flex flex-col">
+                        <CardContent className="p-2.5 flex flex-col gap-2 flex-1">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
+                            <MessageSquareText size={14} /> Glosa Normal
+                          </div>
+                          <div className="flex-1 bg-emerald-50/50 border border-emerald-100 rounded-lg p-3 text-sm text-emerald-900 font-medium line-clamp-4">
+                            {utt.norm_glosa || '-'}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
 
                     {/* Lihat Detail Button */}
                     <Button 
