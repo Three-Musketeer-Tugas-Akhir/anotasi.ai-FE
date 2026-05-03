@@ -191,8 +191,8 @@ export interface Stage2Utterance {
   end: number;              // End time (seconds, relative to segment)
   confidence: number;       // 0.0 – 1.0
   url: string | null;       // Asset URL (optional)
+  audio_url: string | null; // WAV audio URL from ASR
   status: string;           // pending | cropped | failed
-  audio_path: string | null; // WAV audio path (e.g. jobs/{job_id}/audio/{segment_id}.wav)
 }
 
 export interface Stage2SegmentResult {

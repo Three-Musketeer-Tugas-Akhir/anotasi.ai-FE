@@ -959,6 +959,9 @@ function Stage2Content({
                         {(utt.confidence * 100).toFixed(0)}%
                       </Badge>
                     </div>
+                    {utt.audio_url && (
+                      <audio src={utt.audio_url} controls className="w-full h-7 mt-1.5" />
+                    )}
                   </div>
                 ))}
 
