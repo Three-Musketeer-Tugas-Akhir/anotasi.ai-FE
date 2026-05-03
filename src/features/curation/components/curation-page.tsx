@@ -27,14 +27,7 @@ import type {
 } from '../types';
 import { curationApi } from '../curation-api';
 import { toast } from 'sonner';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+
 
 // ── Slang Dictionary (visual reference — real normalization is on BE) ──
 
@@ -353,33 +346,29 @@ export function CurationPage() {
               <h2 className="text-base font-bold text-slate-800">Video untuk Kurasi ({filtered.length})</h2>
             </div>
             <div className="overflow-x-auto">
-              <Table className="w-full text-left">
-                <TableHeader>
-                  <TableRow className="bg-slate-50 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    <TableHead className="text-center w-12">#</TableHead>
-                    <TableHead>Video</TableHead>
-                    <TableHead className="w-32">Kategori</TableHead>
-                    <TableHead className="w-28 text-center">Kalimat</TableHead>
-                    <TableHead className="w-48 text-center">Status</TableHead>
-                    <TableHead className="w-56 text-center">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="text-sm">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-center w-12">#</th>
+                    <th className="px-6 py-3">Video</th>
+                    <th className="px-6 py-3 w-32">Kategori</th>
+                    <th className="px-6 py-3 w-48 text-center">Status</th>
+                    <th className="px-6 py-3 w-56 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
                   {filtered.map((v, i) => (
-                    <TableRow key={v.id} className={`transition-colors ${v.status === 'READY_TO_EXPORT' ? 'bg-emerald-50/30' : v.status === 'NORMALIZED' ? 'bg-teal-50/20' : ''}`}>
-                      <TableCell className="text-center text-slate-400 font-medium">{i + 1}</TableCell>
-                      <TableCell>
+                    <tr key={v.id} className={`hover:bg-slate-50 transition-colors ${v.status === 'READY_TO_EXPORT' ? 'bg-emerald-50/30' : v.status === 'NORMALIZED' ? 'bg-teal-50/20' : ''}`}>
+                      <td className="px-6 py-4 text-center text-slate-400 font-medium">{i + 1}</td>
+                      <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <FileText size={16} className="text-slate-400 flex-shrink-0" />
                           <span className="font-semibold text-slate-700 truncate max-w-[300px]">{v.filename}</span>
                         </div>
-                      </TableCell>
-                      <TableCell><CategoryBadge category={v.category} /></TableCell>
-                      <TableCell className="text-center font-mono text-slate-600">
-                        {v.segmentCount > 0 ? v.segmentCount : '—'}
-                      </TableCell>
-                      <TableCell className="text-center"><CurationStatusBadge status={v.status} /></TableCell>
-                      <TableCell className="text-center">
+                      </td>
+                      <td className="px-6 py-4"><CategoryBadge category={v.category} /></td>
+                      <td className="px-6 py-4 text-center"><CurationStatusBadge status={v.status} /></td>
+                      <td className="px-6 py-4 text-center">
                         <div className="flex items-center justify-center gap-2">
                           {v.status === 'ANNOTATED' && (
                             <>
@@ -407,16 +396,16 @@ export function CurationPage() {
                             </span>
                           )}
                         </div>
-                      </TableCell>
-                    </TableRow>
+                      </td>
+                    </tr>
                   ))}
                   {filtered.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-slate-400 font-medium py-12">Tidak ada video yang cocok dengan pencarian.</TableCell>
-                    </TableRow>
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-slate-400 font-medium">Tidak ada video yang cocok dengan pencarian.</td>
+                    </tr>
                   )}
-                </TableBody>
-              </Table>
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -498,25 +487,25 @@ export function CurationPage() {
               </div>
               
               <div className="overflow-x-auto">
-                <Table className="w-full text-left">
-                  <TableHeader>
-                    <TableRow className="bg-slate-50 text-xs font-bold uppercase tracking-wider">
-                      <TableHead className="text-center w-12 text-slate-400">#</TableHead>
-                      <TableHead className="w-[45%]">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold uppercase tracking-wider">
+                      <th className="px-4 py-3 text-center w-12 text-slate-400">#</th>
+                      <th className="px-4 py-3 w-[45%]">
                         <span className="flex items-center gap-1.5 text-slate-700"><FileText size={14} /> Ground Truth Transkrip</span>
-                      </TableHead>
-                      <TableHead className="w-[45%]">
+                      </th>
+                      <th className="px-4 py-3 w-[45%]">
                         <span className="flex items-center gap-1.5 text-slate-700"><Wand2 size={14} /> Glosa (Label Anotasi)</span>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody className="text-sm">
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-sm">
                     {activeVideo.segments.map((seg, i) => (
-                      <TableRow key={seg.id} className={seg.isEdited ? 'bg-teal-50/10' : ''}>
-                        <TableCell className="text-center text-slate-400 font-mono align-top pt-5">{i + 1}</TableCell>
+                      <tr key={seg.id} className={seg.isEdited ? 'bg-teal-50/10' : ''}>
+                        <td className="px-4 py-5 text-center text-slate-400 font-mono align-top">{i + 1}</td>
                         
                         {/* Transcript Column */}
-                        <TableCell className="align-top">
+                        <td className="px-4 py-5 align-top">
                           <div className="space-y-2">
                             <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-sm text-slate-600 leading-relaxed">
                               <div className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><ArrowRight size={10} /> Asli</div>
@@ -540,10 +529,10 @@ export function CurationPage() {
                               </div>
                             )}
                           </div>
-                        </TableCell>
+                        </td>
 
                         {/* Glosa Column */}
-                        <TableCell className="align-top">
+                        <td className="px-4 py-5 align-top">
                           <div className="space-y-2">
                             <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-3.5 text-sm text-amber-800 leading-relaxed">
                               <div className="text-[10px] font-bold text-amber-600/70 uppercase mb-1 flex items-center gap-1"><ArrowRight size={10} /> Asli</div>
@@ -567,12 +556,12 @@ export function CurationPage() {
                               </div>
                             )}
                           </div>
-                        </TableCell>
+                        </td>
 
-                      </TableRow>
+                      </tr>
                     ))}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

@@ -1,19 +1,11 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DatasetExplorer } from './dataset-explorer';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
+import { DatasetExplorer } from './dataset-explorer';
+
 import {
   Package,
   Download,
@@ -28,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/core/api/axios-client';
-import { pipelineApi } from '@/features/pipeline/pipeline-api';
+
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -249,92 +241,88 @@ export function ExportPage() {
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50/50">
-                  <TableHead className="w-12 text-center">#</TableHead>
-                  <TableHead>Nama File</TableHead>
-                  <TableHead className="w-28 text-center">Segmen</TableHead>
-                  <TableHead className="w-28 text-center">Kategori</TableHead>
-                  <TableHead className="w-36 text-center">Status Kurasi</TableHead>
-                  <TableHead className="w-28 text-center">Tanggal</TableHead>
-                  <TableHead className="w-32 text-center">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {downloadableJobs.map((job, i) => {
-                  const badge = getCurationBadge(job.curation_status);
-                  const isDownloading = downloadingId === job.id;
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-center w-12">#</th>
+                    <th className="px-6 py-3">Nama File</th>
+                    <th className="px-6 py-3 w-28 text-center">Kategori</th>
+                    <th className="px-6 py-3 w-48 text-center">Status Kurasi</th>
+                    <th className="px-6 py-3 w-32 text-center">Tanggal</th>
+                    <th className="px-6 py-3 w-56 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {downloadableJobs.map((job, i) => {
+                    const badge = getCurationBadge(job.curation_status);
+                    const isDownloading = downloadingId === job.id;
 
-                  return (
-                    <TableRow key={job.id}>
-                      <TableCell className="text-center text-gray-400 text-xs">{i + 1}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium text-sm text-gray-800">
-                            {job.original_filename || 'Unknown File'}
+                    return (
+                      <tr key={job.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4 text-center text-slate-400 font-medium">{i + 1}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-slate-700 truncate max-w-[300px]">
+                              {job.original_filename || 'Unknown File'}
+                            </span>
+                            <span className="font-mono text-[10px] text-slate-400">
+                              ID: {job.id.slice(0, 8)}...
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {job.category ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border bg-blue-50 text-blue-700 border-blue-200">
+                              {job.category}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] uppercase tracking-wider font-bold border shadow-sm ${badge.className}`}>
+                            {badge.label}
                           </span>
-                          <span className="font-mono text-[10px] text-gray-400">
-                            ID: {job.id.slice(0, 8)}...
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="outline" className="text-xs font-mono">
-                          {job.total_segments}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {job.category ? (
-                          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
-                            {job.category}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-gray-400">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="outline" className={`text-[10px] ${badge.className}`}>
-                          {badge.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center text-xs text-gray-500">
-                        {formatDate(job.created_at)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 text-xs text-teal-700 border-teal-200 hover:bg-teal-50"
-                            onClick={() => setExploreJobId(job.id)}
-                          >
-                            <FolderOpen size={12} className="mr-1" /> Explorer
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="h-8 bg-teal-600 hover:bg-teal-700 text-white text-xs disabled:opacity-40"
-                            disabled={isDownloading || !job.curation_status || !DOWNLOADABLE_STATUSES.has(job.curation_status)}
-                            onClick={() => handleDownload(job.id)}
-                            title={!job.curation_status || !DOWNLOADABLE_STATUSES.has(job.curation_status) ? 'Belum siap untuk diunduh' : 'Download seluruh Job (semua segmen)'}
-                          >
-                            {isDownloading ? (
-                              <>
-                                <Loader2 size={12} className="mr-1 animate-spin" /> Downloading...
-                              </>
-                            ) : (
-                              <>
-                                <Download size={12} className="mr-1" /> ZIP
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                        </td>
+                        <td className="px-6 py-4 text-center text-xs text-slate-500 font-medium">
+                          {formatDate(job.created_at)}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-xs text-teal-700 border-teal-200 hover:bg-teal-50"
+                              onClick={() => setExploreJobId(job.id)}
+                            >
+                              <FolderOpen size={12} className="mr-1" /> Explorer
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-8 bg-teal-600 hover:bg-teal-700 text-white text-xs disabled:opacity-40"
+                              disabled={isDownloading || !job.curation_status || !DOWNLOADABLE_STATUSES.has(job.curation_status)}
+                              onClick={() => handleDownload(job.id)}
+                              title={!job.curation_status || !DOWNLOADABLE_STATUSES.has(job.curation_status) ? 'Belum siap untuk diunduh' : 'Download seluruh Job'}
+                            >
+                              {isDownloading ? (
+                                <>
+                                  <Loader2 size={12} className="mr-1 animate-spin" /> Downloading...
+                                </>
+                              ) : (
+                                <>
+                                  <Download size={12} className="mr-1" /> ZIP
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>

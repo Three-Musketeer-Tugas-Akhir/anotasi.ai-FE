@@ -125,10 +125,14 @@ function ProgressBar({
 
 // ── Job Picker ─────────────────────────────────────────────────────
 
+type FilterMode = 'all' | 'flagged' | 'clean' | 'pending';
+
 function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
   const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState<VoiceAnnotationJob[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
 
   useEffect(() => {
     (async () => {
@@ -142,6 +146,18 @@ function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
       }
     })();
   }, []);
+
+  const filteredJobs = useMemo(() => {
+    return jobs.filter((job) => {
+      if (searchQuery.trim() && !job.original_filename.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      const isEmpty = job.total_utterances === 0;
+      const allClean = job.flagged_count === 0 && !isEmpty;
+      if (filterMode === 'flagged') return !isEmpty && !allClean;
+      if (filterMode === 'clean') return allClean;
+      if (filterMode === 'pending') return isEmpty;
+      return true;
+    });
+  }, [jobs, searchQuery, filterMode]);
 
   if (loading) {
     return (
@@ -160,79 +176,114 @@ function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
     );
   }
 
-  if (jobs.length === 0) {
-    return (
-      <div className="p-12 text-center">
-        <FileText size={40} className="text-gray-300 mx-auto mb-3" />
-        <p className="text-sm font-medium text-gray-500">Belum ada job yang memerlukan anotasi suara</p>
-        <p className="text-xs text-gray-400 mt-1">
-          Job akan muncul setelah tahap cropping selesai dan terdeteksi kata-kata yang perlu divalidasi
-        </p>
-      </div>
-    );
-  }
+  const filterOptions: { key: FilterMode; label: string; activeClass: string }[] = [
+    { key: 'all', label: 'Semua Job', activeClass: 'bg-teal-600 text-white' },
+    { key: 'flagged', label: 'Perlu Ditinjau', activeClass: 'bg-amber-500 text-white' },
+    { key: 'clean', label: 'Selesai (OK)', activeClass: 'bg-emerald-500 text-white' },
+    { key: 'pending', label: 'Menunggu Proses', activeClass: 'bg-gray-700 text-white' },
+  ];
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="text-center mb-6">
-        <Layers size={32} className="text-teal-500 mx-auto mb-2" />
-        <h2 className="text-lg font-bold text-gray-800">Pilih Job untuk Anotasi Suara</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Validasi transkripsi ASR sebelum masuk tahap Anotasi JBI
-        </p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {jobs.map((job) => {
-          const allClean = job.flagged_count === 0 && job.total_utterances > 0;
-          const pct = job.total_utterances > 0
-            ? Math.round((job.clean_count / job.total_utterances) * 100)
-            : 0;
-
-          return (
+    <div className="p-6 space-y-4 max-w-7xl mx-auto">
+      {/* Search & Filter Bar — replaces the centred title block */}
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between mb-2">
+        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5 w-full sm:w-auto overflow-x-auto shadow-sm flex-shrink-0">
+          {filterOptions.map(({ key, label, activeClass }) => (
             <button
-              key={job.job_id}
-              onClick={() => onSelectJob(job.job_id)}
-              className="bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-teal-300 hover:bg-teal-50/30 hover:shadow-sm transition-all group"
+              key={key}
+              onClick={() => setFilterMode(key)}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
+                filterMode === key ? activeClass : 'text-gray-500 hover:bg-gray-100'
+              }`}
             >
-              <p className="text-sm font-bold text-gray-800 group-hover:text-teal-700 transition-colors truncate">
-                {job.original_filename}
-              </p>
-              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                {allClean ? (
-                  <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
-                    <CheckCircle2 size={8} className="mr-0.5" /> Semua OK
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">
-                    <AlertTriangle size={8} className="mr-0.5" /> {job.flagged_count} Perlu Ditinjau
-                  </Badge>
-                )}
-                <span className="text-[10px] text-gray-400">
-                  {job.total_utterances} kalimat • {pct}% OK
-                </span>
-              </div>
-
-              {/* Mini progress bar */}
-              <div className="mt-2.5 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${allClean ? 'bg-emerald-400' : 'bg-amber-400'}`}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-
-              {job.created_at && (
-                <p className="text-[10px] text-gray-400 mt-1.5">
-                  {new Date(job.created_at).toLocaleDateString('id-ID', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </p>
-              )}
+              {label}
             </button>
-          );
-        })}
+          ))}
+        </div>
+        <div className="relative w-full sm:max-w-[240px]">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Cari nama file..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400 shadow-sm"
+          />
+        </div>
       </div>
+
+      {filteredJobs.length === 0 ? (
+        <div className="py-12 text-center bg-white rounded-xl border border-gray-200 border-dashed">
+          <FileText size={32} className="text-gray-300 mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Tidak ada job yang sesuai dengan filter.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          {filteredJobs.map((job) => {
+            const isEmpty = job.total_utterances === 0;
+            const allClean = job.flagged_count === 0 && !isEmpty;
+            const pct = job.total_utterances > 0
+              ? Math.round((job.clean_count / job.total_utterances) * 100)
+              : 0;
+
+            return (
+              <button
+                key={job.job_id}
+                onClick={() => onSelectJob(job.job_id)}
+                title={job.original_filename}
+                className="bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-teal-300 hover:bg-teal-50 hover:shadow-sm transition-all group flex flex-col justify-between"
+              >
+                <div>
+                  <p className="text-sm font-bold text-gray-800 group-hover:text-teal-700 transition-colors line-clamp-2 min-h-[40px] leading-snug">
+                    {job.original_filename}
+                  </p>
+                  <div className="flex items-center gap-2 mt-3 flex-wrap">
+                    {isEmpty ? (
+                      <Badge variant="outline" className="text-[10px] bg-gray-50 text-gray-500 border-gray-200">
+                        <Layers size={8} className="mr-0.5" /> Menunggu Proses
+                      </Badge>
+                    ) : allClean ? (
+                      <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                        <CheckCircle2 size={8} className="mr-0.5" /> Semua OK
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">
+                        <AlertTriangle size={8} className="mr-0.5" /> {job.flagged_count} Perlu Ditinjau
+                      </Badge>
+                    )}
+                    <span className="text-[10px] text-gray-400">{job.total_utterances} kalimat</span>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  {!isEmpty ? (
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1.5">
+                      <div
+                        className={`h-full rounded-full transition-all ${allClean ? 'bg-emerald-400' : 'bg-amber-400'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="h-1.5 mb-1.5 bg-transparent" />
+                  )}
+                  <div className="flex justify-between items-center text-[10px] text-gray-400">
+                    <span className="font-semibold">{!isEmpty ? `${pct}% OK` : ''}</span>
+                    {job.created_at && (
+                      <span>
+                        {new Date(job.created_at).toLocaleDateString('id-ID', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
