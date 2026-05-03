@@ -11,8 +11,12 @@ interface ExplorerUtterance {
   utterance_index: number;
   status: string | null;
   asr_text: string;
+  gt_text: string;
+  norm_transcript: string;
   glosa_text: string;
+  norm_glosa: string;
   cropped_video_url: string | null;
+  audio_url: string | null;
   start: number;
   end: number;
 }
@@ -122,8 +126,8 @@ export function KalimatDetailPage({ jobId, segmentId, kalimatIndex }: KalimatDet
                   <Music size={18} /> Audio WAV
                 </div>
                 <div className="bg-gray-100 rounded-lg p-6 flex flex-col items-center justify-center border border-gray-200">
-                  {utterance.cropped_video_url ? (
-                    <audio src={utterance.cropped_video_url} controls className="w-full" />
+                  {utterance.audio_url ? (
+                    <audio src={utterance.audio_url} controls className="w-full" />
                   ) : (
                     <span className="text-sm text-gray-500">Audio belum tersedia</span>
                   )}
@@ -132,29 +136,57 @@ export function KalimatDetailPage({ jobId, segmentId, kalimatIndex }: KalimatDet
             </Card>
           </div>
 
-          {/* Right Column: Text Data (Transcription & Glosa) */}
-          <div className="lg:col-span-7 flex flex-col gap-6">
-            <Card className="shadow-sm border-teal-100 flex-1 flex flex-col">
+          {/* Right Column: Text Data (2x2 Grid) */}
+          <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* Transkripsi GT */}
+            <Card className="shadow-sm border-teal-100 flex flex-col">
               <CardContent className="p-5 flex flex-col gap-3 flex-1">
                 <div className="flex items-center gap-2 font-semibold text-teal-800 text-sm">
-                  <FileText size={18} /> Transkripsi Lengkap (ASR)
+                  <FileText size={18} /> Transkripsi (GT)
                 </div>
                 <div className="flex-1 bg-white border border-gray-200 rounded-lg p-5 text-gray-800 text-base leading-relaxed whitespace-pre-wrap shadow-inner overflow-y-auto">
-                  {utterance.asr_text || 'Tidak ada data transkripsi.'}
+                  {utterance.gt_text || 'Tidak ada data transkripsi.'}
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="shadow-sm border-teal-200 bg-teal-50/20 flex-1 flex flex-col">
+            {/* Transkripsi Normalized */}
+            <Card className="shadow-sm border-green-100 flex flex-col">
+              <CardContent className="p-5 flex flex-col gap-3 flex-1">
+                <div className="flex items-center gap-2 font-semibold text-green-800 text-sm">
+                  <FileText size={18} /> Transkripsi Normal
+                </div>
+                <div className="flex-1 bg-green-50/50 border border-green-200 rounded-lg p-5 text-green-900 text-base leading-relaxed whitespace-pre-wrap shadow-inner overflow-y-auto">
+                  {utterance.norm_transcript || 'Belum dinormalisasi.'}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Glosa Asli */}
+            <Card className="shadow-sm border-teal-200 bg-teal-50/20 flex flex-col">
               <CardContent className="p-5 flex flex-col gap-3 flex-1">
                 <div className="flex items-center gap-2 font-semibold text-teal-900 text-sm">
-                  <MessageSquareText size={18} /> Glosa Lengkap (Annotator)
+                  <MessageSquareText size={18} /> Glosa Asli
                 </div>
                 <div className="flex-1 bg-teal-50 border border-teal-200 rounded-lg p-5 text-teal-900 text-base font-medium leading-relaxed whitespace-pre-wrap shadow-inner overflow-y-auto">
                   {utterance.glosa_text || 'Tidak ada data glosa.'}
                 </div>
               </CardContent>
             </Card>
+
+            {/* Glosa Normalized */}
+            <Card className="shadow-sm border-emerald-200 bg-emerald-50/20 flex flex-col">
+              <CardContent className="p-5 flex flex-col gap-3 flex-1">
+                <div className="flex items-center gap-2 font-semibold text-emerald-900 text-sm">
+                  <MessageSquareText size={18} /> Glosa Normal
+                </div>
+                <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-lg p-5 text-emerald-900 text-base font-medium leading-relaxed whitespace-pre-wrap shadow-inner overflow-y-auto">
+                  {utterance.norm_glosa || 'Belum dinormalisasi.'}
+                </div>
+              </CardContent>
+            </Card>
+
           </div>
 
         </div>
