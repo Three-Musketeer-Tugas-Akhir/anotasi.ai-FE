@@ -204,7 +204,7 @@ function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">
-                    <Flag size={8} className="mr-0.5" /> {job.flagged_count} warning
+                    <AlertTriangle size={8} className="mr-0.5" /> {job.flagged_count} Perlu Ditinjau
                   </Badge>
                 )}
                 <span className="text-[10px] text-gray-400">
@@ -272,14 +272,14 @@ function UtteranceRow({
     utterance.voice_annotation_status === 'CLEAN'
       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
       : utterance.voice_annotation_status === 'FLAGGED'
-        ? 'bg-red-50 text-red-700 border-red-200'
+        ? 'bg-amber-50 text-amber-700 border-amber-200'
         : 'bg-gray-50 text-gray-600 border-gray-200';
 
   const statusIcon =
     utterance.voice_annotation_status === 'CLEAN' ? (
       <CheckCircle2 size={10} />
     ) : utterance.voice_annotation_status === 'FLAGGED' ? (
-      <Flag size={10} />
+      <AlertTriangle size={10} />
     ) : null;
 
   return (
@@ -302,7 +302,7 @@ function UtteranceRow({
           <Badge variant="outline" className={`text-[10px] ${statusColor}`}>
             {statusIcon}
             <span className="ml-0.5">
-              {utterance.voice_annotation_status === 'CLEAN' ? 'OK' : utterance.voice_annotation_status}
+              {utterance.voice_annotation_status === 'CLEAN' ? 'OK' : 'Perlu Ditinjau'}
             </span>
           </Badge>
         </div>
@@ -312,36 +312,34 @@ function UtteranceRow({
               Belum disimpan
             </span>
           )}
-          {utterance.has_flag && (
+          {utterance.has_flag && !isDirty && (
             <Button
-              variant="ghost"
+              variant="default"
               size="sm"
-              className="h-7 text-[11px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+              className="h-7 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm border-none"
               disabled={isSaving}
               onClick={() => onSave(utterance.id, editText, true)}
             >
               <CheckCircle2 size={12} className="mr-1" />
-              Unflag (Sudah Benar)
+              Konfirmasi: Sudah Benar
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            className={`h-7 text-[11px] ${
-              isDirty
-                ? 'border-teal-300 text-teal-700 hover:bg-teal-50'
-                : 'text-gray-400 cursor-not-allowed'
-            }`}
-            disabled={!isDirty || isSaving}
-            onClick={handleSave}
-          >
-            {isSaving && isDirty ? (
-              <Loader2 size={12} className="mr-1 animate-spin" />
-            ) : (
-              <Save size={12} className="mr-1" />
-            )}
-            Simpan
-          </Button>
+          {isDirty && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-[11px] border-teal-300 text-teal-700 hover:bg-teal-50 font-bold shadow-sm"
+              disabled={isSaving}
+              onClick={handleSave}
+            >
+              {isSaving ? (
+                <Loader2 size={12} className="mr-1 animate-spin" />
+              ) : (
+                <Save size={12} className="mr-1" />
+              )}
+              Simpan Perbaikan
+            </Button>
+          )}
         </div>
       </div>
 
@@ -357,19 +355,13 @@ function UtteranceRow({
           </div>
         </div>
 
-        {/* Right: Ground Truth (editable) */}
         <div className="p-3 space-y-1.5">
           <div className="flex items-center justify-between">
             <div className="text-[10px] font-semibold text-teal-600 uppercase tracking-wider">
               Ground Truth (edit)
             </div>
-            {utterance.flagged_words.length > 0 && (
-              <div className="flex items-center gap-1 text-[10px] text-red-500 font-medium">
-                <Flag size={9} />
-                {utterance.flagged_words.length} kata tidak dikenal
-              </div>
-            )}
           </div>
+          
           <div className="relative">
             {/* Background highlight layer */}
             <div
@@ -389,15 +381,15 @@ function UtteranceRow({
             />
           </div>
           
-          {/* Flagged words display (optional, can keep as a summary) */}
+          {/* Flagged words display (summary) */}
           {utterance.flagged_words.length > 0 && (
             <div className="flex items-center gap-1.5 mt-1">
-              <span className="text-[10px] text-gray-400 font-medium">Kata warning:</span>
+              <span className="text-[10px] text-amber-500 font-bold uppercase tracking-tighter">Tinjau kata:</span>
               <div className="flex flex-wrap gap-1">
                 {utterance.flagged_words.map((word) => (
                   <span
                     key={word}
-                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-50 text-red-600 border border-red-100"
+                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-600 border border-amber-100 shadow-sm"
                   >
                     {word}
                   </span>
@@ -630,12 +622,12 @@ export function AsrReviewPage() {
                   onClick={() => setFilterMode('flagged')}
                   className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                     filterMode === 'flagged'
-                      ? 'bg-red-500 text-white shadow-sm'
+                      ? 'bg-amber-500 text-white shadow-sm'
                       : 'text-gray-500 hover:bg-gray-100'
                   }`}
                 >
-                  <Flag size={10} className="inline mr-1" />
-                  Flagged ({utterances.filter((u) => u.has_flag).length})
+                  <AlertTriangle size={10} className="inline mr-1" />
+                  Perlu Ditinjau ({utterances.filter((u) => u.has_flag).length})
                 </button>
               </div>
 
@@ -665,7 +657,7 @@ export function AsrReviewPage() {
                   <CheckCircle2 size={36} className="text-emerald-400 mx-auto mb-2" />
                   <p className="text-sm font-medium text-gray-600">
                     {filterMode === 'flagged'
-                      ? 'Tidak ada kalimat yang flagged'
+                      ? 'Tidak ada kalimat yang perlu ditinjau'
                       : 'Tidak ada kalimat ditemukan'}
                   </p>
                 </div>

@@ -13,6 +13,7 @@ import {
   ScrollText,
   Users,
   Server,
+  Network,
 } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -41,6 +42,7 @@ const navItems: NavItemConfig[] = [
 
 /** Admin-only navigation items */
 const adminNavItems: NavItemConfig[] = [
+  { icon: <Network size={20} />, label: 'Distribusi Tugas JBI', href: '/admin/assign-jbi' },
   { icon: <Users size={20} />, label: 'Kelola User', href: '/admin/users' },
   { icon: <Server size={20} />, label: 'Sistem', href: '/admin/system' },
 ];
