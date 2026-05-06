@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Play,
+  Search,
 } from 'lucide-react';
 import { pipelineApi } from '../pipeline-api';
 import type {
@@ -34,21 +35,23 @@ function getStatusDisplay(status: string): { label: string; dotColor: string; te
   switch (status) {
     case JOB_STATUS.UPLOADED:
     case JOB_STATUS.QUEUED:
-      return { label: 'Antrian', dotColor: 'bg-gray-400', textColor: 'text-gray-500' };
+      return { label: 'Antrian', dotColor: 'bg-slate-300', textColor: 'text-slate-500' };
     case JOB_STATUS.DETECTING:
-      return { label: 'Deteksi', dotColor: 'bg-amber-500', textColor: 'text-amber-600' };
+      return { label: 'Deteksi CV', dotColor: 'bg-amber-500', textColor: 'text-amber-600' };
     case JOB_STATUS.TRANSCRIBING:
-      return { label: 'ASR', dotColor: 'bg-blue-500', textColor: 'text-blue-600' };
+      return { label: 'ASR Processing', dotColor: 'bg-blue-500', textColor: 'text-blue-600' };
     case JOB_STATUS.CROPPING:
-      return { label: 'Cropping', dotColor: 'bg-indigo-500', textColor: 'text-indigo-600' };
+    case JOB_STATUS.CROPPING_IN_PROGRESS:
+      return { label: 'Video Cropping', dotColor: 'bg-indigo-500', textColor: 'text-indigo-600' };
     case JOB_STATUS.READY_FOR_ANNOTATION:
       return { label: 'Siap Anotasi', dotColor: 'bg-emerald-500', textColor: 'text-emerald-600' };
+    case JOB_STATUS.CROPPING_FAILED:
     case JOB_STATUS.FAILED:
-      return { label: 'Gagal', dotColor: 'bg-red-500', textColor: 'text-red-600' };
+      return { label: 'Gagal', dotColor: 'bg-rose-500', textColor: 'text-rose-600' };
     case JOB_STATUS.CANCELLED:
-      return { label: 'Dibatalkan', dotColor: 'bg-gray-300', textColor: 'text-gray-400' };
+      return { label: 'Dibatalkan', dotColor: 'bg-slate-300', textColor: 'text-slate-400' };
     default:
-      return { label: status, dotColor: 'bg-gray-400', textColor: 'text-gray-500' };
+      return { label: status, dotColor: 'bg-slate-400', textColor: 'text-slate-500' };
   }
 }
 
@@ -89,8 +92,33 @@ export function PipelinePage() {
   const [classifiedReady, setClassifiedReady] = useState<JobListItemResponse[]>([]);
   const [startingBatch, setStartingBatch] = useState(false);
   const [listRefreshTrigger, setListRefreshTrigger] = useState<number>(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const [listWidth, setListWidth] = useState(360);
+  const [isResizing, setIsResizing] = useState(false);
 
   const listPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Drag to resize logic
+  const startResizing = useCallback(() => setIsResizing(true), []);
+  const stopResizing = useCallback(() => setIsResizing(false), []);
+  const resize = useCallback((mouseMoveEvent: MouseEvent) => {
+    if (isResizing) {
+      const newWidth = mouseMoveEvent.clientX - 240; // Approx sidebar width
+      if (newWidth >= 280 && newWidth <= 600) {
+        setListWidth(newWidth);
+      }
+    }
+  }, [isResizing]);
+
+  useEffect(() => {
+    window.addEventListener("mousemove", resize);
+    window.addEventListener("mouseup", stopResizing);
+    return () => {
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+    };
+  }, [resize, stopResizing]);
 
   // ── Fetch Job List ────────────────────────────────────────────
 
@@ -177,13 +205,14 @@ export function PipelinePage() {
 
   const processingCount = jobs.filter((j) => PROCESSING_STATUSES.has(j.status)).length;
   const completedCount = jobs.filter((j) => j.status === JOB_STATUS.READY_FOR_ANNOTATION).length;
+  const filteredJobs = jobs.filter((j) => (j.original_filename || '').toLowerCase().includes(searchQuery.toLowerCase()));
 
   // ── Render ────────────────────────────────────────────────────
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 flex flex-col overflow-hidden" style={{ cursor: isResizing ? 'col-resize' : 'default' }}>
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
+      <header className="bg-white border-b border-slate-200 px-6 py-4 flex-shrink-0 z-10 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -234,43 +263,58 @@ export function PipelinePage() {
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative bg-slate-50/50" style={{ userSelect: isResizing ? 'none' : 'auto' }}>
         {/* ──── Left: Job List ──── */}
-        <div className="w-80 min-w-[320px] bg-white border-r border-gray-200 flex flex-col">
+        <div 
+          className="bg-white flex flex-col flex-shrink-0 z-10 border-r border-slate-200 shadow-[2px_0_10px_rgba(0,0,0,0.02)]"
+          style={{ width: listWidth }}
+        >
           {/* Filter Bar */}
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex-shrink-0">
-              Jobs ({totalJobs})
-            </p>
-            <div className="flex items-center gap-2">
-              <Combobox
-                options={[
-                  { value: "ALL", label: "Semua" },
-                  { value: "QUEUED", label: "Antrian" },
-                  { value: "DETECTING", label: "Deteksi" },
-                  { value: "TRANSCRIBING", label: "ASR" },
-                  { value: "CROPPING", label: "Cropping" },
-                  { value: "READY_FOR_ANNOTATION", label: "Selesai" },
-                  { value: "FAILED", label: "Gagal" },
-                  { value: "CANCELLED", label: "Dibatalkan" }
-                ]}
-                value={statusFilter || "ALL"}
-                placeholder="Semua"
-                onChange={(v) => { setStatusFilter(v === 'ALL' ? '' : v); setPage(1); }}
-                className="h-8 text-xs w-[120px]"
-              />
-              <button
-                onClick={() => fetchJobs()}
-                className="p-1 rounded text-gray-400 hover:text-teal-600 hover:bg-gray-100 transition-colors"
-                title="Refresh"
-              >
-                <RefreshCw size={14} />
-              </button>
+          <div className="p-3 border-b border-slate-100 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">
+                Daftar Job ({totalJobs})
+              </p>
+              <div className="flex items-center gap-2">
+                <Combobox
+                  options={[
+                    { value: "ALL", label: "Semua" },
+                    { value: "QUEUED", label: "Antrian" },
+                    { value: "DETECTING", label: "Deteksi" },
+                    { value: "TRANSCRIBING", label: "ASR" },
+                    { value: "CROPPING", label: "Cropping" },
+                    { value: "READY_FOR_ANNOTATION", label: "Selesai" },
+                    { value: "FAILED", label: "Gagal" },
+                    { value: "CANCELLED", label: "Dibatalkan" }
+                  ]}
+                  value={statusFilter || "ALL"}
+                  placeholder="Semua"
+                  onChange={(v) => { setStatusFilter(v === 'ALL' ? '' : v); setPage(1); }}
+                  className="h-8 text-xs w-[120px]"
+                />
+                <button
+                  onClick={() => fetchJobs()}
+                  className="p-1.5 rounded-md text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                  title="Refresh"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              </div>
+            </div>
+            <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                    type="text"
+                    placeholder="Cari nama file..."
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                />
             </div>
           </div>
 
           {/* Job List */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto custom-scrollbar">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 size={20} className="text-teal-600 animate-spin" />
@@ -285,13 +329,13 @@ export function PipelinePage() {
               </div>
             ) : jobs.length === 0 ? (
               <div className="p-8 text-center">
-                <Video size={32} className="text-gray-300 mx-auto mb-3" />
-                <p className="text-sm font-medium text-gray-500">Belum ada video</p>
-                <p className="text-xs text-gray-400 mt-1">Lakukan klasifikasi video di halaman Klasifikasi untuk memulai pipeline</p>
+                <Video size={32} className="text-slate-300 mx-auto mb-3" />
+                <p className="text-sm font-medium text-slate-500">Belum ada video</p>
+                <p className="text-xs text-slate-400 mt-1">Lakukan klasifikasi video di halaman Klasifikasi untuk memulai pipeline</p>
               </div>
             ) : (
-              <div className="w-max min-w-full flex flex-col">
-                {jobs.map((job) => {
+              <div className="w-full flex flex-col">
+                {filteredJobs.map((job) => {
                   const sd = getStatusDisplay(job.status);
                   const isSelected = job.id === selectedJobId;
                   const isProcessing = PROCESSING_STATUSES.has(job.status);
@@ -299,43 +343,46 @@ export function PipelinePage() {
                     <button
                       key={job.id}
                       onClick={() => setSelectedJobId(job.id)}
-                      className={`block w-full text-left px-4 py-3.5 border-b border-gray-100 transition-all ${
+                      className={`block w-full text-left p-4 border-b border-slate-100 transition-all group ${
                         isSelected
-                          ? 'bg-teal-50 border-l-[3px] border-l-teal-500'
-                          : 'hover:bg-gray-50 border-l-[3px] border-l-transparent'
+                          ? 'bg-teal-50/60 relative'
+                          : 'hover:bg-slate-50'
                       }`}
                     >
+                      {isSelected && <div className="absolute left-0 top-0 bottom-0 w-1 bg-teal-500 rounded-r-full" />}
                       <div className="flex items-start gap-3">
-                        <div className="mt-1">
-                          <div className={`w-2.5 h-2.5 rounded-full ${sd.dotColor} flex-shrink-0 ${
-                            isProcessing ? 'animate-pulse' : ''
+                        <div className="mt-1 flex-shrink-0">
+                          <div className={`w-2.5 h-2.5 rounded-full ${sd.dotColor} shadow-sm ${
+                            isProcessing ? 'animate-pulse ring-2 ring-offset-1 ring-amber-200' : ''
                           }`} />
                         </div>
-                        <div className="flex-1">
-                          <p className={`text-sm font-medium whitespace-nowrap ${isSelected ? 'text-teal-800' : 'text-gray-800'}`} title={job.original_filename || `Job #${job.id.slice(0, 8)}`}>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm leading-snug line-clamp-2 ${isSelected ? 'font-bold text-teal-900' : 'font-semibold text-slate-700 group-hover:text-slate-900'}`} title={job.original_filename || `Job #${job.id.slice(0, 8)}`}>
                             {job.original_filename || `Job #${job.id.slice(0, 8)}`}
                           </p>
-                          <div className="flex items-center gap-2 mt-0.5 whitespace-nowrap">
-                            <span className={`text-[10px] font-medium ${sd.textColor}`}>{sd.label}</span>
-                            <span className="text-[10px] text-gray-300">•</span>
-                            <span className="text-[10px] text-gray-400 font-mono">#{job.id.slice(0, 8)}</span>
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            <span className={`text-[10px] font-bold tracking-wide uppercase ${sd.textColor}`}>{sd.label}</span>
+                            <span className="text-[10px] text-slate-300">•</span>
+                            <span className="text-[10px] font-mono text-slate-400">#{job.id.slice(0, 8)}</span>
                             {job.category && (
                               <>
-                                <span className="text-[10px] text-gray-300">•</span>
-                                <span className="text-[10px] text-gray-400">{job.category}</span>
+                                <span className="text-[10px] text-slate-300">•</span>
+                                <Badge className="text-[9px] px-1.5 py-0 bg-slate-100 text-slate-600 border border-slate-200">{job.category}</Badge>
                               </>
                             )}
                             {job.created_at && (
                               <>
-                                <span className="text-[10px] text-gray-300">•</span>
-                                <span className="text-[10px] text-gray-400">{formatRelativeTime(job.created_at)}</span>
+                                <span className="text-[10px] text-slate-300">•</span>
+                                <span className="text-[10px] text-slate-400">{formatRelativeTime(job.created_at)}</span>
                               </>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 mt-2 w-full max-w-xs">
-                            <Progress value={job.progress} className="flex-1 h-1.5" />
-                            <span className="text-[10px] font-mono text-gray-400">{job.progress}%</span>
-                          </div>
+                          {(isProcessing || job.progress > 0) && (
+                            <div className="flex items-center gap-3 mt-2.5">
+                              <Progress value={job.progress} className="flex-1 h-1.5" />
+                              <span className="text-[10px] font-mono font-medium text-slate-400">{job.progress}%</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </button>
@@ -373,23 +420,44 @@ export function PipelinePage() {
           )}
         </div>
 
+        {/* DRAG HANDLE */}
+        <div
+            className="w-1.5 bg-transparent hover:bg-teal-400 active:bg-teal-600 flex-shrink-0 cursor-col-resize z-20 transition-colors group relative flex items-center justify-center"
+            onMouseDown={startResizing}
+        >
+            <div className="w-[1px] h-12 bg-slate-200 group-hover:bg-transparent rounded-full" />
+        </div>
+
         {/* ──── Right: Job Detail Panel ──── */}
-        {selectedJobId ? (
-          <JobDetailPanel 
-              jobId={selectedJobId} 
-              listRefreshTrigger={listRefreshTrigger}
-              onJobChanged={() => {
-                fetchJobs(true);
-                fetchClassifiedReady();
-              }} 
-            />
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-              <Cog size={48} className="mb-4 text-gray-200" />
-              <p>Pilih job dari panel kiri untuk melihat detail</p>
-            </div>
-          )}
+        <div className="flex-1 overflow-hidden">
+          {selectedJobId ? (
+            <JobDetailPanel 
+                jobId={selectedJobId} 
+                listRefreshTrigger={listRefreshTrigger}
+                onJobChanged={() => {
+                  fetchJobs(true);
+                  fetchClassifiedReady();
+                }} 
+              />
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
+                <Cog size={48} className="mb-4 text-slate-200" />
+                <p>Pilih job dari panel kiri untuk melihat detail</p>
+              </div>
+            )}
+        </div>
       </div>
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}} />
     </div>
   );
 }

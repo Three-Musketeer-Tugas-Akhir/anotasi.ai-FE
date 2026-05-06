@@ -40,6 +40,7 @@ export interface JobListParams {
 
 export interface JobStatusDetailResponse {
   id: string;
+  original_filename?: string | null;
   status: string;
   current_stage: string | null;
   category: string | null;

@@ -45,6 +45,9 @@ import {
   X,
   Volume2,
   Layers,
+  ZoomIn,
+  ZoomOut,
+  Maximize,
 } from 'lucide-react';
 import { pipelineApi } from '../pipeline-api';
 import type {
@@ -279,7 +282,7 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({
-    detection: true, asr: true, cropping: true,
+    detection: false, asr: false, cropping: true,
   });
 
   // ── Stage Results State (cached, fetched once) ──────────────────
@@ -296,6 +299,98 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevStatusRef = useRef<string | null>(null);
+
+  // ── Arena Canvas State ──────────────────────────────────────────
+  const NODE_WIDTH = 600; // px — the fixed width of the node column
+  const [transform, setTransform] = useState({ x: 0, y: 50, scale: 1 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const arenaRef = useRef<HTMLDivElement>(null);
+
+  const lastCenteredJobIdRef = useRef<string | null>(null);
+
+  const centerArena = useCallback((containerWidth: number) => {
+    if (containerWidth > 0) {
+      setTransform({ x: (containerWidth / 2) - (NODE_WIDTH / 2), y: 40, scale: 1 });
+    }
+  }, []);
+
+  // Robust centering using ResizeObserver as the single source of truth.
+  // It provides guaranteed dimensions (unlike getBoundingClientRect() on mount)
+  // and fires immediately when observed and whenever size changes.
+  useEffect(() => {
+    const el = arenaRef.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver((entries) => {
+      if (!entries.length) return;
+      const width = entries[0].contentRect.width;
+      
+      // Center if we have a valid width and haven't centered THIS job yet
+      if (width > 0 && lastCenteredJobIdRef.current !== jobId) {
+        centerArena(width);
+        lastCenteredJobIdRef.current = jobId;
+      }
+    });
+
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [jobId, centerArena, loading]);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('.no-drag')) return;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - transform.x, y: e.clientY - transform.y });
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    setTransform(prev => ({
+      ...prev,
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    }));
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    setIsDragging(false);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('.no-drag-scroll')) return;
+    if (e.ctrlKey || e.metaKey) {
+      const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+      let newScale = transform.scale * zoomFactor;
+      newScale = Math.min(Math.max(0.3, newScale), 2.5);
+      setTransform(prev => ({ ...prev, scale: newScale }));
+    } else {
+      setTransform(prev => ({
+        ...prev,
+        x: prev.x - e.deltaX,
+        y: prev.y - e.deltaY
+      }));
+    }
+  };
+
+  useEffect(() => {
+    const el = arenaRef.current;
+    if (!el) return;
+    const preventZoom = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) e.preventDefault();
+    };
+    el.addEventListener('wheel', preventZoom, { passive: false });
+    return () => el.removeEventListener('wheel', preventZoom);
+  }, [loading]);
+
+  const handleZoomIn = () => setTransform(prev => ({ ...prev, scale: Math.min(prev.scale + 0.2, 2.5) }));
+  const handleZoomOut = () => setTransform(prev => ({ ...prev, scale: Math.max(prev.scale - 0.2, 0.3) }));
+  const handleReset = () => {
+    if (arenaRef.current) {
+      centerArena(arenaRef.current.getBoundingClientRect().width);
+    }
+  };
 
   // ── Fetch Job Detail ──────────────────────────────────────────
 
@@ -470,29 +565,57 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
   const isCompleted = job.status === JOB_STATUS.READY_FOR_ANNOTATION;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
-      {/* Source Video Header */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-slate-900 flex items-center justify-center flex-shrink-0">
-              <Video size={24} className="text-white" />
+    <div
+      ref={arenaRef}
+      className={`w-full h-full relative overflow-hidden bg-[#f1f5f9] ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+      onWheel={handleWheel}
+    >
+      {/* Figma-style Dot Grid Background */}
+      <div
+        className="absolute inset-[-10000px] pointer-events-none"
+        style={{
+          backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)',
+          backgroundSize: `${24 * transform.scale}px ${24 * transform.scale}px`,
+          backgroundPosition: `${transform.x}px ${transform.y}px`,
+          opacity: 0.6
+        }}
+      />
+
+      {/* Transform Container for Nodes */}
+      <div
+        className="absolute inset-0 origin-top-left flex flex-col items-start pointer-events-none"
+        style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}
+      >
+        <div className="w-[600px] flex flex-col items-center pb-32 pointer-events-auto">
+          {/* ROOT NODE: Source Video Header */}
+          <div className="no-drag w-full" onPointerDown={e => e.stopPropagation()}>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 relative overflow-hidden mb-2">
+        <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
+          <Video size={80} />
+        </div>
+
+        <div className="flex items-center justify-between relative z-10 gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center flex-shrink-0 shadow-md shadow-slate-900/20">
+              <Video size={18} className="text-white" />
             </div>
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Video Sumber</p>
-              <p className="text-base font-bold text-gray-900 mt-0.5">Job #{job.id.slice(0, 8)}</p>
-              <div className="flex gap-3 mt-1 flex-wrap">
-                <span className="text-xs text-gray-500">Dibuat: {formatDate(job.created_at)}</span>
-                {job.category && (
-                  <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
-                    {job.category}
-                  </Badge>
-                )}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <Badge className="text-[9px] bg-slate-100 text-slate-500 px-1.5 uppercase tracking-widest font-bold border-none hover:bg-slate-100">Sumber Video</Badge>
+                <span className="text-[10px] font-mono text-slate-400">#{job.id.slice(0, 8)}</span>
               </div>
+              <p className="text-sm font-bold text-slate-800 leading-snug truncate max-w-[320px]" title={job.original_filename || undefined}>{job.original_filename}</p>
+              <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1 mt-0.5">
+                <Clock size={10} /> {formatDate(job.created_at)}
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 z-20">
             <Combobox
               options={[
                 { value: "SIBI", label: "SIBI" },
@@ -501,7 +624,7 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
               value={job.category || ''}
               onChange={(value) => handleCategoryChange(value)}
               placeholder="Kategori..."
-              className="w-[130px] h-8 text-xs"
+              className="w-[130px] h-8 text-xs bg-white"
             />
 
             {job.status === JOB_STATUS.UPLOADED && (
@@ -543,7 +666,7 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                   <Button
                     variant="outline"
                     size="sm"
-                    className="border-red-300 text-red-600 hover:bg-red-50 h-8"
+                    className="border-rose-200 text-rose-600 hover:bg-rose-50 h-8"
                     onClick={handleCancel}
                     disabled={cancelling}
                   >
@@ -585,33 +708,37 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
           </div>
         )}
       </div>
+      </div>
 
       {/* ── Pipeline Stages ── */}
-      {stages.map((stage) => (
-        <div key={stage.name}>
-          <StageConnector />
-          <StageSection
-            stage={stage}
-            expanded={!!expandedStages[stage.name]}
-            onToggle={() => toggleStage(stage.name)}
-            jobId={jobId}
-            stage1={stage1}
-            stage2={stage2}
-            stage3={stage3}
-            stageLoading={!!stageLoading[stage.stageNumber]}
-            stageErrors={stageErrors}
-            onPreviewVideo={(url, title, subtitle) =>
-              setPreviewVideo({ url, title, subtitle })
-            }
-          />
+      {stages.map((stage, idx) => (
+        <div key={stage.name} className="w-full">
+          <StageConnector status={stage.status} isProcessing={isProcessing} />
+          <div className="no-drag w-full" onPointerDown={e => e.stopPropagation()}>
+            <StageSection
+              stage={stage}
+              expanded={!!expandedStages[stage.name]}
+              onToggle={() => toggleStage(stage.name)}
+              jobId={jobId}
+              stage1={stage1}
+              stage2={stage2}
+              stage3={stage3}
+              stageLoading={!!stageLoading[stage.stageNumber]}
+              stageErrors={stageErrors}
+              onPreviewVideo={(url, title, subtitle) =>
+                setPreviewVideo({ url, title, subtitle })
+              }
+            />
+          </div>
         </div>
       ))}
 
       {/* ── Completion Section ── */}
       {isCompleted && (
-        <>
-          <StageConnector />
-          <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-5">
+        <div className="w-full">
+          <StageConnector status="done" isProcessing={false} />
+          <div className="no-drag w-full" onPointerDown={e => e.stopPropagation()}>
+            <div className="bg-emerald-50 rounded-2xl border-2 border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.2)] p-6 relative">
             <div className="text-center">
               <CheckCircle2 size={32} className="text-emerald-600 mx-auto mb-2" />
               <p className="text-base font-bold text-emerald-800">Pipeline Selesai!</p>
@@ -671,8 +798,28 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
               )}
             </div>
           </div>
-        </>
+          </div>
+        </div>
       )}
+      </div>
+      </div>
+
+      {/* ── Floating Zoom Toolbar ── */}
+      <div className="no-drag absolute bottom-6 right-6 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-slate-200 flex items-center p-1.5 z-50" onPointerDown={e => e.stopPropagation()}>
+        <button onClick={handleZoomOut} className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" title="Zoom Out">
+          <ZoomOut size={18} />
+        </button>
+        <span className="text-xs font-bold text-slate-600 px-3 min-w-[60px] text-center select-none font-mono">
+          {Math.round(transform.scale * 100)}%
+        </span>
+        <button onClick={handleZoomIn} className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" title="Zoom In">
+          <ZoomIn size={18} />
+        </button>
+        <div className="w-px h-5 bg-slate-200 mx-1" />
+        <button onClick={handleReset} className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" title="Fit to Screen / Recenter">
+          <Maximize size={18} />
+        </button>
+      </div>
 
       {/* ── Video Preview Modal ── */}
       {previewVideo && (
@@ -690,14 +837,32 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
 
 // ── Sub-Components ──────────────────────────────────────────────────
 
-function StageConnector() {
+function StageConnector({ status, isProcessing }: { status: string; isProcessing: boolean }) {
+  if (status === 'done') {
+      return (
+          <div className="flex flex-col items-center h-10 my-1 justify-center relative">
+              <div className="w-1 h-full bg-emerald-400" />
+              <ChevronDown size={14} className="text-emerald-400 absolute -bottom-2 bg-[#f1f5f9]" />
+          </div>
+      );
+  }
+
+  if (status === 'processing' || isProcessing) {
+      return (
+          <div className="flex flex-col items-center h-10 my-1 justify-center relative w-full overflow-hidden">
+              <svg height="100%" width="4" className="absolute">
+                  <line x1="2" y1="0" x2="2" y2="40" stroke="#fbbf24" strokeWidth="4" strokeDasharray="8 8" className="animate-flow" />
+              </svg>
+              <ChevronDown size={14} className="text-amber-400 absolute -bottom-2 bg-[#f1f5f9]" />
+          </div>
+      );
+  }
+
   return (
-    <div className="flex justify-center py-1">
-      <div className="flex flex-col items-center">
-        <div className="w-0.5 h-4 bg-gray-300" />
-        <ArrowDown size={14} className="text-gray-400 -mt-1" />
+      <div className="flex flex-col items-center h-10 my-1 justify-center relative">
+          <div className="w-1 h-full bg-slate-300 border-dashed" style={{ borderLeft: '3px dashed #cbd5e1', background: 'transparent', width: '3px' }} />
+          <ChevronDown size={14} className="text-slate-300 absolute -bottom-2 bg-[#f1f5f9]" />
       </div>
-    </div>
   );
 }
 
@@ -724,72 +889,70 @@ function StageSection({
   stageErrors: Record<number, string>;
   onPreviewVideo: (url: string, title: string, subtitle?: string) => void;
 }) {
-  const sc = stageStatusConfig[stage.status];
+  const styles = {
+    done: { bg: 'bg-emerald-100 text-emerald-600', border: 'border-emerald-200 shadow-sm', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Selesai' },
+    processing: { bg: 'bg-amber-100 text-amber-600', border: 'border-amber-300 shadow-[0_0_20px_rgba(251,191,36,0.15)] ring-2 ring-amber-100 ring-offset-2', badge: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Berjalan' },
+    pending: { bg: 'bg-slate-50 text-slate-400', border: 'border-slate-200 border-dashed opacity-80', badge: 'bg-slate-100 text-slate-500 border-slate-200', label: 'Menunggu' },
+    failed: { bg: 'bg-red-100 text-red-600', border: 'border-red-200 shadow-sm', badge: 'bg-red-50 text-red-700 border-red-200', label: 'Gagal' },
+    cancelled: { bg: 'bg-gray-100 text-gray-500', border: 'border-gray-200 border-dashed', badge: 'bg-gray-50 text-gray-600 border-gray-200', label: 'Dibatalkan' },
+  }[stage.status] || { bg: 'bg-slate-100 text-slate-400', border: 'border-slate-200', badge: 'bg-slate-100 text-slate-500', label: 'Menunggu' };
 
   return (
-    <div className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all ${
-      stage.status === 'failed' ? 'border-red-200' :
-      stage.status === 'processing' ? 'border-amber-200' :
-      'border-gray-200'
-    }`}>
+    <div className={`bg-white rounded-2xl border-2 transition-all relative overflow-hidden group ${styles.border}`}>
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-gray-50/50 transition-colors"
+        className="w-full px-6 py-5 flex items-center gap-4 text-left hover:bg-slate-50/50 transition-colors focus:outline-none"
       >
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-          stage.status === 'done' ? 'bg-emerald-100 text-emerald-600' :
-          stage.status === 'processing' ? 'bg-amber-100 text-amber-600' :
-          stage.status === 'failed' ? 'bg-red-100 text-red-600' :
-          'bg-gray-100 text-gray-400'
-        }`}>
-          {stage.icon}
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${styles.bg}`}>
+          {stage.status === 'processing' ? <Loader2 size={24} className="animate-spin" /> : stage.icon}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-bold text-gray-800">{stage.label}</p>
-            <Badge variant="outline" className={`text-[10px] ${sc.color}`}>
-              {sc.icon} <span className="ml-1">{sc.label}</span>
+          <div className="flex items-center gap-3">
+            <h3 className={`text-[15px] font-bold ${stage.status === 'pending' ? 'text-slate-500' : 'text-slate-800'}`}>{stage.label}</h3>
+            <Badge variant="outline" className={`text-[10px] py-0.5 px-2 border ${styles.badge}`}>
+              {stage.status === 'done' && <CheckCircle2 size={10} className="mr-1 inline-block" />}
+              {styles.label}
             </Badge>
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">{stage.subtitle}</p>
+          <p className="text-xs text-slate-500 mt-1">{stage.subtitle}</p>
         </div>
-        <div className="text-gray-400 flex-shrink-0">
-          {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+        <div className="text-slate-400 p-2 bg-slate-50 rounded-full group-hover:bg-slate-100 transition-colors flex-shrink-0">
+          <ChevronDown size={18} className={`transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
         </div>
       </button>
 
       {expanded && (
-        <div className="px-5 pb-4 border-t border-gray-100">
+        <div className="px-6 pb-6 pt-2 border-t border-slate-100/50 bg-slate-50/30">
           {stage.status === 'pending' && (
-            <div className="flex items-center justify-center py-6 text-gray-400">
-              <Clock size={16} className="mr-2" />
-              <span className="text-sm">Menunggu tahap sebelumnya selesai...</span>
+            <div className="flex flex-col items-center justify-center py-6 text-slate-400">
+              <Clock size={20} className="mb-2 opacity-50" />
+              <span className="text-sm font-medium">Menunggu tahap sebelumnya selesai...</span>
             </div>
           )}
           {stage.status === 'processing' && (
-            <div className="flex items-center justify-center py-6 text-amber-600">
-              <Loader2 size={16} className="mr-2 animate-spin" />
-              <span className="text-sm">Sedang memproses...</span>
+            <div className="flex flex-col items-center justify-center py-6 text-amber-600">
+              <Loader2 size={24} className="mb-2 animate-spin" />
+              <span className="text-sm font-medium">Sedang memproses...</span>
             </div>
           )}
           {stage.status === 'failed' && (
-            <div className="flex items-center justify-center py-4 text-red-600">
-              <AlertTriangle size={16} className="mr-2" />
-              <span className="text-sm">Tahap ini gagal</span>
+            <div className="flex flex-col items-center justify-center py-6 text-red-600">
+              <AlertTriangle size={20} className="mb-2" />
+              <span className="text-sm font-medium">Tahap ini gagal</span>
             </div>
           )}
           {stage.status === 'cancelled' && (
-            <div className="flex items-center justify-center py-4 text-gray-400">
-              <Ban size={16} className="mr-2" />
-              <span className="text-sm">Dibatalkan</span>
+            <div className="flex flex-col items-center justify-center py-6 text-gray-400">
+              <Ban size={20} className="mb-2" />
+              <span className="text-sm font-medium">Dibatalkan</span>
             </div>
           )}
 
           {/* ── Stage Results (when done) ── */}
           {stage.status === 'done' && stageLoading && (
-            <div className="flex items-center justify-center py-6 text-teal-600">
-              <Loader2 size={16} className="mr-2 animate-spin" />
-              <span className="text-sm">Memuat hasil...</span>
+            <div className="flex flex-col items-center justify-center py-6 text-teal-600">
+              <Loader2 size={20} className="mb-2 animate-spin" />
+              <span className="text-sm font-medium">Memuat hasil...</span>
             </div>
           )}
 
@@ -1081,7 +1244,7 @@ function Stage3Content({
       </div>
 
       {/* 1. Horizontal Scroll Area for Segments with Sticky effect */}
-      <div className="flex overflow-x-auto gap-3 pb-2 snap-x relative">
+      <div className="flex overflow-x-auto gap-3 pb-2 snap-x relative no-drag-scroll">
         {segments.map((segment, idx) => {
           const isSelected = idx === selectedSegIdx;
           return (
@@ -1117,7 +1280,7 @@ function Stage3Content({
             <Film size={14} className="text-indigo-500" />
             Video Cropping - Segmen #{selectedSegIdx + 1}
           </h4>
-          <div className="flex overflow-x-auto gap-3 pb-2 snap-x">
+          <div className="flex overflow-x-auto gap-3 pb-2 snap-x no-drag-scroll">
             {selectedSegment.utterances.length === 0 ? (
               <p className="text-xs text-gray-400 italic">Tidak ada data crop di segmen ini.</p>
             ) : (

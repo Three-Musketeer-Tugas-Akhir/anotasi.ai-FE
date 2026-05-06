@@ -113,17 +113,17 @@ export function TimelineEditor({
     outerRef.current.scrollLeft = midPx - outerRef.current.clientWidth / 2;
   }, [zoom, activeUtterance, duration, innerWidth]);
 
-  // ── Compute Window [N-1.start, N+1.end] ───────────────────────
+  // ── Compute Window [N.start, N+1.end] — only show active + next ──
   const { windowStart, windowEnd, windowDuration } = useMemo(() => {
     if (!allUtterances || allUtterances.length === 0 || !activeUtterance) {
       return { windowStart: 0, windowEnd: duration, windowDuration: duration };
     }
     const idx = activeUtterance.index;
-    const prev = allUtterances[idx - 1];
     const next = allUtterances[idx + 1];
     
-    const wStart = prev ? prev.start : activeUtterance.start;
-    const wEnd = next ? next.end : activeUtterance.end;
+    // Window starts at the active utterance, extends to end of next utterance
+    const wStart = activeUtterance.start;
+    const wEnd = next ? (next.global_end ?? next.end) : activeUtterance.end;
     const wDur = Math.max(0.1, wEnd - wStart);
     
     return { windowStart: wStart, windowEnd: wEnd, windowDuration: wDur };
@@ -256,13 +256,13 @@ export function TimelineEditor({
     if (!dragging) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!outerRef.current || duration <= 0 || innerWidth <= 0) return;
+      if (!outerRef.current || windowDuration <= 0 || innerWidth <= 0) return;
       const rect = outerRef.current.getBoundingClientRect();
       const scrollLeft = outerRef.current.scrollLeft;
 
       const startInnerX = dragStartClientX.current - rect.left + scrollLeft;
       const curInnerX = e.clientX - rect.left + scrollLeft;
-      const deltaTime = ((curInnerX - startInnerX) / innerWidth) * duration;
+      const deltaTime = ((curInnerX - startInnerX) / innerWidth) * windowDuration;
 
       const origStart = dragStartValues.current.start;
       const origEnd = dragStartValues.current.end;
@@ -290,7 +290,7 @@ export function TimelineEditor({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragging, duration, innerWidth, onTrimChange]);
+  }, [dragging, windowDuration, innerWidth, onTrimChange]);
 
   // ── Computed positions (in px on inner strip) ─────────────────
 
@@ -403,13 +403,16 @@ export function TimelineEditor({
           <div className="absolute top-0 bottom-0 bg-black/50 pointer-events-none"
             style={{ left: `${regionRightPx}px`, right: 0 }} />
 
-          {/* Background regions for other utterances */}
+          {/* Background regions for other utterances (only N+1 visible) */}
           {allUtterances && activeUtterance && allUtterances.map((u, idx) => {
-            if (u.utterance_index === activeUtterance.index) return null;
-            if (u.end <= windowStart || u.start >= windowEnd) return null;
+            if (idx === activeUtterance.index) return null;
+            // Use global timestamps for positioning
+            const uGlobalStart = u.global_start ?? u.start;
+            const uGlobalEnd = u.global_end ?? u.end;
+            if (uGlobalEnd <= windowStart || uGlobalStart >= windowEnd) return null;
 
-            const left = timeToInnerPx(u.start);
-            const width = timeToInnerPx(u.end) - left;
+            const left = timeToInnerPx(uGlobalStart);
+            const width = timeToInnerPx(uGlobalEnd) - left;
             const isOk = u.status === 'OK';
 
             return (

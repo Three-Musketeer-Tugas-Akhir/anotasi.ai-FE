@@ -2,10 +2,9 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/core/api/axios-client';
-import { ArrowLeft, Film, Music, FileText, MessageSquareText } from 'lucide-react';
+import { ArrowLeft, Film, Music, FileText, MessageSquareText, Lock, CheckCircle2 } from 'lucide-react';
 
 interface ExplorerUtterance {
   utterance_index: number;
@@ -54,7 +53,7 @@ export function KalimatDetailPage({ jobId, segmentId, kalimatIndex }: KalimatDet
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex h-screen items-center justify-center bg-gray-50/50">
+      <div className="flex-1 flex h-screen items-center justify-center bg-slate-100">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div>
       </div>
     );
@@ -62,140 +61,155 @@ export function KalimatDetailPage({ jobId, segmentId, kalimatIndex }: KalimatDet
 
   if (error || !data) {
     return (
-      <div className="flex-1 flex h-screen flex-col items-center justify-center text-red-500 bg-gray-50/50">
+      <div className="flex-1 flex h-screen flex-col items-center justify-center text-red-500 bg-slate-100">
         <p>Gagal memuat detail kalimat.</p>
         <Button variant="outline" onClick={() => router.back()} className="mt-4">Kembali</Button>
       </div>
     );
   }
 
-  const segment = data.segments.find(s => s.segment_id === segmentId);
-  const utterance = segment?.utterances.find(u => u.utterance_index === kalimatIndex);
+  const segment = data.segments.find((s) => s.segment_id === segmentId);
+  const utterance = segment?.utterances.find((u) => u.utterance_index === kalimatIndex);
 
   if (!segment || !utterance) {
     return (
-      <div className="flex-1 flex h-screen flex-col items-center justify-center text-gray-500 bg-gray-50/50">
+      <div className="flex-1 flex h-screen flex-col items-center justify-center text-slate-500 bg-slate-100">
         <p>Data Kalimat tidak ditemukan.</p>
         <Button variant="outline" onClick={() => router.back()} className="mt-4">Kembali</Button>
       </div>
     );
   }
 
+  const isApproved = utterance.status === 'OK';
+
   return (
-    <div className="min-h-screen bg-gray-50/50 p-6 md:p-12">
-      <div className="max-w-6xl mx-auto space-y-6">
-        
-        {/* Header */}
-        <div className="flex items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <Button variant="ghost" size="icon" onClick={() => router.back()} className="h-10 w-10 shrink-0 hover:bg-gray-100">
+    <div className="min-h-screen bg-slate-100 p-4 md:p-8 overflow-auto">
+      <div className="max-w-6xl mx-auto w-full space-y-6">
+
+        {/* ── Header Card ── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-6 flex flex-col md:flex-row items-start md:items-center gap-4">
+          <button
+            onClick={() => router.back()}
+            className="p-2 border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-colors flex-shrink-0"
+          >
             <ArrowLeft size={20} />
-          </Button>
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900">
-              Detail Kalimat {kalimatIndex}
-            </h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              File: <span className="font-medium text-gray-700">{data.original_filename}</span> • Segmen {segment.segment_index} • Waktu: {utterance.start.toFixed(1)}s - {utterance.end.toFixed(1)}s
+          </button>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 mb-1 flex-wrap">
+              <h1 className="text-xl md:text-2xl font-black text-slate-900">
+                Detail Kalimat {kalimatIndex}
+              </h1>
+              {isApproved && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                  <Lock size={11} /> Approved
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-slate-500 flex items-center gap-2 flex-wrap">
+              <span className="font-medium text-slate-700 truncate max-w-sm">{data.original_filename}</span>
+              <span className="text-slate-300">·</span>
+              <span>Segmen {segment.segment_index}</span>
+              <span className="text-slate-300">·</span>
+              <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 text-xs">
+                {utterance.start.toFixed(1)}s – {utterance.end.toFixed(1)}s
+              </span>
             </p>
           </div>
         </div>
 
-        {/* Content Grid */}
+        {/* ── Workspace Grid ── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          
-          {/* Left Column: Media (Video & Audio) */}
-          <div className="lg:col-span-5 flex flex-col gap-6">
-            <Card className="shadow-sm border-teal-100">
-              <CardContent className="p-4 flex flex-col gap-3">
-                <div className="flex items-center gap-2 font-semibold text-teal-800 text-sm">
-                  <Film size={18} /> Video Crop
-                </div>
-                <div className="bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center shadow-inner">
-                  {utterance.cropped_video_url ? (
-                    <video src={utterance.cropped_video_url} controls className="w-full h-full object-contain" />
-                  ) : (
-                    <span className="text-sm text-gray-500">Video belum tersedia</span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
 
-            <Card className="shadow-sm border-teal-100">
-              <CardContent className="p-4 flex flex-col gap-3">
-                <div className="flex items-center gap-2 font-semibold text-teal-800 text-sm">
-                  <Music size={18} /> Audio WAV
-                </div>
-                <div className="bg-gray-100 rounded-lg p-6 flex flex-col items-center justify-center border border-gray-200">
-                  {(() => {
-                    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-                    const proxiedAudioUrl = utterance.audio_url && token
-                      ? `/proxy-segment?url=${encodeURIComponent(utterance.audio_url)}&token=${token}#t=${utterance.start},${utterance.end}`
-                      : null;
-                      
-                    return proxiedAudioUrl ? (
-                      <audio src={proxiedAudioUrl} controls className="w-full" />
-                    ) : (
-                      <span className="text-sm text-gray-500">Audio belum tersedia</span>
-                    );
-                  })()}
-                </div>
-              </CardContent>
-            </Card>
+          {/* Left: Media (sticky) */}
+          <div className="lg:col-span-5 flex flex-col gap-5 lg:sticky lg:top-6 self-start">
+
+            {/* Video */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
+                <Film size={16} className="text-teal-600" />
+                <span className="text-sm font-bold text-slate-700">Video Segmen</span>
+              </div>
+              <div className="bg-black aspect-video flex items-center justify-center">
+                {utterance.cropped_video_url ? (
+                  <video src={utterance.cropped_video_url} controls className="w-full h-full object-contain" />
+                ) : (
+                  <span className="text-sm text-slate-500">Video belum tersedia</span>
+                )}
+              </div>
+            </div>
+
+            {/* Audio */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
+                <Music size={16} className="text-teal-600" />
+                <span className="text-sm font-bold text-slate-700">Audio Ekstrak</span>
+              </div>
+              <div className="p-5 bg-slate-50/50 flex items-center justify-center">
+                {utterance.audio_url ? (
+                  <audio src={utterance.audio_url} controls className="w-full" />
+                ) : (
+                  <span className="text-sm text-slate-500">Audio belum tersedia</span>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Right Column: Text Data (2x2 Grid) */}
-          <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* Transkripsi GT */}
-            <Card className="shadow-sm border-teal-100 flex flex-col">
-              <CardContent className="p-5 flex flex-col gap-3 flex-1">
-                <div className="flex items-center gap-2 font-semibold text-teal-800 text-sm">
-                  <FileText size={18} /> Transkripsi (GT)
-                </div>
-                <div className="flex-1 bg-white border border-gray-200 rounded-lg p-5 text-gray-800 text-base leading-relaxed whitespace-pre-wrap shadow-inner overflow-y-auto">
-                  {utterance.gt_text || 'Tidak ada data transkripsi.'}
-                </div>
-              </CardContent>
-            </Card>
+          {/* Right: Text Data */}
+          <div className="lg:col-span-7 flex flex-col gap-5">
 
-            {/* Transkripsi Normalized */}
-            <Card className="shadow-sm border-green-100 flex flex-col">
-              <CardContent className="p-5 flex flex-col gap-3 flex-1">
-                <div className="flex items-center gap-2 font-semibold text-green-800 text-sm">
-                  <FileText size={18} /> Transkripsi Normal
+            {/* Transkripsi Block */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
+                <FileText size={17} className="text-slate-400" />
+                <h3 className="font-bold text-slate-800">Data Transkripsi</h3>
+              </div>
+              <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+                <div className="flex-1 p-6">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 block">
+                    Ground Truth Asli
+                  </label>
+                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-slate-800 text-sm leading-relaxed min-h-[120px] whitespace-pre-wrap">
+                    {utterance.gt_text || 'Tidak ada data transkripsi.'}
+                  </div>
                 </div>
-                <div className="flex-1 bg-green-50/50 border border-green-200 rounded-lg p-5 text-green-900 text-base leading-relaxed whitespace-pre-wrap shadow-inner overflow-y-auto">
-                  {utterance.norm_transcript || 'Belum dinormalisasi.'}
+                <div className="flex-1 p-6 bg-emerald-50/20">
+                  <label className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-3 block">
+                    Hasil Normalisasi
+                  </label>
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-emerald-900 font-medium text-sm leading-relaxed min-h-[120px] whitespace-pre-wrap">
+                    {utterance.norm_transcript || 'Belum dinormalisasi.'}
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            {/* Glosa Asli */}
-            <Card className="shadow-sm border-teal-200 bg-teal-50/20 flex flex-col">
-              <CardContent className="p-5 flex flex-col gap-3 flex-1">
-                <div className="flex items-center gap-2 font-semibold text-teal-900 text-sm">
-                  <MessageSquareText size={18} /> Glosa Asli
+            {/* Glosa Block */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
+                <MessageSquareText size={17} className="text-slate-400" />
+                <h3 className="font-bold text-slate-800">Data Glosa</h3>
+              </div>
+              <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+                <div className="flex-1 p-6">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 block">
+                    Glosa Asli
+                  </label>
+                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-slate-800 text-sm leading-relaxed min-h-[120px] whitespace-pre-wrap">
+                    {utterance.glosa_text || 'Tidak ada data glosa.'}
+                  </div>
                 </div>
-                <div className="flex-1 bg-teal-50 border border-teal-200 rounded-lg p-5 text-teal-900 text-base font-medium leading-relaxed whitespace-pre-wrap shadow-inner overflow-y-auto">
-                  {utterance.glosa_text || 'Tidak ada data glosa.'}
+                <div className="flex-1 p-6 bg-teal-50/20">
+                  <label className="text-[10px] font-bold text-teal-600 uppercase tracking-widest mb-3 block">
+                    Hasil Normalisasi
+                  </label>
+                  <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 text-teal-900 font-medium text-sm leading-relaxed min-h-[120px] whitespace-pre-wrap">
+                    {utterance.norm_glosa || 'Belum dinormalisasi.'}
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Glosa Normalized */}
-            <Card className="shadow-sm border-emerald-200 bg-emerald-50/20 flex flex-col">
-              <CardContent className="p-5 flex flex-col gap-3 flex-1">
-                <div className="flex items-center gap-2 font-semibold text-emerald-900 text-sm">
-                  <MessageSquareText size={18} /> Glosa Normal
-                </div>
-                <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-lg p-5 text-emerald-900 text-base font-medium leading-relaxed whitespace-pre-wrap shadow-inner overflow-y-auto">
-                  {utterance.norm_glosa || 'Belum dinormalisasi.'}
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
           </div>
-
         </div>
       </div>
     </div>

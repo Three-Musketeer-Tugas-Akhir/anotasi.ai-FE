@@ -12,17 +12,23 @@ export interface TranscriptUtterance {
   end: number;
   confidence: number;
   segment_id?: string;
+  video_path?: string;
 }
 
 export interface UtteranceCorrection {
   utterance_index: number;
   text: string;
-  start: number;
-  end: number;
+  start: number;           // Local timestamp (relative to segment video)
+  end: number;             // Local timestamp (relative to segment video)
   cropped_video_path?: string;
   status?: string;
   segment_id?: string;
   confidence?: number;
+  // ── Virtual Continuous Timeline (FE-only, never sent to API) ──
+  global_start?: number;   // start + segment_offset
+  global_end?: number;     // end + segment_offset
+  segment_offset?: number; // Cumulative duration of all previous segments
+  segment_video_url?: string; // Video URL for the segment this utterance belongs to
 }
 
 // ── Queue ───────────────────────────────────────────────────────────

@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +14,7 @@ import {
   ChevronDown,
   ArrowLeft,
   Lock,
+  Download,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/core/api/axios-client';
@@ -54,7 +54,7 @@ interface DatasetExplorerProps {
   onBack: () => void;
 }
 
-// ── Components ─────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────
 
 export function DatasetExplorer({ jobId, onBack }: DatasetExplorerProps) {
   const router = useRouter();
@@ -86,7 +86,7 @@ export function DatasetExplorer({ jobId, onBack }: DatasetExplorerProps) {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center h-full">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div>
       </div>
     );
@@ -94,7 +94,7 @@ export function DatasetExplorer({ jobId, onBack }: DatasetExplorerProps) {
 
   if (error || !data) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-red-500">
+      <div className="flex-1 flex flex-col items-center justify-center text-red-500 h-full">
         <p>Gagal memuat dataset explorer.</p>
         <Button variant="outline" onClick={onBack} className="mt-4">Kembali</Button>
       </div>
@@ -105,191 +105,189 @@ export function DatasetExplorer({ jobId, onBack }: DatasetExplorerProps) {
     setExpandedGlobalIdx(expandedGlobalIdx === idx ? null : idx);
   };
 
+  const handleDownloadZip = () => {
+    const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/pipeline/jobs/${jobId}/dataset/download`;
+    const token = localStorage.getItem('token');
+    fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
+      .then((res) => res.blob())
+      .then((blob) => {
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `${data.original_filename}_dataset.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      })
+      .catch((err) => {
+        console.error('Failed to download', err);
+        alert('Failed to download ZIP');
+      });
+  };
+
   return (
-    <div className="flex flex-col h-full bg-gray-50/50 p-6 overflow-y-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={onBack} className="h-8 w-8">
-          <ArrowLeft size={18} />
-        </Button>
-        <div className="flex-1 flex flex-wrap gap-4 items-center justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <FolderOpen size={20} className="text-teal-600" />
-              Dataset Explorer: {data.original_filename}
-            </h2>
-            <p className="text-xs text-gray-500 mt-1">ID: {data.job_id} • {flatUtterances.length} Kalimat</p>
-          </div>
-          <Button 
-            size="sm" 
-            variant="secondary" 
-            className="text-xs px-4 bg-teal-50 text-teal-700 hover:bg-teal-100 border-teal-200"
-            disabled={flatUtterances.length === 0}
-            onClick={() => {
-              const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/pipeline/jobs/${jobId}/dataset/download`;
-              const token = localStorage.getItem('token');
-              // Create an invisible iframe/link to trigger download with token in headers if possible, 
-              // but since standard browser download doesn't support Auth header, we might need to use a temporary token
-              // or open in a new tab if cookie-based. Assuming we can just open it or fetch it.
-              // For simplicity, we can fetch it as blob.
-              fetch(url, {
-                headers: {
-                  'Authorization': `Bearer ${token}`
-                }
-              }).then(res => res.blob()).then(blob => {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${data.original_filename}_dataset.zip`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-              }).catch(err => {
-                console.error("Failed to download", err);
-                alert("Failed to download ZIP");
-              });
-            }}
+    <div className="flex flex-col h-full bg-slate-50/50 overflow-y-auto p-6 md:p-8">
+
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+        <div className="flex items-start gap-3">
+          <button
+            onClick={onBack}
+            className="mt-0.5 p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-200 rounded-lg transition-colors flex-shrink-0"
           >
-            Download ZIP
-          </Button>
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+              <FolderOpen size={20} className="text-teal-600 flex-shrink-0" />
+              Dataset Explorer
+            </h2>
+            <p className="text-sm text-slate-500 mt-0.5 line-clamp-1">{data.original_filename}</p>
+            <p className="text-xs text-slate-400 mt-0.5 font-mono">ID: {data.job_id} · {flatUtterances.length} Kalimat</p>
+          </div>
         </div>
+        <button
+          onClick={handleDownloadZip}
+          disabled={flatUtterances.length === 0}
+          className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:opacity-50 shadow-sm transition-colors flex-shrink-0"
+        >
+          <Download size={15} className="mr-2" /> Download ZIP
+        </button>
       </div>
 
-      {/* Flat List of Utterances */}
-      <div className="space-y-3">
+      {/* ── Accordion List ── */}
+      <div className="space-y-3 max-w-5xl">
         {flatUtterances.length === 0 ? (
-          <div className="p-12 text-center border rounded-xl bg-white border-gray-200">
-            <p className="text-sm text-gray-500">Tidak ada kalimat dalam dataset ini.</p>
+          <div className="p-16 text-center bg-white border border-slate-200 rounded-xl shadow-sm">
+            <p className="text-sm font-semibold text-slate-500">Tidak ada kalimat dalam dataset ini.</p>
           </div>
         ) : (
-          flatUtterances.map((utt) => (
-            <div key={`${utt.segment_id}-${utt.utterance_index}`} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm hover:border-teal-200 transition-colors">
-              {/* Utterance Header */}
-              <div 
-                className="flex items-center justify-between p-4 cursor-pointer hover:bg-teal-50/30"
-                onClick={() => toggleUtterance(utt.global_index)}
+          flatUtterances.map((utt) => {
+            const isExpanded = expandedGlobalIdx === utt.global_index;
+            return (
+              <div
+                key={`${utt.segment_id}-${utt.utterance_index}`}
+                className={`bg-white rounded-xl overflow-hidden transition-all duration-200 ${
+                  isExpanded
+                    ? 'border border-teal-300 shadow-md ring-1 ring-teal-500/10'
+                    : 'border border-slate-200 shadow-sm hover:border-slate-300'
+                }`}
               >
-                <div className="flex items-center gap-3">
-                  {expandedGlobalIdx === utt.global_index ? <ChevronDown size={18} className="text-teal-600" /> : <ChevronRight size={18} className="text-gray-400" />}
-                  <span className="text-sm font-semibold text-gray-800">Kalimat {utt.global_index}</span>
+                {/* Row Header */}
+                <div
+                  className={`flex items-center justify-between p-4 cursor-pointer select-none ${isExpanded ? 'bg-teal-50/60 border-b border-teal-100' : 'hover:bg-slate-50/80'}`}
+                  onClick={() => toggleUtterance(utt.global_index)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-1 rounded-md transition-colors ${isExpanded ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-400'}`}>
+                      {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                    </div>
+                    <span className={`text-sm font-bold ${isExpanded ? 'text-teal-900' : 'text-slate-700'}`}>
+                      Kalimat {utt.global_index}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                      {utt.start.toFixed(1)}s – {utt.end.toFixed(1)}s
+                    </span>
+                    {utt.status === 'OK' && (
+                      <Badge variant="outline" className="text-[10px] bg-teal-50 text-teal-700 border-teal-200 py-0.5">
+                        <Lock size={9} className="mr-1" /> OK
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-400 font-mono bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
-                    {utt.start.toFixed(1)}s - {utt.end.toFixed(1)}s
-                  </span>
-                  {utt.status === 'OK' && (
-                    <Badge variant="outline" className="text-[10px] bg-teal-50 text-teal-700 border-teal-200">
-                      <Lock size={10} className="mr-1" /> OK
-                    </Badge>
-                  )}
-                </div>
-              </div>
 
-              {/* Utterance Body (Bento Cards - 2 Columns) */}
-              {expandedGlobalIdx === utt.global_index && (
-                <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3 bg-teal-50/10 border-t border-teal-100/50">
-                  
-                  {/* Kiri: Video & WAV */}
-                  <div className="flex flex-col gap-3">
-                    {/* Video Card */}
-                    <Card className="shadow-none border-teal-100/50">
-                      <CardContent className="p-2.5 flex flex-col gap-2">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
-                          <Film size={14} /> Video Crop
+                {/* Expanded: Side-by-Side Layout */}
+                {isExpanded && (
+                  <div className="p-5 flex flex-col lg:flex-row gap-5 bg-white">
+
+                    {/* Left: Media Column */}
+                    <div className="w-full lg:w-[40%] flex flex-col gap-4 flex-shrink-0">
+                      {/* Video */}
+                      <div className="rounded-xl border border-slate-200 overflow-hidden">
+                        <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
+                          <Film size={13} className="text-slate-500" />
+                          <span className="text-xs font-semibold text-slate-700">Video Crop</span>
                         </div>
-                        <div className="bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center border border-gray-800">
+                        <div className="bg-black aspect-video flex items-center justify-center">
                           {utt.cropped_video_url ? (
                             <video src={utt.cropped_video_url} controls className="w-full h-full object-contain" />
                           ) : (
-                            <span className="text-xs text-gray-500">Video belum dipotong</span>
+                            <span className="text-xs text-slate-500">Video belum dipotong</span>
                           )}
                         </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* WAV Card */}
-                    <Card className="shadow-none border-teal-100/50">
-                      <CardContent className="p-2.5 flex flex-col gap-2">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
-                          <Music size={14} /> Audio WAV
+                      </div>
+                      {/* Audio */}
+                      <div className="rounded-xl border border-slate-200 overflow-hidden">
+                        <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
+                          <Music size={13} className="text-slate-500" />
+                          <span className="text-xs font-semibold text-slate-700">Audio WAV</span>
                         </div>
-                        <div className="bg-gray-100 rounded-lg p-2.5 flex flex-col items-center justify-center">
+                        <div className="p-4 bg-slate-50/50 flex items-center justify-center">
                           {utt.audio_url ? (
-                            <audio src={utt.audio_url} controls className="w-full h-8" />
+                            <audio src={utt.audio_url} controls className="w-full h-9" />
                           ) : (
-                            <span className="text-xs text-gray-500">Audio belum tersedia</span>
+                            <span className="text-xs text-slate-500">Audio belum tersedia</span>
                           )}
                         </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {/* Kanan: Transkripsi & Glosa */}
-                  <div className="flex flex-col gap-3">
-                    <div className="grid grid-cols-2 gap-3 flex-1">
-                      {/* Transcription Card */}
-                      <Card className="shadow-none border-teal-100/50 flex-1 flex flex-col">
-                        <CardContent className="p-2.5 flex flex-col gap-2 flex-1">
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
-                            <FileText size={14} /> Transkripsi (GT)
-                          </div>
-                          <div className="flex-1 bg-gray-50 border border-gray-100 rounded-lg p-3 text-sm text-gray-700 line-clamp-4">
-                            {utt.gt_text || '-'}
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Normalized Transcription Card */}
-                      <Card className="shadow-none border-teal-100/50 flex-1 flex flex-col">
-                        <CardContent className="p-2.5 flex flex-col gap-2 flex-1">
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
-                            <FileText size={14} /> Transkripsi Normal
-                          </div>
-                          <div className="flex-1 bg-green-50/50 border border-green-100 rounded-lg p-3 text-sm text-green-900 line-clamp-4">
-                            {utt.norm_transcript || '-'}
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Glosa Card */}
-                      <Card className="shadow-none border-teal-100/50 flex-1 flex flex-col">
-                        <CardContent className="p-2.5 flex flex-col gap-2 flex-1">
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
-                            <MessageSquareText size={14} /> Glosa Asli
-                          </div>
-                          <div className="flex-1 bg-teal-50/50 border border-teal-100 rounded-lg p-3 text-sm text-teal-900 font-medium line-clamp-4">
-                            {utt.glosa_text || '-'}
-                          </div>
-                        </CardContent>
-                      </Card>
-                      
-                      {/* Normalized Glosa Card */}
-                      <Card className="shadow-none border-teal-100/50 flex-1 flex flex-col">
-                        <CardContent className="p-2.5 flex flex-col gap-2 flex-1">
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
-                            <MessageSquareText size={14} /> Glosa Normal
-                          </div>
-                          <div className="flex-1 bg-emerald-50/50 border border-emerald-100 rounded-lg p-3 text-sm text-emerald-900 font-medium line-clamp-4">
-                            {utt.norm_glosa || '-'}
-                          </div>
-                        </CardContent>
-                      </Card>
+                      </div>
                     </div>
 
-                    {/* Lihat Detail Button */}
-                    <Button 
-                      variant="outline" 
-                      className="w-full text-teal-700 border-teal-200 hover:bg-teal-50 shadow-sm"
-                      onClick={() => router.push(`/export/${jobId}/segment/${utt.segment_id}/kalimat/${utt.utterance_index}`)}
-                    >
-                      <FolderOpen size={16} className="mr-2" /> Lihat Detail Kalimat
-                    </Button>
-                  </div>
+                    {/* Right: Text Comparison Column */}
+                    <div className="flex-1 flex flex-col gap-4">
 
-                </div>
-              )}
-            </div>
-          ))
+                      {/* Transkripsi Block */}
+                      <div className="rounded-xl border border-slate-200 overflow-hidden">
+                        <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
+                          <FileText size={13} className="text-slate-500" />
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Transkripsi</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 bg-white">
+                          <div className="p-4">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Ground Truth</p>
+                            <p className="text-sm text-slate-800 leading-relaxed line-clamp-4">{utt.gt_text || '—'}</p>
+                          </div>
+                          <div className="p-4 bg-emerald-50/30">
+                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-2">Normalisasi</p>
+                            <p className="text-sm text-emerald-900 font-medium leading-relaxed line-clamp-4">{utt.norm_transcript || '—'}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Glosa Block */}
+                      <div className="rounded-xl border border-slate-200 overflow-hidden">
+                        <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/80 flex items-center gap-2">
+                          <MessageSquareText size={13} className="text-slate-500" />
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Glosa</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 bg-white">
+                          <div className="p-4">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Asli</p>
+                            <p className="text-sm text-slate-800 leading-relaxed line-clamp-4">{utt.glosa_text || '—'}</p>
+                          </div>
+                          <div className="p-4 bg-teal-50/30">
+                            <p className="text-[10px] font-bold text-teal-600 uppercase tracking-wider mb-2">Normalisasi</p>
+                            <p className="text-sm text-teal-900 font-medium leading-relaxed line-clamp-4">{utt.norm_glosa || '—'}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Detail CTA */}
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => router.push(`/export/${jobId}/segment/${utt.segment_id}/kalimat/${utt.utterance_index}`)}
+                          className="inline-flex items-center text-sm font-semibold text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 px-4 py-2 rounded-lg transition-colors"
+                        >
+                          Buka Detail Penuh <ChevronRight size={15} className="ml-1" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     </div>

@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { PenTool, ArrowLeft, Loader2, AlertTriangle, RotateCcw } from 'lucide-react';
+import { PenTool, ArrowLeft, Loader2, AlertTriangle, RotateCcw, List, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { VideoPlayer } from './video-player';
 import { TimelineEditor } from './timeline-editor';
 import { PropertiesPanel } from './properties-panel';
 import { AnnotationQueue } from './annotation-queue';
+import { UtteranceSheet, type SheetFilter } from './utterance-sheet';
 import { annotationApi } from '../annotation-api';
-import type { SegmentDetailResponse, UtteranceCorrection, TranscriptUtterance } from '../annotation-types';
+import type { UtteranceCorrection, TranscriptUtterance } from '../annotation-types';
 
 export function AnnotationPage() {
   // ── Job Selection ─────────────────────────────────────────
@@ -24,6 +25,10 @@ export function AnnotationPage() {
   const [originalUtterances, setOriginalUtterances] = useState<TranscriptUtterance[]>([]);
   const [utteranceEdits, setUtteranceEdits] = useState<UtteranceCorrection[]>([]);
   const [activeUtteranceIndex, setActiveUtteranceIndex] = useState<number | null>(null);
+
+  // ── Sheet State ──────────────────────────────────────────────
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [sheetFilter, setSheetFilter] = useState<SheetFilter>('ALL');
 
   // ── Sidebar State ─────────────────────────────────────────────
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -48,18 +53,22 @@ export function AnnotationPage() {
 
   const segmentStart = useMemo(() => {
     if (utteranceEdits.length === 0) return 0;
-    return Math.min(...utteranceEdits.map((u) => u.start));
+    return Math.min(...utteranceEdits.map((u) => u.global_start ?? u.start));
   }, [utteranceEdits]);
 
   const segmentEnd = useMemo(() => {
     if (utteranceEdits.length === 0) return 0;
-    return Math.max(...utteranceEdits.map((u) => u.end));
+    return Math.max(...utteranceEdits.map((u) => u.global_end ?? u.end));
   }, [utteranceEdits]);
 
   const activeUtterancePosition = useMemo(() => {
     if (activeUtteranceIndex === null) return undefined;
     return activeUtteranceIndex + 1;
   }, [activeUtteranceIndex]);
+
+  const totalCompleted = utteranceEdits.filter(u => u.status === 'OK').length;
+  const totalUtterances = utteranceEdits.length;
+  const progressPercent = totalUtterances > 0 ? (totalCompleted / totalUtterances) * 100 : 0;
 
   // ── Load Job ───────────────────────────────────────
 
@@ -79,18 +88,30 @@ export function AnnotationPage() {
       });
 
       // 2. Fetch all segments in parallel
-      const segmentsData = await Promise.all(
+      let segmentsData = await Promise.all(
         jobItems.map((item) => annotationApi.getSegment(item.segment_id))
       );
 
-      // We assume video_url is the same for all segments of the same job
+      // Sort segments sequentially to ensure segment 1 comes before segment 2, etc.
+      segmentsData.sort((a, b) => {
+        const getIndex = (url: string | undefined | null) => {
+          if (!url) return 0;
+          const match = url.match(/segment_(\d+)\.mp4/);
+          return match ? parseInt(match[1], 10) : 0;
+        };
+        return getIndex(a.video_url) - getIndex(b.video_url);
+      });
+
+      // Store the first segment's video URL as default
       if (segmentsData.length > 0 && segmentsData[0].video_url) {
         setJobVideoUrl(segmentsData[0].video_url);
       }
 
-      // 3. Flatten utterances
+      // 3. Flatten utterances and build contiguous global timeline
       const allOriginal: TranscriptUtterance[] = [];
       const allEdits: UtteranceCorrection[] = [];
+
+      let currentGlobalTime = 0;
 
       segmentsData.forEach((data) => {
         // Collect original ASR transcripts
@@ -99,32 +120,51 @@ export function AnnotationPage() {
             ...t,
             segment_id: data.segment_id,
           }));
+          mappedOriginal.sort((a, b) => a.start - b.start);
           allOriginal.push(...mappedOriginal);
         }
 
         // Collect current edits or fall back to ASR
+        let segmentEdits: UtteranceCorrection[] = [];
         if (data.current_utterances && data.current_utterances.length > 0) {
-          allEdits.push(...data.current_utterances.map((u) => ({
-            ...u,
-            segment_id: data.segment_id,
-            // Fallback confidence from transcript if possible
-            confidence: data.transcripts.find((t) => t.utterance_index === u.utterance_index)?.confidence
-          })));
+          segmentEdits = data.current_utterances.map((u) => {
+            const transcript = data.transcripts.find((t) => t.utterance_index === u.utterance_index);
+            const duration = u.end - u.start;
+            const gStart = currentGlobalTime;
+            const gEnd = currentGlobalTime + duration;
+            currentGlobalTime = gEnd;
+            return {
+              ...u,
+              segment_id: data.segment_id,
+              confidence: transcript?.confidence,
+              global_start: gStart,
+              global_end: gEnd,
+              segment_video_url: u.cropped_video_path || transcript?.video_path || data.video_url,
+            };
+          });
         } else if (data.transcripts && data.transcripts.length > 0) {
-          allEdits.push(...data.transcripts.map((t) => ({
-            utterance_index: t.utterance_index,
-            text: t.text,
-            start: t.start,
-            end: t.end,
-            segment_id: data.segment_id,
-            confidence: t.confidence
-          })));
+          segmentEdits = data.transcripts.map((t) => {
+            const duration = t.end - t.start;
+            const gStart = currentGlobalTime;
+            const gEnd = currentGlobalTime + duration;
+            currentGlobalTime = gEnd;
+            return {
+              utterance_index: t.utterance_index,
+              text: t.text,
+              start: t.start,
+              end: t.end,
+              segment_id: data.segment_id,
+              confidence: t.confidence,
+              cropped_video_path: t.video_path,
+              global_start: gStart,
+              global_end: gEnd,
+              segment_video_url: t.video_path || data.video_url,
+            };
+          });
         }
+        segmentEdits.sort((a, b) => a.start - b.start);
+        allEdits.push(...segmentEdits);
       });
-
-      // Sort both arrays by start time
-      allOriginal.sort((a, b) => a.start - b.start);
-      allEdits.sort((a, b) => a.start - b.start);
       
       setOriginalUtterances(allOriginal);
       setUtteranceEdits(allEdits);
@@ -180,55 +220,80 @@ export function AnnotationPage() {
     setUtteranceEdits((prev) => {
       const next = [...prev];
       if (next[index]) {
-        next[index] = { ...next[index], ...updates };
+        // Automatically mark as DRAFT if it was NEW (no status or not OK/DRAFT)
+        const newStatus = next[index].status === 'OK' ? 'OK' : 'DRAFT';
+        next[index] = { ...next[index], ...updates, status: newStatus };
       }
       return next;
     });
   };
 
-  const handleTrimChange = (start: number, end: number) => {
+  const handleTrimChange = (globalStart: number, globalEnd: number) => {
     if (activeUtteranceIndex === null) return;
     setUtteranceEdits((prev) => {
       const next = [...prev];
       const current = next[activeUtteranceIndex];
       if (!current) return next;
 
-      let newStart = start;
-      let newEnd = end;
+      let newGlobalStart = globalStart;
+      let newGlobalEnd = globalEnd;
       const prevUtterance = next[activeUtteranceIndex - 1];
       const nextUtterance = next[activeUtteranceIndex + 1];
 
-      // Left Spillover
+      // Left Spillover (using global timestamps)
       if (prevUtterance) {
+        const prevGlobalEnd = prevUtterance.global_end ?? prevUtterance.end;
         if (prevUtterance.status === 'OK') {
-          newStart = Math.max(newStart, prevUtterance.end);
+          newGlobalStart = Math.max(newGlobalStart, prevGlobalEnd);
         } else {
-          if (newStart < prevUtterance.end) {
-            next[activeUtteranceIndex - 1] = { ...prevUtterance, end: newStart };
+          if (newGlobalStart < prevGlobalEnd) {
+            const shift = prevGlobalEnd - newGlobalStart;
+            next[activeUtteranceIndex - 1] = {
+              ...prevUtterance,
+              end: prevUtterance.end - shift,
+              global_end: newGlobalStart,
+            };
             if (next[activeUtteranceIndex - 1].end <= next[activeUtteranceIndex - 1].start) {
               next[activeUtteranceIndex - 1].end = next[activeUtteranceIndex - 1].start + 0.1;
-              newStart = next[activeUtteranceIndex - 1].end;
+              next[activeUtteranceIndex - 1].global_end = (next[activeUtteranceIndex - 1].global_start ?? 0) + 0.1;
+              newGlobalStart = next[activeUtteranceIndex - 1].global_end!;
             }
           }
         }
       }
 
-      // Right Spillover
+      // Right Spillover (using global timestamps — allows cross-segment overlap)
       if (nextUtterance) {
+        const nextGlobalStart = nextUtterance.global_start ?? nextUtterance.start;
         if (nextUtterance.status === 'OK') {
-          newEnd = Math.min(newEnd, nextUtterance.start);
+          newGlobalEnd = Math.min(newGlobalEnd, nextGlobalStart);
         } else {
-          if (newEnd > nextUtterance.start) {
-            next[activeUtteranceIndex + 1] = { ...nextUtterance, start: newEnd };
+          if (newGlobalEnd > nextGlobalStart) {
+            const shift = newGlobalEnd - nextGlobalStart;
+            next[activeUtteranceIndex + 1] = {
+              ...nextUtterance,
+              start: nextUtterance.start + shift,
+              global_start: newGlobalEnd,
+            };
             if (next[activeUtteranceIndex + 1].start >= next[activeUtteranceIndex + 1].end) {
               next[activeUtteranceIndex + 1].start = next[activeUtteranceIndex + 1].end - 0.1;
-              newEnd = next[activeUtteranceIndex + 1].start;
+              next[activeUtteranceIndex + 1].global_start = (next[activeUtteranceIndex + 1].global_end ?? 0) - 0.1;
+              newGlobalEnd = next[activeUtteranceIndex + 1].global_start!;
             }
           }
         }
       }
 
-      next[activeUtteranceIndex] = { ...current, start: newStart, end: newEnd };
+      // Update current utterance: both local and global
+      // offset converts global→ASR so start/end stay in ASR coordinate space
+      const offset = (current.global_start ?? current.start) - current.start;
+      next[activeUtteranceIndex] = {
+        ...current,
+        start: newGlobalStart - offset,
+        end: newGlobalEnd - offset,
+        global_start: newGlobalStart,
+        global_end: newGlobalEnd,
+      };
       return next;
     });
   };
@@ -237,7 +302,8 @@ export function AnnotationPage() {
     setActiveUtteranceIndex(index);
     const utt = utteranceEdits[index];
     if (utt) {
-      setCurrentTime(utt.start);
+      // Use global timestamp for seeking so playhead is correct in continuous timeline
+      setCurrentTime(utt.global_start ?? utt.start);
       setIsPlaying(false);
     }
   };
@@ -256,12 +322,18 @@ export function AnnotationPage() {
 
   // ── API Actions ───────────────────────────────────────────────
 
+  // Strip FE-only virtual fields before sending to backend
+  const stripGlobalFields = (utt: UtteranceCorrection): UtteranceCorrection => {
+    const { global_start, global_end, segment_offset, segment_video_url, confidence, ...clean } = utt;
+    return clean;
+  };
+
   const saveDraftForAllSegments = async (edits: UtteranceCorrection[]) => {
     const grouped = edits.reduce((acc, utt) => {
       const sid = utt.segment_id;
       if (sid) {
         if (!acc[sid]) acc[sid] = [];
-        acc[sid].push(utt);
+        acc[sid].push(stripGlobalFields(utt));
       }
       return acc;
     }, {} as Record<string, UtteranceCorrection[]>);
@@ -276,10 +348,10 @@ export function AnnotationPage() {
   const handleSaveDraft = async () => {
     if (!selectedJobId || utteranceEdits.length === 0) return;
     setIsSaving(true);
-    setActionMessage(null);
+    setActionMessage('Menyimpan draft...');
     try {
       await saveDraftForAllSegments(utteranceEdits);
-      setActionMessage('Draft tersimpan');
+      setActionMessage('✅ Draft tersimpan');
       await loadJob(selectedJobId);
     } catch (err: unknown) {
       const msg = (err as any)?.response?.data?.detail || 'Gagal menyimpan draft';
@@ -307,6 +379,13 @@ export function AnnotationPage() {
       
       // 3. Reload job
       await loadJob(selectedJobId);
+      
+      // 4. Auto-advance if not at the end
+      if (index < utteranceEdits.length - 1) {
+        setTimeout(() => {
+          handleSelectUtterance(index + 1);
+        }, 400);
+      }
     } catch (err: unknown) {
       const msg = (err as any)?.response?.data?.detail || 'Gagal memotong video';
       setActionMessage(typeof msg === 'string' ? `❌ ${msg}` : '❌ Gagal memotong video');
@@ -321,7 +400,7 @@ export function AnnotationPage() {
       const segmentIds = Array.from(new Set(utteranceEdits.map((u) => u.segment_id).filter(Boolean))) as string[];
       await Promise.all(segmentIds.map((sid) => annotationApi.resetToOriginal(sid)));
       
-      setActionMessage('Anotasi direset');
+      setActionMessage('✅ Anotasi direset');
       await loadJob(selectedJobId);
     } catch (err: unknown) {
       const msg = (err as any)?.response?.data?.detail || 'Gagal mereset anotasi';
@@ -331,46 +410,109 @@ export function AnnotationPage() {
 
 
 
-  // ── Hybrid Player Computed Properties ───────────────────────────
-  const useCroppedVideo = activeUtterance?.status === 'OK' && activeUtterance?.cropped_video_path;
-  const videoSrc = useCroppedVideo ? activeUtterance.cropped_video_path! : (jobVideoUrl ?? '');
-  const playerTime = useCroppedVideo && activeUtterance ? Math.max(0, currentTime - activeUtterance.start) : currentTime;
+  // ── Hybrid Player Computed Properties (Seamless Segment Router) ──
+
+  const videoSrc = useMemo(() => {
+    if (activeUtterance?.segment_video_url) return activeUtterance.segment_video_url;
+    return jobVideoUrl ?? '';
+  }, [activeUtterance, jobVideoUrl]);
+
+  // Convert global currentTime to local time for the video player
+  // Since we always play utterance videos, the video time starts at 0 for the active utterance
+  const playerTime = useMemo(() => {
+    if (!activeUtterance) return 0;
+    return Math.max(0, currentTime - (activeUtterance.global_start ?? 0));
+  }, [activeUtterance, currentTime]);
+
   const handlePlayerTimeUpdate = (t: number) => {
-    setCurrentTime(useCroppedVideo && activeUtterance ? t + activeUtterance.start : t);
+    if (!activeUtterance) return;
+    const globalTime = t + (activeUtterance.global_start ?? 0);
+    setCurrentTime(globalTime);
+    
+    // Auto-switch to next utterance if we cross boundary
+    if (activeUtterance.global_end !== undefined && globalTime >= activeUtterance.global_end) {
+      if (activeUtteranceIndex !== null && activeUtteranceIndex < utteranceEdits.length - 1) {
+        setActiveUtteranceIndex(activeUtteranceIndex + 1);
+      } else {
+        setIsPlaying(false);
+      }
+    }
   };
 
   // ── Render ────────────────────────────────────────────────────
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <header className="bg-white border-b border-gray-200 px-4 py-2 flex-shrink-0">
-        <div className="flex items-center gap-3">
+      {selectedJobId && (
+        <UtteranceSheet
+          isOpen={isSheetOpen}
+          onClose={() => setIsSheetOpen(false)}
+          utterances={utteranceEdits}
+          originalUtterances={originalUtterances}
+          activeIndex={activeUtteranceIndex}
+          onJump={handleSelectUtterance}
+          filter={sheetFilter}
+          onFilterChange={setSheetFilter}
+        />
+      )}
+
+      {/* 1. TOP NAVBAR & GLOBAL PROGRESS */}
+      <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shrink-0 z-10 shadow-sm">
+        <div className="flex items-center gap-4">
           {selectedJobId && (
-            <Button variant="ghost" size="sm" onClick={handleBackToQueue} className="h-8 px-2">
-              <ArrowLeft size={16} />
+            <Button variant="ghost" size="sm" onClick={handleBackToQueue} className="h-10 px-3">
+              <ArrowLeft size={18} />
             </Button>
           )}
+          <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-inner shrink-0">
+            A
+          </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <PenTool size={18} className="text-teal-600" />
-              {selectedJobId ? 'Workspace Anotasi' : 'Antrian Anotasi'}
+            <h1 className="text-lg font-bold text-slate-800 leading-tight flex items-center gap-2">
+              {!selectedJobId && <PenTool size={18} className="text-teal-600" />}
+              {selectedJobId && jobMetadata ? jobMetadata.original_filename : 'Antrian Anotasi'}
             </h1>
-            {selectedJobId && jobMetadata && (
-              <p className="text-[11px] text-gray-500 truncate" title={jobMetadata.original_filename}>
-                <span className="font-medium text-gray-600">{jobMetadata.original_filename}</span>
-                <span className="text-gray-300 mx-1.5">·</span>
-                <span>{utteranceEdits.length} kalimat</span>
-              </p>
-            )}
+            <p className="text-sm text-slate-500 font-medium truncate">
+              {selectedJobId ? 'Workspace Anotasi JBI' : 'Pilih video untuk mulai bekerja'}
+            </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {actionMessage && (
-              <div className="bg-gray-100 text-gray-700 text-xs px-3 py-1 rounded-lg max-w-xs truncate">
-                {actionMessage}
-              </div>
-            )}
-          </div>
+          {actionMessage && (
+            <div className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded-lg max-w-xs truncate font-medium">
+              {actionMessage}
+            </div>
+          )}
         </div>
+
+        {/* Right side: Progress & Sheet Trigger */}
+        {selectedJobId && (
+          <div className="flex items-center gap-6">
+            <div className="flex flex-col items-end w-[250px] hidden md:flex">
+              <div className="flex justify-between w-full mb-1">
+                <span className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+                  Progres
+                </span>
+                <span className="text-sm font-bold text-teal-700">
+                  {totalCompleted} / {totalUtterances} Selesai
+                </span>
+              </div>
+              <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden shadow-inner border border-slate-200">
+                <div
+                  className="h-full bg-teal-500 rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="w-px h-10 bg-slate-200 hidden md:block"></div>
+
+            <button
+              onClick={() => setIsSheetOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-xl font-bold transition-all shadow-sm"
+            >
+              <List size={18} /> Daftar Kalimat
+            </button>
+          </div>
+        )}
       </header>
 
       <div className="flex-1 flex overflow-hidden">
@@ -382,21 +524,21 @@ export function AnnotationPage() {
         />
 
         {!selectedJobId ? (
-          <div className="flex-1 flex items-center justify-center bg-gray-50">
+          <div className="flex-1 flex items-center justify-center bg-slate-50">
             <div className="text-center max-w-xs">
-              <PenTool size={48} className="text-gray-300 mx-auto mb-3" />
-              <p className="text-sm font-medium text-gray-500">Pilih video untuk dianotasi</p>
-              <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
+              <PenTool size={48} className="text-slate-300 mx-auto mb-3" />
+              <p className="text-sm font-medium text-slate-500">Pilih video untuk dianotasi</p>
+              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
                 Klik video di panel kiri untuk mulai menganotasi bahasa isyarat.
               </p>
             </div>
           </div>
         ) : jobLoading ? (
-          <div className="flex-1 flex items-center justify-center bg-gray-50">
+          <div className="flex-1 flex items-center justify-center bg-slate-50">
             <Loader2 size={24} className="text-teal-600 animate-spin" />
           </div>
         ) : jobError ? (
-          <div className="flex-1 flex items-center justify-center bg-gray-50">
+          <div className="flex-1 flex items-center justify-center bg-slate-50">
             <div className="text-center">
               <AlertTriangle size={32} className="text-red-400 mx-auto mb-2" />
               <p className="text-sm text-red-600">{jobError}</p>
@@ -411,54 +553,92 @@ export function AnnotationPage() {
             </div>
           </div>
         ) : jobMetadata ? (
-          <div className="flex-1 flex flex-col bg-gray-50 overflow-hidden gap-2 p-3">
-            <div className="flex gap-2 min-h-0" style={{ flex: '1 1 auto' }}>
-              <div className="flex flex-col gap-2 min-w-0" style={{ flex: '0 0 60%' }}>
-                <VideoPlayer
-                  src={videoSrc}
-                  isPlaying={isPlaying}
-                  onPlayPause={setIsPlaying}
-                  currentTime={playerTime}
-                  onTimeUpdate={handlePlayerTimeUpdate}
-                  playbackRate={playbackRate}
-                  onPlaybackRateChange={setPlaybackRate}
-                  onDurationChange={setDuration}
-                />
-                <div className="flex-shrink-0 mt-auto">
-                  <TimelineEditor
-                    videoUrl={jobVideoUrl ?? ''}
-                    duration={duration}
-                    currentTime={currentTime}
+          <div className="flex-1 flex bg-slate-900 overflow-hidden">
+            {/* 2. LEFT PANEL: VIDEO & TIMELINE */}
+            <div className="flex-[0_0_60%] flex flex-col bg-slate-900 relative">
+              <div className="flex-1 p-6 flex flex-col items-center justify-center relative min-h-0">
+                <div className="w-full max-w-4xl max-h-full aspect-video">
+                  <VideoPlayer
+                    src={videoSrc}
                     isPlaying={isPlaying}
-                    onTimeUpdate={setCurrentTime}
-                    trimStart={activeUtterance?.start ?? segmentStart}
-                    trimEnd={activeUtterance?.end ?? segmentEnd}
-                    onTrimChange={handleTrimChange}
-                    activeUtterance={activeUtterance && activeUtteranceIndex !== null ? { index: activeUtteranceIndex, start: activeUtterance.start, end: activeUtterance.end, status: activeUtterance.status } : null}
-                    allUtterances={utteranceEdits}
-                    onPrevUtterance={handlePrevUtterance}
-                    onNextUtterance={handleNextUtterance}
-                    utteranceCount={utteranceEdits.length}
-                    activeUtterancePosition={activeUtterancePosition}
+                    onPlayPause={setIsPlaying}
+                    currentTime={playerTime}
+                    onTimeUpdate={handlePlayerTimeUpdate}
+                    playbackRate={playbackRate}
+                    onPlaybackRateChange={setPlaybackRate}
+                    onDurationChange={setDuration}
                   />
+                </div>
+                
+                {/* Contextual Trigger for Sheet */}
+                <div className="mt-6 flex items-center justify-center gap-2">
+                  <button
+                    onClick={handlePrevUtterance}
+                    disabled={activeUtteranceIndex === null || activeUtteranceIndex === 0}
+                    className="flex items-center gap-3 bg-slate-800 hover:bg-slate-700 px-6 py-3 rounded-xl border border-slate-700 shadow-inner group transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft size={16} className="text-slate-400 group-hover:text-white" />
+                    <span className="text-white font-bold text-sm">Kalimat Sebelumnya</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsSheetOpen(true)}
+                    className="flex items-center gap-4 bg-slate-800 hover:bg-slate-700 px-6 py-3 rounded-[32px] border border-slate-700 shadow-inner group cursor-pointer transition-colors"
+                    title="Klik untuk melihat daftar kalimat"
+                  >
+                    <span className="text-slate-400 text-sm font-medium">Posisi saat ini:</span>
+                    <span className="text-white font-bold text-lg flex items-center gap-2">
+                      Kalimat ke-{(activeUtteranceIndex ?? 0) + 1}
+                      <Search size={16} className="text-slate-400 group-hover:text-white transition-colors" />
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={handleNextUtterance}
+                    disabled={activeUtteranceIndex === null || activeUtteranceIndex === utteranceEdits.length - 1}
+                    className="flex items-center gap-3 bg-slate-800 hover:bg-slate-700 px-6 py-3 rounded-xl border border-slate-700 shadow-inner group transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="text-white font-bold text-sm">Kalimat Selanjutnya</span>
+                    <ChevronRight size={16} className="text-slate-400 group-hover:text-white" />
+                  </button>
                 </div>
               </div>
 
-              <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
-                <PropertiesPanel
-                  originalUtterances={originalUtterances}
-                  utteranceEdits={utteranceEdits}
-                  onUtteranceChange={handleUtteranceChange}
-                  activeUtteranceIndex={activeUtteranceIndex}
-                  onSelectUtterance={handleSelectUtterance}
-                  onSaveDraft={handleSaveDraft}
-                  onMarkOk={handleMarkOk}
-                  onReset={handleReset}
-                  isSaving={isSaving}
-                  reviewStatus={reviewStatus}
-                  reviewFeedback={reviewFeedback}
+              <div className="flex-shrink-0 mt-auto bg-slate-950 p-2 border-t border-slate-800">
+                <TimelineEditor
+                  videoUrl={activeUtterance?.segment_video_url ?? jobVideoUrl ?? ''}
+                  duration={segmentEnd}
+                  currentTime={currentTime}
+                  isPlaying={isPlaying}
+                  onTimeUpdate={setCurrentTime}
+                  trimStart={activeUtterance?.global_start ?? segmentStart}
+                  trimEnd={activeUtterance?.global_end ?? segmentEnd}
+                  onTrimChange={handleTrimChange}
+                  activeUtterance={activeUtterance && activeUtteranceIndex !== null ? { index: activeUtteranceIndex, start: activeUtterance.global_start ?? activeUtterance.start, end: activeUtterance.global_end ?? activeUtterance.end, status: activeUtterance.status } : null}
+                  allUtterances={utteranceEdits}
+                  onPrevUtterance={handlePrevUtterance}
+                  onNextUtterance={handleNextUtterance}
+                  utteranceCount={utteranceEdits.length}
+                  activeUtterancePosition={activeUtterancePosition}
                 />
               </div>
+            </div>
+
+            {/* 3. RIGHT PANEL: THE TASK */}
+            <div className="flex-[0_0_40%] bg-white border-l border-slate-200 flex flex-col shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-20 min-w-[350px]">
+              <PropertiesPanel
+                originalUtterances={originalUtterances}
+                utteranceEdits={utteranceEdits}
+                onUtteranceChange={handleUtteranceChange}
+                activeUtteranceIndex={activeUtteranceIndex}
+                onSelectUtterance={handleSelectUtterance}
+                onSaveDraft={handleSaveDraft}
+                onMarkOk={handleMarkOk}
+                onReset={handleReset}
+                isSaving={isSaving}
+                reviewStatus={reviewStatus}
+                reviewFeedback={reviewFeedback}
+              />
             </div>
           </div>
         ) : null}
