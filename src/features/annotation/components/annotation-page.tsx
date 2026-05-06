@@ -127,7 +127,9 @@ export function AnnotationPage() {
         // Collect current edits or fall back to ASR
         let segmentEdits: UtteranceCorrection[] = [];
         if (data.current_utterances && data.current_utterances.length > 0) {
-          segmentEdits = data.current_utterances.map((u) => {
+          // Sort by start BEFORE computing global timeline
+          const sortedUtts = [...data.current_utterances].sort((a, b) => a.start - b.start);
+          segmentEdits = sortedUtts.map((u) => {
             const transcript = data.transcripts.find((t) => t.utterance_index === u.utterance_index);
             const duration = u.end - u.start;
             const gStart = currentGlobalTime;
@@ -143,7 +145,8 @@ export function AnnotationPage() {
             };
           });
         } else if (data.transcripts && data.transcripts.length > 0) {
-          segmentEdits = data.transcripts.map((t) => {
+          const sortedTranscripts = [...data.transcripts].sort((a, b) => a.start - b.start);
+          segmentEdits = sortedTranscripts.map((t) => {
             const duration = t.end - t.start;
             const gStart = currentGlobalTime;
             const gEnd = currentGlobalTime + duration;
@@ -162,7 +165,7 @@ export function AnnotationPage() {
             };
           });
         }
-        segmentEdits.sort((a, b) => a.start - b.start);
+        // Already sorted before global_start computation — no re-sort needed
         allEdits.push(...segmentEdits);
       });
       
