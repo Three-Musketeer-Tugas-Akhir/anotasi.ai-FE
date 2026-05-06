@@ -792,12 +792,7 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
             <div className="flex justify-center mt-4 gap-2 flex-wrap">
               <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
                 <a href={`/asr-review?job_id=${jobId}`}>
-                  <ExternalLink size={14} className="mr-1.5" /> Buka ASR Review
-                </a>
-              </Button>
-              <Button variant="outline" className="border-emerald-300 text-emerald-700" asChild>
-                <a href="/annotation">
-                  <ExternalLink size={14} className="mr-1.5" /> Buka Annotation
+                  <ExternalLink size={14} className="mr-1.5" /> Buka Anotasi Suara
                 </a>
               </Button>
               {(job.curation_status === 'READY_TO_BE_NORMALIZED' || job.curation_status === 'NORMALIZED' || job.curation_status === 'READY_TO_EXPORT') && (
@@ -1008,7 +1003,7 @@ function StageSection({
           )}
 
           {stage.status === 'done' && !stageLoading && stage.stageNumber === 3 && (
-            <Stage3Content results={stage3} onPreviewVideo={onPreviewVideo} />
+            <Stage3Content results={stage3} onPreviewVideo={onPreviewVideo} jobId={jobId} />
           )}
         </div>
       )}
@@ -1245,9 +1240,11 @@ function Stage2Content({
 function Stage3Content({
   results,
   onPreviewVideo,
+  jobId,
 }: {
   results: Stage3ResultsResponse | null;
   onPreviewVideo: (url: string, title: string, subtitle?: string) => void;
+  jobId: string;
 }) {
   const [selectedSegIdx, setSelectedSegIdx] = useState<number>(0);
 
@@ -1393,11 +1390,11 @@ function Stage3Content({
         </div>
       )}
 
-      {/* Link to Annotation page */}
+      {/* Link to Voice Annotation page */}
       <div className="flex justify-center pt-2">
         <Button variant="outline" size="sm" className="text-xs border-indigo-200 text-indigo-600 hover:bg-indigo-50" asChild>
-          <a href="/annotation">
-            <ExternalLink size={12} className="mr-1" /> Buka Annotation
+          <a href={`/asr-review?job_id=${jobId}`}>
+            <ExternalLink size={12} className="mr-1" /> Buka Anotasi Suara
           </a>
         </Button>
       </div>
