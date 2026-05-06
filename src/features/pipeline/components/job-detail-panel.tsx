@@ -1,20 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { apiClient } from '@/core/api/axios-client';
 import { env } from '@/core/config/env';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  SelectValue, // Still keeping it just in case, or removing if not needed. But we'll remove it since we only use Combobox here. Wait, actually I will remove the Select block entirely and insert Combobox.
-} from '@/components/ui/select';
 import { Combobox } from '@/components/ui/combobox';
 import {
   Tooltip,
@@ -196,6 +188,8 @@ function getConfidenceLabel(score: number): string {
 }
 
 // ── Video Preview Modal ─────────────────────────────────────────────
+// Uses createPortal to render OUTSIDE the arena div so pointer-capture
+// on the canvas never intercepts close/button clicks.
 
 function VideoPreviewModal({
   open,
@@ -213,31 +207,76 @@ function VideoPreviewModal({
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (!open || !videoUrl) return;
-
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
     if (token) {
       setVideoLoading(false);
       setVideoError(null);
-      const urlWithToken = `/proxy-segment?url=${encodeURIComponent(videoUrl)}&token=${token}`;
-      setBlobUrl(urlWithToken);
+      setBlobUrl(`/proxy-segment?url=${encodeURIComponent(videoUrl)}&token=${token}`);
     }
   }, [open, videoUrl]);
 
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-[720px] p-0 overflow-hidden">
-        <DialogHeader className="px-5 pt-5 pb-2">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <Play size={16} className="text-teal-600" />
-            {title}
-          </DialogTitle>
-          {subtitle && (
-            <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>
-          )}
-        </DialogHeader>
+  // Pause & clear video on close so audio stops
+  const handleClose = () => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.src = '';
+    }
+    setBlobUrl(null);
+    onClose();
+  };
+
+  // Keyboard: Escape to close
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  if (!open || typeof document === 'undefined') return null;
+
+  return createPortal(
+    // Backdrop — click outside to close
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onPointerDown={(e) => {
+        // Close only if clicking directly on the backdrop, not the modal panel
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
+      {/* Modal panel */}
+      <div
+        className="bg-white rounded-xl shadow-2xl w-full max-w-[720px] mx-4 overflow-hidden flex flex-col"
+        onPointerDown={(e) => e.stopPropagation()} // prevent backdrop handler
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-semibold text-gray-800">
+              <Play size={16} className="text-teal-600" />
+              {title}
+            </h2>
+            {subtitle && (
+              <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>
+            )}
+          </div>
+          {/* X button — always clickable */}
+          <button
+            type="button"
+            onClick={handleClose}
+            className="ml-4 flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            aria-label="Tutup"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Video area */}
         <div className="bg-black min-h-[200px] flex items-center justify-center">
           {videoLoading ? (
             <div className="flex flex-col items-center gap-2 text-gray-400">
@@ -251,6 +290,7 @@ function VideoPreviewModal({
             </div>
           ) : blobUrl ? (
             <video
+              ref={videoRef}
               src={blobUrl}
               controls
               autoPlay
@@ -262,13 +302,16 @@ function VideoPreviewModal({
             </video>
           ) : null}
         </div>
+
+        {/* Footer */}
         <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
-          <Button variant="outline" size="sm" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={handleClose}>
             <X size={14} className="mr-1" /> Tutup
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
