@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Layout, Loader2, AlertCircle } from 'lucide-react';
+import type { YTDownloadState } from './youtube-download-banner';
+import { YTDownloadBanner } from './youtube-download-banner';
 import { useJobs, useUpdateCategory } from '@/features/classification/hooks/use-classification';
 import type { CategoryStatus, JobListParams } from '@/features/classification/types/classification.types';
 import { useTour } from '@/shared/components/tour';
@@ -28,6 +30,7 @@ export function ClassificationPage() {
   const [filter, setFilter] = useState<FilterValue>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [ytDownloads, setYtDownloads] = useState<YTDownloadState[]>([]);
   const [page, setPage] = useState(0); // offset-based pagination
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, targetCategory: 'SIBI' | 'BISINDO' | null}>({ isOpen: false, targetCategory: null });
   const PAGE_SIZE = 20;
@@ -101,6 +104,24 @@ export function ClassificationPage() {
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedJob, isPending]);
+
+  // ── YouTube background download handlers ─────────────────────────────
+  const handleYtDownloadStarted = useCallback((state: YTDownloadState) => {
+    setYtDownloads((prev) => [...prev, state]);
+  }, []);
+
+  const handleYtProgressUpdate = useCallback(
+    (downloadId: string, update: Partial<YTDownloadState>) => {
+      setYtDownloads((prev) =>
+        prev.map((d) => (d.downloadId === downloadId ? { ...d, ...update } : d)),
+      );
+    },
+    [],
+  );
+
+  const handleYtDismiss = useCallback((downloadId: string) => {
+    setYtDownloads((prev) => prev.filter((d) => d.downloadId !== downloadId));
+  }, []);
 
   // ── Handlers ────────────────────────────────────────────────────────
   function handleCategorize(category: 'SIBI' | 'BISINDO') {
@@ -231,7 +252,12 @@ export function ClassificationPage() {
           refetch();
           setSelectedJobId(jobId);
         }}
+        onYtDownloadStarted={handleYtDownloadStarted}
+        onYtProgressUpdate={handleYtProgressUpdate}
       />
+
+      {/* Floating YouTube download progress banner */}
+      <YTDownloadBanner downloads={ytDownloads} onDismiss={handleYtDismiss} />
 
       {/* Confirmation Modal for changing category */}
       <Dialog 
