@@ -305,6 +305,15 @@ function UtteranceRow({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
 
+  // Auto-resize textarea to fit content dynamically
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (ta) {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    }
+  }, [editText]);
+
   // Sync when parent data changes (e.g. after save)
   useEffect(() => {
     setEditText(utterance.ground_truth_text);
@@ -359,7 +368,7 @@ function UtteranceRow({
             </span>
           </Badge>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {isDirty && (
             <span className="text-[10px] text-amber-500 font-medium">
               Belum disimpan
@@ -420,7 +429,7 @@ function UtteranceRow({
           <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
             Transkripsi ASR (asli)
           </div>
-          <div className="text-sm text-gray-500 leading-relaxed bg-gray-50 rounded-lg p-2.5 min-h-[52px]">
+          <div className="text-sm text-gray-500 leading-relaxed bg-gray-50 rounded-lg p-2.5 min-h-[52px] break-words">
             {utterance.asr_text || '–'}
           </div>
         </div>
@@ -442,7 +451,7 @@ function UtteranceRow({
               <HighlightedOverlay text={editText} flaggedWords={utterance.flagged_words} />
             </div>
 
-            {/* Transparent Textarea */}
+            {/* Transparent Textarea — auto-resizes to content */}
             <textarea
               ref={textareaRef}
               value={editText}
@@ -452,8 +461,7 @@ function UtteranceRow({
                   overlayRef.current.scrollTop = e.currentTarget.scrollTop;
                 }
               }}
-              rows={2}
-              className="relative z-10 w-full text-sm text-gray-800 leading-relaxed bg-transparent border border-gray-200 rounded-lg p-2.5 min-h-[52px] resize-none focus:outline-none focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all caret-black overflow-auto"
+              className="relative z-10 w-full text-sm text-gray-800 leading-relaxed bg-transparent border border-gray-200 rounded-lg p-2.5 min-h-[52px] resize-none focus:outline-none focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all caret-black overflow-hidden"
             />
           </div>
 
