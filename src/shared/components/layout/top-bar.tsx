@@ -131,7 +131,7 @@ export function TopBar() {
   // ── Pre-mount: render a static placeholder to avoid Radix ID hydration mismatches ──
   if (!mounted) {
     return (
-      <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0 z-10">
+      <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0 z-30 relative">
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-400 font-medium">Anotasi.ai</span>
           <span className="text-gray-300">/</span>
@@ -163,7 +163,7 @@ export function TopBar() {
   }
 
   return (
-    <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0 z-10">
+    <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0 z-30 relative">
       {/* Left: Breadcrumb / Page context + Dataset Selector */}
       <div className="flex items-center gap-3">
         <span className="text-sm text-gray-400 font-medium">Anotasi.ai</span>
