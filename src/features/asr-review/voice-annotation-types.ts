@@ -48,6 +48,7 @@ export interface VoiceAnnotationUtterance {
   voice_annotation_status: 'PENDING' | 'FLAGGED' | 'CLEAN';
   start: number;
   end: number;
+  audio_url: string | null;
   annotator_id: string | null;
   edited_at: string | null;
 }

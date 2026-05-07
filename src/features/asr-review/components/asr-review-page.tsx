@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   ArrowRight,
   Search,
+  Headphones,
 } from 'lucide-react';
 import { voiceAnnotationApi } from '../voice-annotation-api';
 import type {
@@ -391,6 +392,23 @@ function UtteranceRow({
               )}
               Simpan Perbaikan
             </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Audio Player */}
+      <div className="px-4 py-2 bg-white border-b border-gray-100">
+        <div className="flex items-center gap-3">
+          <Headphones size={14} className="text-teal-500 shrink-0" />
+          {utterance.audio_url ? (
+            <audio
+              src={utterance.audio_url}
+              controls
+              preload="metadata"
+              className="w-full h-8"
+            />
+          ) : (
+            <span className="text-xs text-gray-400 italic">Audio WAV belum tersedia</span>
           )}
         </div>
       </div>
