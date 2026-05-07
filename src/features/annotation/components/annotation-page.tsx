@@ -38,6 +38,9 @@ export function AnnotationPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [duration, setDuration] = useState(0);
+  // Cross-segment: when last utterance of segment N finishes, we switch to N+1's video.
+  // This tracks the override URL so the workspace (activeUtteranceIndex) stays on N.
+  const [crossSegmentVideoUrl, setCrossSegmentVideoUrl] = useState<string | null>(null);
 
   // ── Action State ──────────────────────────────────────────────
   const [isSaving, setIsSaving] = useState(false);
@@ -200,6 +203,11 @@ export function AnnotationPage() {
       loadJob(selectedJobId);
     }
   }, [selectedJobId, loadJob]);
+
+  // Reset cross-segment override whenever the user manually selects a different utterance.
+  useEffect(() => {
+    setCrossSegmentVideoUrl(null);
+  }, [activeUtteranceIndex]);
 
   // ── Handlers ──────────────────────────────────────────────────
 
@@ -419,49 +427,86 @@ export function AnnotationPage() {
 
   // ── Hybrid Player Computed Properties (Seamless Segment Router) ──
 
+  // N+1 utterance (for cross-segment info)
+  const nextUtterance = useMemo(
+    () => (activeUtteranceIndex !== null ? utteranceEdits[activeUtteranceIndex + 1] : null),
+    [activeUtteranceIndex, utteranceEdits],
+  );
+
+  // When crossSegmentVideoUrl is set, we're playing N+1's video — use N+1 as the time context.
+  const playingUtterance = useMemo(() => {
+    if (crossSegmentVideoUrl && nextUtterance) return nextUtterance;
+    return activeUtterance;
+  }, [crossSegmentVideoUrl, nextUtterance, activeUtterance]);
+
   const videoSrc = useMemo(() => {
+    if (crossSegmentVideoUrl) return crossSegmentVideoUrl;
     if (activeUtterance?.segment_video_url) return activeUtterance.segment_video_url;
     return jobVideoUrl ?? '';
-  }, [activeUtterance, jobVideoUrl]);
+  }, [crossSegmentVideoUrl, activeUtterance, jobVideoUrl]);
 
-  // Offset between segment-local time and global time for the active utterance.
-  // segment-local = global + videoOffset
-  // e.g. if utterance.start (ASR) = 8.5s and global_start = 3.0s → offset = 5.5
+  // Offset: segment-local time = global time + videoOffset
   const videoOffset = useMemo(() => {
-    if (!activeUtterance) return 0;
-    return (activeUtterance.start ?? 0) - (activeUtterance.global_start ?? 0);
-  }, [activeUtterance]);
+    if (!playingUtterance) return 0;
+    return (playingUtterance.start ?? 0) - (playingUtterance.global_start ?? 0);
+  }, [playingUtterance]);
 
   // Convert global currentTime → segment-local time for the video element.
   const playerTime = useMemo(() => {
-    if (!activeUtterance) return 0;
-    // segment-local = ASR start + elapsed since N started
-    const segLocalStart = activeUtterance.start ?? 0;
-    const elapsed = currentTime - (activeUtterance.global_start ?? 0);
+    if (!playingUtterance) return 0;
+    const segLocalStart = playingUtterance.start ?? 0;
+    const elapsed = currentTime - (playingUtterance.global_start ?? 0);
     return Math.max(0, segLocalStart + elapsed);
-  }, [activeUtterance, currentTime]);
+  }, [playingUtterance, currentTime]);
 
   const handlePlayerTimeUpdate = (t: number) => {
-    if (!activeUtterance) return;
-    // Convert segment-local time → global
-    const segLocalStart = activeUtterance.start ?? 0;
+    if (!activeUtterance || !playingUtterance) return;
+    // Convert segment-local time → global using the currently-playing utterance
+    const segLocalStart = playingUtterance.start ?? 0;
     const elapsed = t - segLocalStart;
-    const globalTime = (activeUtterance.global_start ?? 0) + elapsed;
+    const globalTime = (playingUtterance.global_start ?? 0) + elapsed;
     setCurrentTime(globalTime);
 
     // Determine end of playback window: end of N+1 (or N if no N+1)
-    const nextUtterance =
-      activeUtteranceIndex !== null ? utteranceEdits[activeUtteranceIndex + 1] : null;
     const windowEnd = nextUtterance
       ? (nextUtterance.global_end ?? nextUtterance.end)
       : (activeUtterance.global_end ?? activeUtterance.end);
 
-    // Stop at end of the N+1 window — do NOT switch the workspace automatically.
-    // The user stays on utterance N's workspace and can manually advance.
+    // Stop at end of the N+1 window — workspace stays on N.
     if (globalTime >= windowEnd) {
       setIsPlaying(false);
     }
   };
+
+  // Called when the HTML5 video element fires onEnded (file naturally finished).
+  // For cross-segment case: switch to N+1's video and keep playing.
+  const handleVideoEnded = useCallback(() => {
+    if (!activeUtterance || !nextUtterance) { setIsPlaying(false); return; }
+    const nextUrl = nextUtterance.segment_video_url ?? '';
+    const activeUrl = activeUtterance.segment_video_url ?? '';
+    // Only do cross-segment switch if they are different files and we haven't switched yet
+    if (nextUrl && nextUrl !== activeUrl && !crossSegmentVideoUrl) {
+      setCrossSegmentVideoUrl(nextUrl);
+      // currentTime stays at N.global_end; playerTime will compute N+1.start automatically.
+      setCurrentTime(nextUtterance.global_start ?? nextUtterance.start);
+      // Keep isPlaying true so the new video starts immediately after load
+    } else {
+      setIsPlaying(false);
+    }
+  }, [activeUtterance, nextUtterance, crossSegmentVideoUrl]);
+
+  // For the filmstrip: when N+1 is in a different segment video, pass it for composite frames.
+  const nextVideoUrl = useMemo(() => {
+    if (!nextUtterance || !activeUtterance) return undefined;
+    const nUrl = nextUtterance.segment_video_url ?? '';
+    const aUrl = activeUtterance.segment_video_url ?? '';
+    return nUrl && nUrl !== aUrl ? nUrl : undefined;
+  }, [nextUtterance, activeUtterance]);
+
+  const nextVideoOffset = useMemo(() => {
+    if (!nextUtterance) return 0;
+    return (nextUtterance.start ?? 0) - (nextUtterance.global_start ?? 0);
+  }, [nextUtterance]);
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -591,6 +636,7 @@ export function AnnotationPage() {
                     playbackRate={playbackRate}
                     onPlaybackRateChange={setPlaybackRate}
                     onDurationChange={setDuration}
+                    onEnded={handleVideoEnded}
                   />
                 </div>
                 
@@ -632,6 +678,9 @@ export function AnnotationPage() {
                 <TimelineEditor
                   videoUrl={activeUtterance?.segment_video_url ?? jobVideoUrl ?? ''}
                   videoOffset={videoOffset}
+                  nextVideoUrl={nextVideoUrl}
+                  nextVideoBoundaryGlobal={activeUtterance?.global_end}
+                  nextVideoOffset={nextVideoOffset}
                   duration={segmentEnd}
                   currentTime={currentTime}
                   isPlaying={isPlaying}

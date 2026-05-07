@@ -30,6 +30,9 @@ const ZOOM_STEP = 0.5;
 interface TimelineEditorProps {
   videoUrl: string;
   videoOffset?: number;   // segment-local time = global time + videoOffset
+  nextVideoUrl?: string;  // N+1 segment video (when cross-segment)
+  nextVideoBoundaryGlobal?: number; // global time where N ends / N+1 begins
+  nextVideoOffset?: number; // offset for N+1's video
   duration: number;
   currentTime: number;
   isPlaying: boolean;
@@ -59,6 +62,9 @@ function formatTimestamp(seconds: number): string {
 export function TimelineEditor({
   videoUrl,
   videoOffset = 0,
+  nextVideoUrl,
+  nextVideoBoundaryGlobal,
+  nextVideoOffset = 0,
   duration,
   currentTime,
   onTimeUpdate,
@@ -146,6 +152,7 @@ export function TimelineEditor({
     setFrames([]);
 
     const extractFrames = async () => {
+      // Primary video (utterance N's segment)
       const video = document.createElement('video');
       video.crossOrigin = 'anonymous';
       video.muted = true;
@@ -158,11 +165,25 @@ export function TimelineEditor({
         video.src = videoUrl;
       });
 
+      // Secondary video (utterance N+1's segment, only when cross-segment)
+      let nextVideo: HTMLVideoElement | null = null;
+      if (nextVideoUrl) {
+        nextVideo = document.createElement('video');
+        nextVideo.crossOrigin = 'anonymous';
+        nextVideo.muted = true;
+        nextVideo.preload = 'auto';
+        await new Promise<void>((resolve) => {
+          nextVideo!.onloadeddata = () => resolve();
+          nextVideo!.onerror = () => resolve(); // fail silently
+          nextVideo!.src = nextVideoUrl;
+        });
+      }
+
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      const aspectRatio = video.videoWidth / video.videoHeight;
+      const aspectRatio = video.videoWidth / video.videoHeight || 16 / 9;
       const thumbWidth = Math.round(THUMB_HEIGHT * aspectRatio);
       canvas.width = thumbWidth;
       canvas.height = THUMB_HEIGHT;
@@ -172,13 +193,19 @@ export function TimelineEditor({
 
       for (let i = 0; i < frameCount; i++) {
         if (cancelled) return;
-        // Add videoOffset so we seek to the correct segment-local position
         const seekGlobal = windowStart + i * interval + interval / 2;
-        const seekTime = seekGlobal + videoOffset;
-        video.currentTime = Math.min(Math.max(0, seekTime), video.duration - 0.01);
+
+        // Decide which video to use: N's or N+1's segment
+        const useNextVideo =
+          nextVideo && nextVideoBoundaryGlobal !== undefined && seekGlobal >= nextVideoBoundaryGlobal;
+        const targetVideo = useNextVideo ? nextVideo! : video;
+        const offset = useNextVideo ? nextVideoOffset : videoOffset;
+        const seekTime = seekGlobal + offset;
+
+        targetVideo.currentTime = Math.min(Math.max(0, seekTime), targetVideo.duration - 0.01);
         await new Promise<void>((resolve) => {
-          video.onseeked = () => {
-            ctx.drawImage(video, 0, 0, thumbWidth, THUMB_HEIGHT);
+          targetVideo.onseeked = () => {
+            ctx.drawImage(targetVideo, 0, 0, thumbWidth, THUMB_HEIGHT);
             extracted.push(canvas.toDataURL('image/jpeg', 0.6));
             resolve();
           };
@@ -191,6 +218,7 @@ export function TimelineEditor({
       }
       video.src = '';
       video.load();
+      if (nextVideo) { nextVideo.src = ''; nextVideo.load(); }
       extractVideoRef.current = null;
     };
 
@@ -206,7 +234,7 @@ export function TimelineEditor({
         extractVideoRef.current = null;
       }
     };
-  }, [videoUrl, videoOffset, duration, frameCount]);
+  }, [videoUrl, videoOffset, nextVideoUrl, nextVideoOffset, nextVideoBoundaryGlobal, duration, frameCount]);
 
   // ── Position helpers ──────────────────────────────────────────
 

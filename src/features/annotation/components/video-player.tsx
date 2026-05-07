@@ -20,6 +20,7 @@ interface VideoPlayerProps {
   playbackRate: number;
   onPlaybackRateChange: (rate: number) => void;
   onDurationChange: (duration: number) => void;
+  onEnded?: () => void;
 }
 
 export function VideoPlayer({
@@ -31,6 +32,7 @@ export function VideoPlayer({
   playbackRate,
   onPlaybackRateChange,
   onDurationChange,
+  onEnded,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -121,6 +123,7 @@ export function VideoPlayer({
               onDurationChange={(e) => onDurationChange(e.currentTarget.duration)}
               onClick={() => onPlayPause(!isPlaying)}
               onError={() => setVideoError('Gagal memuat video. Coba refresh halaman.')}
+              onEnded={onEnded}
               preload="metadata"
               muted={isMuted}
             >
