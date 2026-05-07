@@ -29,6 +29,7 @@ const ZOOM_STEP = 0.5;
 
 interface TimelineEditorProps {
   videoUrl: string;
+  videoOffset?: number;   // segment-local time = global time + videoOffset
   duration: number;
   currentTime: number;
   isPlaying: boolean;
@@ -57,6 +58,7 @@ function formatTimestamp(seconds: number): string {
 
 export function TimelineEditor({
   videoUrl,
+  videoOffset = 0,
   duration,
   currentTime,
   onTimeUpdate,
@@ -170,8 +172,10 @@ export function TimelineEditor({
 
       for (let i = 0; i < frameCount; i++) {
         if (cancelled) return;
-        const seekTime = windowStart + i * interval + interval / 2;
-        video.currentTime = Math.min(seekTime, duration - 0.01);
+        // Add videoOffset so we seek to the correct segment-local position
+        const seekGlobal = windowStart + i * interval + interval / 2;
+        const seekTime = seekGlobal + videoOffset;
+        video.currentTime = Math.min(Math.max(0, seekTime), video.duration - 0.01);
         await new Promise<void>((resolve) => {
           video.onseeked = () => {
             ctx.drawImage(video, 0, 0, thumbWidth, THUMB_HEIGHT);
@@ -202,7 +206,7 @@ export function TimelineEditor({
         extractVideoRef.current = null;
       }
     };
-  }, [videoUrl, duration, frameCount]);
+  }, [videoUrl, videoOffset, duration, frameCount]);
 
   // ── Position helpers ──────────────────────────────────────────
 

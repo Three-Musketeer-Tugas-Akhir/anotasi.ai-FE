@@ -126,6 +126,9 @@ export function AnnotationPage() {
 
         // Collect current edits or fall back to ASR
         let segmentEdits: UtteranceCorrection[] = [];
+        // Always prefer the full segment video (data.video_url) so the player
+        // can seek across utterance N and N+1 seamlessly within the same video.
+        const segVideo = data.video_url ?? '';
         if (data.current_utterances && data.current_utterances.length > 0) {
           // Sort by start BEFORE computing global timeline
           const sortedUtts = [...data.current_utterances].sort((a, b) => a.start - b.start);
@@ -141,7 +144,8 @@ export function AnnotationPage() {
               confidence: transcript?.confidence,
               global_start: gStart,
               global_end: gEnd,
-              segment_video_url: u.cropped_video_path || transcript?.video_path || data.video_url,
+              // Use full segment video so player spans N and N+1
+              segment_video_url: segVideo || u.cropped_video_path || transcript?.video_path,
             };
           });
         } else if (data.transcripts && data.transcripts.length > 0) {
@@ -161,7 +165,7 @@ export function AnnotationPage() {
               cropped_video_path: t.video_path,
               global_start: gStart,
               global_end: gEnd,
-              segment_video_url: t.video_path || data.video_url,
+              segment_video_url: segVideo || t.video_path,
             };
           });
         }
@@ -420,25 +424,42 @@ export function AnnotationPage() {
     return jobVideoUrl ?? '';
   }, [activeUtterance, jobVideoUrl]);
 
-  // Convert global currentTime to local time for the video player
-  // Since we always play utterance videos, the video time starts at 0 for the active utterance
+  // Offset between segment-local time and global time for the active utterance.
+  // segment-local = global + videoOffset
+  // e.g. if utterance.start (ASR) = 8.5s and global_start = 3.0s → offset = 5.5
+  const videoOffset = useMemo(() => {
+    if (!activeUtterance) return 0;
+    return (activeUtterance.start ?? 0) - (activeUtterance.global_start ?? 0);
+  }, [activeUtterance]);
+
+  // Convert global currentTime → segment-local time for the video element.
   const playerTime = useMemo(() => {
     if (!activeUtterance) return 0;
-    return Math.max(0, currentTime - (activeUtterance.global_start ?? 0));
+    // segment-local = ASR start + elapsed since N started
+    const segLocalStart = activeUtterance.start ?? 0;
+    const elapsed = currentTime - (activeUtterance.global_start ?? 0);
+    return Math.max(0, segLocalStart + elapsed);
   }, [activeUtterance, currentTime]);
 
   const handlePlayerTimeUpdate = (t: number) => {
     if (!activeUtterance) return;
-    const globalTime = t + (activeUtterance.global_start ?? 0);
+    // Convert segment-local time → global
+    const segLocalStart = activeUtterance.start ?? 0;
+    const elapsed = t - segLocalStart;
+    const globalTime = (activeUtterance.global_start ?? 0) + elapsed;
     setCurrentTime(globalTime);
-    
-    // Auto-switch to next utterance if we cross boundary
-    if (activeUtterance.global_end !== undefined && globalTime >= activeUtterance.global_end) {
-      if (activeUtteranceIndex !== null && activeUtteranceIndex < utteranceEdits.length - 1) {
-        setActiveUtteranceIndex(activeUtteranceIndex + 1);
-      } else {
-        setIsPlaying(false);
-      }
+
+    // Determine end of playback window: end of N+1 (or N if no N+1)
+    const nextUtterance =
+      activeUtteranceIndex !== null ? utteranceEdits[activeUtteranceIndex + 1] : null;
+    const windowEnd = nextUtterance
+      ? (nextUtterance.global_end ?? nextUtterance.end)
+      : (activeUtterance.global_end ?? activeUtterance.end);
+
+    // Stop at end of the N+1 window — do NOT switch the workspace automatically.
+    // The user stays on utterance N's workspace and can manually advance.
+    if (globalTime >= windowEnd) {
+      setIsPlaying(false);
     }
   };
 
@@ -610,6 +631,7 @@ export function AnnotationPage() {
               <div className="flex-shrink-0 mt-auto bg-slate-950 p-2 border-t border-slate-800">
                 <TimelineEditor
                   videoUrl={activeUtterance?.segment_video_url ?? jobVideoUrl ?? ''}
+                  videoOffset={videoOffset}
                   duration={segmentEnd}
                   currentTime={currentTime}
                   isPlaying={isPlaying}
