@@ -25,7 +25,7 @@ export function VideoPlayer({ job }: VideoPlayerProps) {
   // Use original_video_url directly from the backend response.
   // #t=0,60 restricts playback to 1 minute max for large files.
   const videoUrl = isMounted && job.original_video_url
-    ? `${job.original_video_url}#t=0,60`
+    ? job.original_video_url
     : null;
 
   return (

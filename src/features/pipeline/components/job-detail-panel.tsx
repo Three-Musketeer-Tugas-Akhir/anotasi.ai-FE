@@ -1080,7 +1080,7 @@ function Stage1Content({
         </Badge>
       </div>
 
-      <div className="max-h-[240px] overflow-y-auto pr-1 pb-1">
+      <div className="max-h-[240px] overflow-y-auto pr-1 pb-1 no-drag-scroll">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {segments.map((seg) => renderCard(seg))}
         </div>
@@ -1246,8 +1246,6 @@ function Stage3Content({
   onPreviewVideo: (url: string, title: string, subtitle?: string) => void;
   jobId: string;
 }) {
-  const [selectedSegIdx, setSelectedSegIdx] = useState<number>(0);
-
   if (!results || results.results.length === 0) {
     return (
       <div className="flex items-center justify-center py-4 text-emerald-600">
@@ -1258,8 +1256,7 @@ function Stage3Content({
   }
 
   const { summary } = results;
-  const segments = results.results;
-  const selectedSegment = segments[selectedSegIdx];
+  const allUtterances = results.results.flatMap((seg) => seg.utterances);
 
   return (
     <div className="pt-3 space-y-4">
@@ -1283,48 +1280,18 @@ function Stage3Content({
         </div>
       </div>
 
-      {/* 1. Horizontal Scroll Area for Segments with Sticky effect */}
-      <div className="flex overflow-x-auto gap-3 pb-2 snap-x relative no-drag-scroll">
-        {segments.map((segment, idx) => {
-          const isSelected = idx === selectedSegIdx;
-          return (
-            <button
-              key={segment.segment_id}
-              onClick={() => setSelectedSegIdx(idx)}
-              className={`flex-shrink-0 w-48 p-3 text-left transition-all border rounded-xl snap-start ${
-                isSelected 
-                  ? 'sticky left-0 z-10 bg-indigo-50 border-indigo-400 shadow-md ring-1 ring-indigo-400' 
-                  : 'bg-white border-gray-200 hover:bg-gray-50 z-0 opacity-80 hover:opacity-100'
-              }`}
-            >
-              <div className="flex justify-between items-start">
-                <p className="text-sm font-bold text-gray-800">Segmen #{idx + 1}</p>
-                {segment.asr_review_flag && (
-                  <AlertTriangle size={14} className="text-amber-500" />
-                )}
-              </div>
-              <div className="mt-1.5 flex gap-1.5 flex-wrap">
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-blue-50 text-blue-600 border-blue-200">
-                  {segment.utterances.length} Crop
-                </Badge>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 2. Expanded Area for Selected Segment's Utterances */}
-      {selectedSegment && (
-        <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
-          <h4 className="text-xs font-bold text-gray-700 mb-3 flex items-center gap-2">
-            <Film size={14} className="text-indigo-500" />
-            Video Cropping - Segmen #{selectedSegIdx + 1}
-          </h4>
-          <div className="flex overflow-x-auto gap-3 pb-2 snap-x no-drag-scroll">
-            {selectedSegment.utterances.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">Tidak ada data crop di segmen ini.</p>
+      {/* Utterances Grid */}
+      <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
+        <h4 className="text-xs font-bold text-gray-700 mb-3 flex items-center gap-2">
+          <Film size={14} className="text-indigo-500" />
+          Daftar Video Cropping
+        </h4>
+        <div className="max-h-[400px] overflow-y-auto pr-1 pb-1 no-drag-scroll">
+          <div className="flex flex-col gap-2">
+            {allUtterances.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">Tidak ada data crop.</p>
             ) : (
-              selectedSegment.utterances.map((utt) => {
+              allUtterances.map((utt) => {
                 const isCropped = utt.status === 'cropped';
                 const isFailed = utt.status === 'failed';
 
@@ -1341,7 +1308,7 @@ function Stage3Content({
                       }
                     }}
                     disabled={!utt.url || !isCropped}
-                    className={`flex-shrink-0 w-64 snap-start rounded-xl border p-3 text-left transition-all ${
+                    className={`w-full rounded-xl border p-3 text-left transition-all ${
                       isCropped && utt.url
                         ? 'bg-white border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 group cursor-pointer shadow-sm'
                         : isFailed
@@ -1388,7 +1355,7 @@ function Stage3Content({
             )}
           </div>
         </div>
-      )}
+      </div>
 
       {/* Link to Voice Annotation page */}
       <div className="flex justify-center pt-2">
