@@ -29,6 +29,7 @@ export interface UtteranceCorrection {
   global_end?: number;     // end + segment_offset
   segment_offset?: number; // Cumulative duration of all previous segments
   segment_video_url?: string; // Video URL for the segment this utterance belongs to
+  segment_max_end?: number;   // Segment video duration bound (asr_end) for cross-segment clamping
 }
 
 // ── Queue ───────────────────────────────────────────────────────────

@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAnnotationsApi } from '../api/admin-annotations-api';
-import { classificationRepository } from '@/features/classification/api/classification.repository';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import {
   Loader2,
   UserCheck,
@@ -15,6 +15,10 @@ import {
   AlertCircle,
   ArrowRight,
   Check,
+  AlertTriangle,
+  UserX,
+  RefreshCw,
+  ChevronLeft,
 } from 'lucide-react';
 
 // ── Helper ──────────────────────────────────────────────────────────
@@ -35,9 +39,9 @@ export function AssignAnnotationsPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   // ── Queries ──
-  const { data: jobsResponse, isLoading: isLoadingJobs } = useQuery({
-    queryKey: ['admin', 'jobs', 'ready_for_annotation'],
-    queryFn: () => classificationRepository.getJobs({ status: 'READY_FOR_ANNOTATION', limit: 50 }),
+  const { data: assignmentsResponse, isLoading: isLoadingJobs } = useQuery({
+    queryKey: ['admin', 'job-assignments'],
+    queryFn: () => adminAnnotationsApi.getJobAssignments(),
   });
 
   const { data: queueStatus, isLoading: isLoadingQueueStatus } = useQuery({
@@ -50,35 +54,73 @@ export function AssignAnnotationsPage() {
     queryFn: adminAnnotationsApi.getAnnotators,
   });
 
-  // ── Mutation ──
+  // ── Mutations ──
   const assignMutation = useMutation({
     mutationFn: ({ jobId, annotatorId }: { jobId: string; annotatorId: string }) =>
       adminAnnotationsApi.assignJob({ job_id: jobId, annotator_id: annotatorId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'jobs'] });
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'job-assignments'] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'queue-status'] });
       setSelectedJobId(null);
       setSelectedAnnotatorId(null);
+      toast.success('Penugasan berhasil', {
+        description: data.message,
+        position: 'top-center',
+      });
+    },
+    onError: (err: any) => {
+      toast.error('Penugasan gagal', {
+        description: err?.response?.data?.detail || 'Terjadi kesalahan saat menugaskan job.',
+        position: 'top-center',
+      });
     },
   });
 
-  const jobs = jobsResponse?.jobs || [];
+  const reassignMutation = useMutation({
+    mutationFn: ({ jobId, annotatorId }: { jobId: string; annotatorId: string }) =>
+      adminAnnotationsApi.reassignJob({ job_id: jobId, annotator_id: annotatorId }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'job-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'queue-status'] });
+      setSelectedJobId(null);
+      setSelectedAnnotatorId(null);
+      toast.success('Penggantian penanggung jawab berhasil', {
+        description: data.message,
+        position: 'top-center',
+      });
+    },
+    onError: (err: any) => {
+      toast.error('Penggantian gagal', {
+        description: err?.response?.data?.detail || 'Terjadi kesalahan saat mengganti penanggung jawab.',
+        position: 'top-center',
+      });
+    },
+  });
+
+  const jobs = assignmentsResponse?.items || [];
   const annotators = usersResponse?.items || [];
 
   const filteredJobs = useMemo(() =>
     jobs.filter((job: any) =>
-      (job.video_title || '').toLowerCase().includes(searchQuery.toLowerCase())
+      (job.original_filename || '').toLowerCase().includes(searchQuery.toLowerCase())
     ),
     [jobs, searchQuery]
   );
 
   const selectedJob = jobs.find((j: any) => j.job_id === selectedJobId);
+  const isReassigning = selectedJob?.assignment_status === 'assigned';
 
   const handleAssign = () => {
-    if (selectedJobId && selectedAnnotatorId) {
+    if (!selectedJobId || !selectedAnnotatorId) return;
+
+    if (isReassigning) {
+      reassignMutation.mutate({ jobId: selectedJobId, annotatorId: selectedAnnotatorId });
+    } else {
       assignMutation.mutate({ jobId: selectedJobId, annotatorId: selectedAnnotatorId });
     }
   };
+
+  const isMutating = assignMutation.isPending || reassignMutation.isPending;
 
   // Build job count per annotator from queueStatus
   const jobCountByEmail = useMemo(() => {
@@ -90,6 +132,10 @@ export function AssignAnnotationsPage() {
     }
     return map;
   }, [queueStatus]);
+
+  // Stats
+  const assignedCount = jobs.filter((j: any) => j.assignment_status === 'assigned').length;
+  const unassignedCount = jobs.filter((j: any) => j.assignment_status === 'unassigned').length;
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
@@ -104,7 +150,7 @@ export function AssignAnnotationsPage() {
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Distribusi Tugas JBI</h1>
           </div>
           <p className="text-slate-500 text-sm max-w-2xl leading-relaxed">
-            Pilih video yang telah siap, lalu tugaskan kepada annotator JBI. Perhatikan beban kerja masing-masing annotator sebelum menugaskan.
+            Pilih video yang telah siap, lalu tugaskan kepada annotator JBI. Job yang sudah ditugaskan dapat diganti penanggung jawabnya kapan saja.
           </p>
         </div>
 
@@ -112,7 +158,15 @@ export function AssignAnnotationsPage() {
         <div className="flex bg-white border border-slate-200 rounded-xl shadow-sm divide-x divide-slate-100 overflow-hidden flex-shrink-0">
           <div className="px-5 py-3 text-center">
             <p className="text-lg font-bold text-slate-900 leading-none">{jobs.length}</p>
-            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide mt-1">Siap Dialokasi</p>
+            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide mt-1">Total Job</p>
+          </div>
+          <div className="px-5 py-3 text-center">
+            <p className="text-lg font-bold text-emerald-600 leading-none">{assignedCount}</p>
+            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide mt-1">Sudah Ditugaskan</p>
+          </div>
+          <div className="px-5 py-3 text-center">
+            <p className="text-lg font-bold text-amber-600 leading-none">{unassignedCount}</p>
+            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide mt-1">Belum Ditugaskan</p>
           </div>
           <div className="px-5 py-3 text-center">
             <p className="text-lg font-bold text-teal-600 leading-none">{annotators.length}</p>
@@ -147,7 +201,7 @@ export function AssignAnnotationsPage() {
               {isLoadingJobs ? (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3">
                   <Loader2 className="w-8 h-8 animate-spin text-teal-500" />
-                  <p className="text-sm font-medium">Memuat antrean job...</p>
+                  <p className="text-sm font-medium">Memuat daftar job...</p>
                 </div>
               ) : filteredJobs.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-3 p-8">
@@ -166,6 +220,9 @@ export function AssignAnnotationsPage() {
               ) : (
                 filteredJobs.map((job: any) => {
                   const isSelected = selectedJobId === job.job_id;
+                  const isAssigned = job.assignment_status === 'assigned';
+                  const isPartial = job.assignment_status === 'partial';
+
                   return (
                     <div
                       key={job.job_id}
@@ -190,15 +247,30 @@ export function AssignAnnotationsPage() {
                         <div className="flex-1 min-w-0">
                           <h3 className={`font-semibold text-sm truncate mb-1.5 transition-colors
                             ${isSelected ? 'text-teal-900' : 'text-slate-900 group-hover:text-teal-700'}`}>
-                            {job.video_title || 'Unknown Video'}
+                            {job.original_filename || 'Unknown Video'}
                           </h3>
                           <div className="flex items-center gap-3 text-[11px] text-slate-500 font-medium flex-wrap">
                             <span className="flex items-center gap-1.5 bg-slate-100 px-2 py-0.5 rounded-md font-mono">
                               <FileText className="w-3 h-3" /> {job.job_id.slice(0, 8)}...
                             </span>
-                            {job.progress?.percent != null && (
-                              <span className="flex items-center gap-1.5">
-                                <Clock className="w-3 h-3" /> {job.progress.percent}%
+                            <span className="flex items-center gap-1.5">
+                              <Clock className="w-3 h-3" /> {job.total_segments} segmen
+                            </span>
+                            {/* Assignment status indicator */}
+                            {isAssigned ? (
+                              <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                                <CheckCircle2 className="w-3 h-3" />
+                                {job.assigned_to_email || 'Ditugaskan'}
+                              </span>
+                            ) : isPartial ? (
+                              <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">
+                                <AlertTriangle className="w-3 h-3" />
+                                Sebagian ditugaskan
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">
+                                <UserX className="w-3 h-3" />
+                                Perlu ditugaskan
                               </span>
                             )}
                           </div>
@@ -239,11 +311,24 @@ export function AssignAnnotationsPage() {
                   <Video className="w-4 h-4 text-teal-600 mt-0.5 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-slate-900 line-clamp-2 leading-tight">
-                      {(selectedJob as any).video_title || 'Unknown Video'}
+                      {(selectedJob as any).original_filename || 'Unknown Video'}
                     </p>
-                    <p className="text-xs text-slate-400 mt-1 font-mono">
-                      {(selectedJob as any).job_id}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <p className="text-xs text-slate-400 font-mono">
+                        {(selectedJob as any).job_id}
+                      </p>
+                      {(selectedJob as any).assignment_status === 'assigned' ? (
+                        <span className="text-[10px] flex items-center gap-1 text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                          <CheckCircle2 className="w-3 h-3" />
+                          {(selectedJob as any).assigned_to_email}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] flex items-center gap-1 text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                          <UserX className="w-3 h-3" />
+                          Perlu ditugaskan
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -316,19 +401,26 @@ export function AssignAnnotationsPage() {
             <div className="p-4 bg-slate-50 border-t border-slate-100">
               <Button
                 onClick={handleAssign}
-                disabled={!selectedJobId || !selectedAnnotatorId || assignMutation.isPending}
+                disabled={!selectedJobId || !selectedAnnotatorId || isMutating}
                 className={`w-full py-3.5 h-auto font-bold text-sm flex justify-center items-center gap-2 transition-all duration-300 rounded-xl
                   ${(!selectedJobId || !selectedAnnotatorId)
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed hover:bg-slate-200'
-                    : assignMutation.isPending
+                    : isMutating
                       ? 'bg-teal-700 text-white cursor-wait'
-                      : 'bg-teal-600 text-white hover:bg-teal-700 hover:shadow-lg hover:shadow-teal-600/20 active:scale-[0.98]'
+                      : isReassigning
+                        ? 'bg-amber-600 text-white hover:bg-amber-700 hover:shadow-lg hover:shadow-amber-600/20 active:scale-[0.98]'
+                        : 'bg-teal-600 text-white hover:bg-teal-700 hover:shadow-lg hover:shadow-teal-600/20 active:scale-[0.98]'
                   }`}
               >
-                {assignMutation.isPending ? (
+                {isMutating ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Memproses Penugasan...
+                    Memproses...
+                  </>
+                ) : isReassigning ? (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    Ganti Penanggung Jawab
                   </>
                 ) : (
                   <>
@@ -342,8 +434,12 @@ export function AssignAnnotationsPage() {
                 {!selectedJobId
                   ? 'Pilih job target di panel sebelah kiri'
                   : !selectedAnnotatorId
-                    ? 'Pilih annotator untuk menugaskan job ini'
-                    : 'Siap ditugaskan. Tindakan ini tidak bisa dibatalkan.'}
+                    ? isReassigning
+                      ? 'Pilih annotator pengganti'
+                      : 'Pilih annotator untuk menugaskan job ini'
+                    : isReassigning
+                      ? 'Siap mengganti penanggung jawab. Pekerjaan sebelumnya tetap tersimpan.'
+                      : 'Siap ditugaskan. Tindakan ini tidak bisa dibatalkan.'}
               </p>
             </div>
           </div>

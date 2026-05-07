@@ -14,6 +14,8 @@ interface VideoUploadModalProps {
   onYtDownloadStarted: (state: YTDownloadState) => void;
   /** Called on every poll tick so parent can update the download state */
   onYtProgressUpdate: (downloadId: string, update: Partial<YTDownloadState>) => void;
+  /** Currently selected dataset ID to associate with the upload */
+  datasetId?: string;
 }
 
 type UploadTab = 'file' | 'youtube';
@@ -24,6 +26,7 @@ export function VideoUploadModal({
   onUploadSuccess,
   onYtDownloadStarted,
   onYtProgressUpdate,
+  datasetId,
 }: VideoUploadModalProps) {
   const [activeTab, setActiveTab] = useState<UploadTab>('file');
   const [file, setFile] = useState<File | null>(null);
@@ -48,7 +51,7 @@ export function VideoUploadModal({
     e.preventDefault();
     if (!file) { setError('File video harus dipilih.'); return; }
     setError(null);
-    upload({ file }, {
+    upload({ file, datasetId }, {
       onError: (err: unknown) => {
         const resp = (err as { response?: { data?: { detail?: string } } })?.response;
         setError(resp?.data?.detail || 'Terjadi kesalahan saat mengunggah.');
@@ -70,7 +73,7 @@ export function VideoUploadModal({
     setYtSubmitting(true);
 
     try {
-      const result = await classificationRepository.startYoutubeDownload(trimmed);
+      const result = await classificationRepository.startYoutubeDownload(trimmed, undefined, datasetId);
       const downloadId = result.download_id;
 
       // Initial state pushed up to parent

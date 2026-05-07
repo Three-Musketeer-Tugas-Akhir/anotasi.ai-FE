@@ -132,6 +132,8 @@ export function AnnotationPage() {
         // Always prefer the full segment video (data.video_url) so the player
         // can seek across utterance N and N+1 seamlessly within the same video.
         const segVideo = data.video_url ?? '';
+        // Track the segment's video duration boundary for cross-segment clamping
+        const segMaxEnd = data.asr_end ?? data.jbi_end ?? undefined;
         if (data.current_utterances && data.current_utterances.length > 0) {
           // Sort by start BEFORE computing global timeline
           const sortedUtts = [...data.current_utterances].sort((a, b) => a.start - b.start);
@@ -147,6 +149,7 @@ export function AnnotationPage() {
               confidence: transcript?.confidence,
               global_start: gStart,
               global_end: gEnd,
+              segment_max_end: segMaxEnd,
               // Use full segment video so player spans N and N+1
               segment_video_url: segVideo || u.cropped_video_path || transcript?.video_path,
             };
@@ -168,6 +171,7 @@ export function AnnotationPage() {
               cropped_video_path: t.video_path,
               global_start: gStart,
               global_end: gEnd,
+              segment_max_end: segMaxEnd,
               segment_video_url: segVideo || t.video_path,
             };
           });
@@ -339,7 +343,16 @@ export function AnnotationPage() {
 
   // Strip FE-only virtual fields before sending to backend
   const stripGlobalFields = (utt: UtteranceCorrection): UtteranceCorrection => {
-    const { global_start, global_end, segment_offset, segment_video_url, confidence, ...clean } = utt;
+    const { global_start, global_end, segment_offset, segment_video_url, confidence, segment_max_end, ...clean } = utt;
+    // Clamp local end to segment video duration to prevent cross-segment
+    // trim from exceeding the video file length (e.g. 473.55 > 470.3)
+    if (segment_max_end != null && clean.end > segment_max_end) {
+      clean.end = segment_max_end;
+    }
+    // Clamp start to >= 0
+    if (clean.start < 0) {
+      clean.start = 0;
+    }
     return clean;
   };
 

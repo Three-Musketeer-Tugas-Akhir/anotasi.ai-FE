@@ -14,6 +14,40 @@ export interface AssignJobResponse {
   segment_ids: string[];
 }
 
+export interface ReassignJobRequest {
+  job_id: string;
+  annotator_id: string;
+}
+
+export interface ReassignJobResponse {
+  success: boolean;
+  message: string;
+  reassigned_count: number;
+  job_id: string;
+  new_annotator_id: string;
+  new_annotator_email: string;
+}
+
+export interface JobAssignmentItem {
+  job_id: string;
+  original_filename: string;
+  status: string;
+  category: string | null;
+  created_at: string | null;
+  total_segments: number;
+  assigned_segments: number;
+  assignment_status: 'unassigned' | 'partial' | 'assigned';
+  assigned_to: string | null;
+  assigned_to_email: string | null;
+}
+
+export interface JobAssignmentsResponse {
+  items: JobAssignmentItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface QueueStatusResponse {
   by_status: Record<string, number>;
   by_annotator: {
@@ -46,6 +80,16 @@ export const adminAnnotationsApi = {
   assignJob: (params: AssignJobRequest) =>
     apiClient
       .post<AssignJobResponse>('/admin/annotations/assign-job', null, { params })
+      .then((r) => r.data),
+
+  reassignJob: (params: ReassignJobRequest) =>
+    apiClient
+      .post<ReassignJobResponse>('/admin/annotations/reassign-job', null, { params })
+      .then((r) => r.data),
+
+  getJobAssignments: () =>
+    apiClient
+      .get<JobAssignmentsResponse>('/admin/annotations/job-assignments')
       .then((r) => r.data),
 
   getAnnotators: () =>

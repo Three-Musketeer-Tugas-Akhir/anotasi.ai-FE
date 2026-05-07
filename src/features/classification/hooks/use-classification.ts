@@ -49,8 +49,8 @@ export function useUploadJob(onSuccess?: (data: ReturnType<typeof classification
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ file }: { file: File }) =>
-      classificationRepository.uploadVideo(file),
+    mutationFn: ({ file, datasetId }: { file: File; datasetId?: string }) =>
+      classificationRepository.uploadVideo(file, datasetId),
 
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: classificationKeys.all });

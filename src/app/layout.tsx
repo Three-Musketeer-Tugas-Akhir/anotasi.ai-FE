@@ -4,6 +4,7 @@ import { QueryProvider } from '@/core/providers/query-provider';
 import { TourProvider, AppTour } from '@/shared/components/tour';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/features/auth';
+import { DatasetProvider } from '@/features/dataset';
 import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
 
@@ -29,10 +30,12 @@ export default function RootLayout({
         <QueryProvider>
           <TooltipProvider>
             <AuthProvider>
-              <TourProvider>
-                {children}
-                <AppTour />
-              </TourProvider>
+              <DatasetProvider>
+                <TourProvider>
+                  {children}
+                  <AppTour />
+                </TourProvider>
+              </DatasetProvider>
             </AuthProvider>
           </TooltipProvider>
         </QueryProvider>

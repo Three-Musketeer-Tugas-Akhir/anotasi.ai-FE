@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/features/auth';
+import { DatasetSelector } from '@/features/dataset';
 import { useRouter } from 'next/navigation';
 import { USER_ROLE_LABELS } from '@/features/auth/types';
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -135,6 +136,8 @@ export function TopBar() {
           <span className="text-sm text-gray-400 font-medium">Anotasi.ai</span>
           <span className="text-gray-300">/</span>
           <span className="text-sm font-semibold text-gray-700">Pipeline Anotasi SIBI</span>
+          <div className="hidden md:block w-px h-5 bg-gray-200 mx-1" />
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100 h-9 w-40" />
         </div>
         <div className="flex items-center gap-3">
           <div className="p-2 text-gray-500"><MessageCircle size={18} /></div>
@@ -161,11 +164,13 @@ export function TopBar() {
 
   return (
     <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0 z-10">
-      {/* Left: Breadcrumb / Page context */}
+      {/* Left: Breadcrumb / Page context + Dataset Selector */}
       <div className="flex items-center gap-3">
         <span className="text-sm text-gray-400 font-medium">Anotasi.ai</span>
         <span className="text-gray-300">/</span>
         <span className="text-sm font-semibold text-gray-700">Pipeline Anotasi SIBI</span>
+        <div className="hidden md:block w-px h-5 bg-gray-200 mx-1" />
+        <DatasetSelector />
       </div>
 
       {/* Right: Chat + Notifications + Profile */}

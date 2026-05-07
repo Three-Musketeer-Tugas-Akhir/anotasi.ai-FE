@@ -78,9 +78,13 @@ export const classificationRepository = {
    */
   uploadVideo: async (
     file: File,
+    datasetId?: string,
   ): Promise<JobCreateResponse> => {
     const formData = new FormData();
     formData.append('video', file);
+    if (datasetId) {
+      formData.append('dataset_id', datasetId);
+    }
 
     const { data } = await apiClient.post<JobCreateResponse>('/pipeline/jobs', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -95,8 +99,9 @@ export const classificationRepository = {
   startYoutubeDownload: async (
     url: string,
     category?: string,
+    datasetId?: string,
   ): Promise<{ download_id: string; url: string; status: string; message: string }> => {
-    const { data } = await apiClient.post('/upload/youtube', { url, category });
+    const { data } = await apiClient.post('/upload/youtube', { url, category, dataset_id: datasetId });
     return data;
   },
 

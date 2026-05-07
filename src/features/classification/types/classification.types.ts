@@ -46,6 +46,7 @@ export interface JobListResponse {
 export interface JobListParams {
   status?: string;
   category?: 'SIBI' | 'BISINDO';
+  dataset_id?: string;
   limit?: number;
   offset?: number;
 }

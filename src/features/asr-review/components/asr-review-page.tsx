@@ -302,6 +302,7 @@ function UtteranceRow({
   const [editText, setEditText] = useState(utterance.ground_truth_text);
   const [isDirty, setIsDirty] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   // Sync when parent data changes (e.g. after save)
   useEffect(() => {
@@ -414,35 +415,40 @@ function UtteranceRow({
           </div>
           
           <div className="relative">
-            {/* Background highlight layer */}
+            {/* Background highlight layer — scroll synced with textarea */}
             <div
-              className="absolute inset-0 pointer-events-none p-2.5 whitespace-pre-wrap break-words font-inherit text-sm leading-relaxed text-transparent z-0"
+              ref={overlayRef}
+              className="absolute inset-0 pointer-events-none p-2.5 whitespace-pre-wrap break-words font-inherit text-sm leading-relaxed text-transparent z-0 overflow-auto"
               aria-hidden="true"
             >
               <HighlightedOverlay text={editText} flaggedWords={utterance.flagged_words} />
             </div>
-            
+
             {/* Transparent Textarea */}
             <textarea
               ref={textareaRef}
               value={editText}
               onChange={(e) => handleChange(e.target.value)}
+              onScroll={(e) => {
+                if (overlayRef.current) {
+                  overlayRef.current.scrollTop = e.currentTarget.scrollTop;
+                }
+              }}
               rows={2}
-              className="relative z-10 w-full text-sm text-gray-800 leading-relaxed bg-transparent border border-gray-200 rounded-lg p-2.5 min-h-[52px] resize-none focus:outline-none focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all caret-black"
+              className="relative z-10 w-full text-sm text-gray-800 leading-relaxed bg-transparent border border-gray-200 rounded-lg p-2.5 min-h-[52px] resize-none focus:outline-none focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all caret-black overflow-auto"
             />
           </div>
-          
-          {/* Flagged words display (summary) */}
+
+          {/* Flagged words display (summary) — plain text, no badge/box */}
           {utterance.flagged_words.length > 0 && (
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="text-[10px] text-amber-500 font-bold uppercase tracking-tighter">Tinjau kata:</span>
-              <div className="flex flex-wrap gap-1">
-                {utterance.flagged_words.map((word) => (
-                  <span
-                    key={word}
-                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-600 border border-amber-100 shadow-sm"
-                  >
-                    {word}
+            <div className="flex items-start gap-1.5 mt-1.5">
+              <AlertTriangle size={12} className="text-amber-500 mt-0.5 flex-shrink-0" />
+              <div className="text-[11px] text-amber-700 leading-snug">
+                <span className="font-semibold">Tinjau kata:</span>{' '}
+                {utterance.flagged_words.map((word, i) => (
+                  <span key={word}>
+                    <span className="font-medium">{word}</span>
+                    {i < utterance.flagged_words.length - 1 ? ' · ' : ''}
                   </span>
                 ))}
               </div>

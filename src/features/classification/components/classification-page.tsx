@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Layout, Loader2, AlertCircle } from 'lucide-react';
 import type { YTDownloadState } from './youtube-download-banner';
 import { YTDownloadBanner } from './youtube-download-banner';
+import { useSelectedDataset } from '@/features/dataset';
 import { useJobs, useUpdateCategory } from '@/features/classification/hooks/use-classification';
 import type { CategoryStatus, JobListParams } from '@/features/classification/types/classification.types';
 import { useTour } from '@/shared/components/tour';
@@ -35,11 +36,17 @@ export function ClassificationPage() {
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, targetCategory: 'SIBI' | 'BISINDO' | null}>({ isOpen: false, targetCategory: null });
   const PAGE_SIZE = 20;
 
+  // ── Dataset context ──────────────────────────────────────────────────
+  const { selectedDataset } = useSelectedDataset();
+
   // ── Build query params ───────────────────────────────────────────────
   const params: JobListParams = {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
   };
+  if (selectedDataset?.id) {
+    params.dataset_id = selectedDataset.id;
+  }
   // Map filter to API category param (only for SIBI/BISINDO, not 'all'/'uncategorized')
   if (filter === 'SIBI' || filter === 'BISINDO') {
     params.category = filter;
@@ -53,9 +60,13 @@ export function ClassificationPage() {
 
   // ── Global progress stats (independent of current filter/page) ───────
   // Fetch minimal (limit:1) queries so we always have the true totals.
-  const { data: allStatsData } = useJobs({ limit: 1 });
-  const { data: sibiStatsData } = useJobs({ limit: 1, category: 'SIBI' });
-  const { data: bisindoStatsData } = useJobs({ limit: 1, category: 'BISINDO' });
+  const statsParamsBase: JobListParams = { limit: 1 };
+  if (selectedDataset?.id) {
+    statsParamsBase.dataset_id = selectedDataset.id;
+  }
+  const { data: allStatsData } = useJobs(statsParamsBase);
+  const { data: sibiStatsData } = useJobs({ ...statsParamsBase, category: 'SIBI' });
+  const { data: bisindoStatsData } = useJobs({ ...statsParamsBase, category: 'BISINDO' });
 
   const totalAll = allStatsData?.total ?? 0;
   const sibiTotal = sibiStatsData?.total ?? 0;
@@ -193,9 +204,16 @@ export function ClassificationPage() {
             <Layout size={20} className="text-teal-600" />
             Klasifikasi Tipe JBI
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Tentukan apakah Juru Bahasa Isyarat menggunakan SIBI atau BISINDO
-          </p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-sm text-gray-500">
+              Tentukan apakah Juru Bahasa Isyarat menggunakan SIBI atau BISINDO
+            </p>
+            {selectedDataset && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 text-xs font-semibold border border-teal-200">
+                {selectedDataset.name}
+              </span>
+            )}
+          </div>
         </div>
         <Button
           onClick={() => setIsUploadModalOpen(true)}
@@ -254,6 +272,7 @@ export function ClassificationPage() {
         }}
         onYtDownloadStarted={handleYtDownloadStarted}
         onYtProgressUpdate={handleYtProgressUpdate}
+        datasetId={selectedDataset?.id}
       />
 
       {/* Floating YouTube download progress banner */}
