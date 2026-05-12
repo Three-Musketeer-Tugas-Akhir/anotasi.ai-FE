@@ -17,6 +17,7 @@ import {
   Download,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { apiClient } from '@/core/api/axios-client';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -118,10 +119,17 @@ export function DatasetExplorer({ jobId, onBack }: DatasetExplorerProps) {
         document.body.appendChild(a);
         a.click();
         a.remove();
+        toast.success('Dataset berhasil diunduh', {
+          description: `File ${data.original_filename}_dataset.zip telah diunduh.`,
+          position: 'top-center',
+        });
       })
       .catch((err) => {
         console.error('Failed to download', err);
-        alert('Failed to download ZIP');
+        toast.error('Gagal mengunduh', {
+          description: 'Terjadi kesalahan saat mengunduh dataset ZIP.',
+          position: 'top-center',
+        });
       });
   };
 

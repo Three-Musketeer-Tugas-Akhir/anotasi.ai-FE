@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/core/api/axios-client';
+import { toast } from 'sonner';
 
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -138,9 +139,16 @@ export function ExportPage() {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
+      toast.success('Dataset berhasil diunduh', {
+        description: `File ${filename} telah diunduh.`,
+        position: 'top-center',
+      });
     } catch (err) {
       console.error('Download failed:', err);
-      alert('Gagal mengunduh dataset. Pastikan Anda sudah login.');
+      toast.error('Gagal mengunduh', {
+        description: 'Gagal mengunduh dataset. Pastikan Anda sudah login.',
+        position: 'top-center',
+      });
     } finally {
       setDownloadingId(null);
     }

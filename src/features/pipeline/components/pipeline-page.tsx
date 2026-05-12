@@ -21,6 +21,7 @@ import {
   Play,
   Search,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { pipelineApi } from '../pipeline-api';
 import type {
   JobListItemResponse,
@@ -193,9 +194,16 @@ export function PipelinePage() {
       await pipelineApi.startAllClassified();
       await fetchJobs();
       await fetchClassifiedReady();
+      toast.success('Batch dimulai', {
+        description: 'Semua job yang sudah diklasifikasikan sedang diproses.',
+        position: 'top-center',
+      });
     } catch (err) {
       console.error(err);
-      alert('Gagal memulai pemrosesan batch.');
+      toast.error('Gagal memulai batch', {
+        description: 'Terjadi kesalahan saat memulai pemrosesan batch.',
+        position: 'top-center',
+      });
     } finally {
       setStartingBatch(false);
     }

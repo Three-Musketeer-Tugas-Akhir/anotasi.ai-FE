@@ -41,6 +41,7 @@ import {
   ZoomOut,
   Maximize,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { pipelineApi } from '../pipeline-api';
 import type {
   JobStatusDetailResponse,
@@ -553,9 +554,17 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
       await pipelineApi.cancelJob(jobId);
       await fetchJob();
       onJobChanged();
+      toast.success('Job dibatalkan', {
+        description: 'Pemrosesan video telah dibatalkan.',
+        position: 'top-center',
+      });
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Gagal membatalkan job';
       setError(typeof msg === 'string' ? msg : 'Gagal membatalkan job');
+      toast.error('Gagal membatalkan', {
+        description: typeof msg === 'string' ? msg : 'Terjadi kesalahan saat membatalkan job.',
+        position: 'top-center',
+      });
     } finally {
       setCancelling(false);
     }
@@ -566,8 +575,15 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
     try {
       await pipelineApi.updateJobCategory(jobId, { category: value as SignLanguageCategory });
       await fetchJob();
+      toast.success('Kategori diperbarui', {
+        description: `Kategori diubah ke ${value}.`,
+        position: 'top-center',
+      });
     } catch {
-      // Silently fail category update
+      toast.error('Gagal memperbarui kategori', {
+        description: 'Terjadi kesalahan saat mengubah kategori.',
+        position: 'top-center',
+      });
     }
   };
 
@@ -676,7 +692,10 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                 className="bg-teal-600 hover:bg-teal-700 text-white h-8"
                 onClick={async () => {
                   if (!job.category) {
-                    alert('Pilih kategori (SIBI / BISINDO) terlebih dahulu.');
+                    toast.error('Kategori belum dipilih', {
+                      description: 'Pilih kategori (SIBI / BISINDO) terlebih dahulu.',
+                      position: 'top-center',
+                    });
                     return;
                   }
                   setStarting(true);
@@ -685,9 +704,16 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                     // Refresh both the detail panel AND the parent list
                     await fetchJob();
                     onJobChanged();
+                    toast.success('Pemrosesan dimulai', {
+                      description: 'Pipeline telah dimulai untuk video ini.',
+                      position: 'top-center',
+                    });
                   } catch (e) {
                     console.error(e);
-                    alert('Gagal memulai proses. Pastikan kategori sudah dipilih.');
+                    toast.error('Gagal memulai', {
+                      description: 'Gagal memulai proses. Pastikan kategori sudah dipilih.',
+                      position: 'top-center',
+                    });
                   } finally {
                     setStarting(false);
                   }
@@ -818,9 +844,16 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                       link.click();
                       link.remove();
                       window.URL.revokeObjectURL(url);
+                      toast.success('Dataset berhasil diunduh', {
+                        description: 'File ZIP telah diunduh ke perangkat Anda.',
+                        position: 'top-center',
+                      });
                     } catch (e) {
                       console.error(e);
-                      alert('Gagal mengunduh dataset.');
+                      toast.error('Gagal mengunduh', {
+                        description: 'Terjadi kesalahan saat mengunduh dataset.',
+                        position: 'top-center',
+                      });
                     } finally {
                       setDownloadingDataset(false);
                     }

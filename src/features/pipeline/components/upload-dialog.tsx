@@ -28,6 +28,7 @@ import {
   Link2,
   Loader2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { pipelineApi } from '../pipeline-api';
 import type { SignLanguageCategory } from '../types';
 
@@ -113,6 +114,10 @@ export function UploadDialog({ open, onOpenChange, onJobCreated }: UploadDialogP
 
       setUploadState('success');
       setUploadProgress(100);
+      toast.success('Video berhasil diupload', {
+        description: 'Job telah dibuat dan siap diproses.',
+        position: 'top-center',
+      });
 
       // Notify parent after brief delay
       setTimeout(() => {
@@ -128,6 +133,10 @@ export function UploadDialog({ open, onOpenChange, onJobCreated }: UploadDialogP
         (err as Error)?.message ||
         'Upload gagal. Silakan coba lagi.';
       setErrorMessage(typeof msg === 'string' ? msg : 'Upload gagal. Silakan coba lagi.');
+      toast.error('Upload gagal', {
+        description: typeof msg === 'string' ? msg : 'Terjadi kesalahan saat upload video.',
+        position: 'top-center',
+      });
     }
   };
 
@@ -143,6 +152,10 @@ export function UploadDialog({ open, onOpenChange, onJobCreated }: UploadDialogP
 
       setUploadState('success');
       setUploadProgress(100);
+      toast.success('Job berhasil dibuat', {
+        description: 'Video dari URL telah ditambahkan ke pipeline.',
+        position: 'top-center',
+      });
 
       setTimeout(() => {
         onJobCreated();
@@ -157,6 +170,10 @@ export function UploadDialog({ open, onOpenChange, onJobCreated }: UploadDialogP
         (err as Error)?.message ||
         'Gagal memproses URL video.';
       setErrorMessage(typeof msg === 'string' ? msg : 'Gagal memproses URL video.');
+      toast.error('Gagal membuat job', {
+        description: typeof msg === 'string' ? msg : 'Terjadi kesalahan saat memproses URL video.',
+        position: 'top-center',
+      });
     }
   };
 

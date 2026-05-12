@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { Upload, X, Loader2, Link2, Film } from 'lucide-react';
+import { toast } from 'sonner';
 import { useUploadJob } from '@/features/classification/hooks/use-classification';
 import { classificationRepository } from '@/features/classification/api/classification.repository';
 import type { YTDownloadState } from './youtube-download-banner';
@@ -42,6 +43,10 @@ export function VideoUploadModal({
     onClose();
     setFile(null);
     setError(null);
+    toast.success('Video berhasil diupload', {
+      description: 'Video telah ditambahkan ke daftar klasifikasi.',
+      position: 'top-center',
+    });
   });
 
   if (!isOpen) return null;
@@ -114,6 +119,10 @@ export function VideoUploadModal({
 
             if (data.status === 'completed' && data.job_id) {
               onUploadSuccess(data.job_id);
+              toast.success('Download YouTube selesai', {
+                description: 'Video siap untuk diklasifikasikan.',
+                position: 'top-center',
+              });
             }
           }
         } catch {
@@ -124,6 +133,10 @@ export function VideoUploadModal({
       const resp = (err as { response?: { data?: { detail?: string } } })?.response;
       setError(resp?.data?.detail || 'Gagal memulai download YouTube.');
       setYtSubmitting(false);
+      toast.error('Download YouTube gagal', {
+        description: resp?.data?.detail || 'Terjadi kesalahan saat memulai download.',
+        position: 'top-center',
+      });
     }
   };
 

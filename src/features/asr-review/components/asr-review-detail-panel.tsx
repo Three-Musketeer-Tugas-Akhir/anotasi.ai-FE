@@ -22,6 +22,7 @@ import {
   Shield,
   Info,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { asrReviewApi } from '../asr-review-api';
 import type {
   ASRReviewDetailResponse,
@@ -136,12 +137,20 @@ export function AsrReviewDetailPanel({ reviewId, onActionCompleted }: AsrReviewD
       });
       setSuccessMessage(result.message);
       setActionMode('idle');
+      toast.success('Transcript disetujui', {
+        description: result.message,
+        position: 'top-center',
+      });
       setTimeout(() => onActionCompleted(), 1500);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
         'Gagal menyetujui transcript';
       setActionError(typeof msg === 'string' ? msg : 'Gagal menyetujui transcript');
+      toast.error('Gagal menyetujui', {
+        description: typeof msg === 'string' ? msg : 'Terjadi kesalahan saat menyetujui transcript.',
+        position: 'top-center',
+      });
     } finally {
       setSubmitting(false);
     }
@@ -161,12 +170,20 @@ export function AsrReviewDetailPanel({ reviewId, onActionCompleted }: AsrReviewD
       });
       setSuccessMessage(result.message);
       setActionMode('idle');
+      toast.success('Koreksi tersimpan', {
+        description: result.message,
+        position: 'top-center',
+      });
       setTimeout(() => onActionCompleted(), 1500);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
         'Gagal mengoreksi transcript';
       setActionError(typeof msg === 'string' ? msg : 'Gagal mengoreksi transcript');
+      toast.error('Gagal mengoreksi', {
+        description: typeof msg === 'string' ? msg : 'Terjadi kesalahan saat mengoreksi transcript.',
+        position: 'top-center',
+      });
     } finally {
       setSubmitting(false);
     }
@@ -190,12 +207,20 @@ export function AsrReviewDetailPanel({ reviewId, onActionCompleted }: AsrReviewD
       });
       setSuccessMessage(result.message);
       setActionMode('idle');
+      toast.success('Segmen ditandai', {
+        description: result.message,
+        position: 'top-center',
+      });
       setTimeout(() => onActionCompleted(), 1500);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
         'Gagal menandai segmen';
       setActionError(typeof msg === 'string' ? msg : 'Gagal menandai segmen');
+      toast.error('Gagal menandai', {
+        description: typeof msg === 'string' ? msg : 'Terjadi kesalahan saat menandai segmen.',
+        position: 'top-center',
+      });
     } finally {
       setSubmitting(false);
     }

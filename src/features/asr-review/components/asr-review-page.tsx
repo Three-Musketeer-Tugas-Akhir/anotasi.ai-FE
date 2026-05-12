@@ -22,6 +22,7 @@ import {
   Search,
   Headphones,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { voiceAnnotationApi } from '../voice-annotation-api';
 import type {
   VoiceAnnotationJob,
@@ -565,8 +566,16 @@ export function AsrReviewPage() {
               }
             : prev,
         );
+        toast.success('Ground truth tersimpan', {
+          description: 'Perubahan teks berhasil disimpan.',
+          position: 'top-center',
+        });
       } catch (err) {
         console.error('Failed to save ground truth:', err);
+        toast.error('Gagal menyimpan', {
+          description: 'Terjadi kesalahan saat menyimpan ground truth.',
+          position: 'top-center',
+        });
       } finally {
         setSavingId(null);
       }

@@ -15,6 +15,7 @@ import {
   XCircle,
   Clock,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface ActionBarProps {
   onSaveDraft: () => Promise<void>;
@@ -66,14 +67,40 @@ export function ActionBar({
   const handleReset = async () => {
     if (!confirm('Reset semua edit? Data akan kembali ke ASR original.')) return;
     setResetting(true);
-    try { await onReset(); } finally { setResetting(false); }
+    try {
+      await onReset();
+      toast.success('Anotasi direset', {
+        description: 'Semua edit telah dikembalikan ke ASR original.',
+        position: 'top-center',
+      });
+    } catch {
+      toast.error('Gagal reset', {
+        description: 'Terjadi kesalahan saat mereset anotasi.',
+        position: 'top-center',
+      });
+    } finally {
+      setResetting(false);
+    }
   };
 
   const handleSubmit = async () => {
     if (submitWarning && !confirm(submitWarning + '\n\nLanjutkan submit?')) return;
     if (!confirm('Submit anotasi untuk review oleh kurator?')) return;
     setSubmitting(true);
-    try { await onSubmit(); } finally { setSubmitting(false); }
+    try {
+      await onSubmit();
+      toast.success('Anotasi dikirim', {
+        description: 'Anotasi berhasil dikirim untuk review kurator.',
+        position: 'top-center',
+      });
+    } catch {
+      toast.error('Gagal mengirim', {
+        description: 'Terjadi kesalahan saat mengirim anotasi.',
+        position: 'top-center',
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handlePreview = async () => {
