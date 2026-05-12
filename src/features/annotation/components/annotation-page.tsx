@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { PenTool, ArrowLeft, Loader2, AlertTriangle, RotateCcw, List, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { VideoPlayer } from './video-player';
@@ -41,6 +41,9 @@ export function AnnotationPage() {
   // VIDEO-EDITOR-SIBI STYLE: merged video (utterance N + N+1)
   const [mergedVideoUrl, setMergedVideoUrl] = useState<string | null>(null);
   const [videoNDuration, setVideoNDuration] = useState<number>(0);
+  const [mergedTotalDuration, setMergedTotalDuration] = useState<number>(0);
+  // Ref untuk menghindari race condition saat load merged video
+  const activeUttRequestRef = useRef<number | null>(null);
 
   // ── Action State ──────────────────────────────────────────────
   const [isSaving, setIsSaving] = useState(false);
@@ -297,19 +300,33 @@ export function AnnotationPage() {
       setIsPlaying(false);
     }
     
+    // Reset merged video sebelum load yang baru (hindari flash video lama)
+    setMergedVideoUrl(null);
+    setVideoNDuration(0);
+    setMergedTotalDuration(0);
+    
     // VIDEO-EDITOR-SIBI STYLE: Load merged video for this utterance
     if (utt && utt.segment_id) {
+      const requestId = index;
+      activeUttRequestRef.current = requestId;
       try {
         const merged = await annotationApi.getMergedVideo(
           utt.segment_id,
           utt.utterance_index
         );
-        setMergedVideoUrl(merged.merged_video_url);
-        setVideoNDuration(merged.video_n_duration);
+        // Hindari race condition: hanya update jika user masih di utterance yang sama
+        if (activeUttRequestRef.current === requestId) {
+          setMergedVideoUrl(merged.merged_video_url);
+          setVideoNDuration(merged.video_n_duration);
+          setMergedTotalDuration(merged.total_duration);
+        }
       } catch (err) {
         console.warn('Failed to load merged video:', err);
-        setMergedVideoUrl(null);
-        setVideoNDuration(0);
+        if (activeUttRequestRef.current === requestId) {
+          setMergedVideoUrl(null);
+          setVideoNDuration(0);
+          setMergedTotalDuration(0);
+        }
       }
     }
   };
@@ -661,7 +678,7 @@ export function AnnotationPage() {
                 <TimelineEditor
                   videoUrl={mergedVideoUrl ?? activeUtterance?.segment_video_url ?? jobVideoUrl ?? ''}
                   videoOffset={0}
-                  duration={mergedVideoUrl ? (videoNDuration + (activeUtterance?.global_end ?? segmentEnd) - (activeUtterance?.global_start ?? segmentStart)) : segmentEnd}
+                  duration={mergedVideoUrl ? mergedTotalDuration : segmentEnd}
                   currentTime={currentTime}
                   isPlaying={isPlaying}
                   onTimeUpdate={setCurrentTime}
@@ -670,7 +687,7 @@ export function AnnotationPage() {
                   onTrimChange={handleTrimChange}
                   disableTrimIn={true}
                   videoNDuration={videoNDuration}
-                  activeUtterance={activeUtterance && activeUtteranceIndex !== null ? { index: activeUtteranceIndex, start: activeUtterance.global_start ?? activeUtterance.start, end: activeUtterance.global_end ?? activeUtterance.end, status: activeUtterance.status } : null}
+                  activeUtterance={activeUtterance && activeUtteranceIndex !== null ? { index: activeUtteranceIndex, start: activeUtterance.global_start ?? activeUtterance.start, end: activeUtterance.global_end ?? activeUtterance.end, status: activeUtterance.status, global_start: activeUtterance.global_start ?? activeUtterance.start } : null}
                   allUtterances={utteranceEdits}
                   onPrevUtterance={handlePrevUtterance}
                   onNextUtterance={handleNextUtterance}

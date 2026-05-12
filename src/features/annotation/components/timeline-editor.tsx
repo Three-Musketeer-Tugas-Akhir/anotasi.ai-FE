@@ -40,7 +40,7 @@ interface TimelineEditorProps {
   trimStart: number;
   trimEnd: number;
   onTrimChange: (start: number, end: number) => void;
-  activeUtterance?: { index: number; start: number; end: number; status?: string } | null;
+  activeUtterance?: { index: number; start: number; end: number; status?: string; global_start?: number } | null;
   allUtterances?: UtteranceCorrection[];
   onPrevUtterance?: () => void;
   onNextUtterance?: () => void;
@@ -470,9 +470,9 @@ export function TimelineEditor({
             style={{ left: `${regionLeftPx}px`, width: `${regionRightPx - regionLeftPx}px` }} />
 
           {/* VIDEO-EDITOR-SIBI STYLE: Marker boundary line (video N duration) */}
-          {videoNDuration > 0 && (
+          {videoNDuration > 0 && activeUtterance && (
             <div className="absolute top-0 bottom-0 w-0.5 bg-yellow-400 z-25 pointer-events-none"
-              style={{ left: `${timeToInnerPx((activeUtterance?.start ?? 0) + videoNDuration)}px` }}>
+              style={{ left: `${timeToInnerPx((activeUtterance.global_start ?? activeUtterance.start ?? 0) + videoNDuration)}px` }}>
               <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-yellow-400 rounded-full" />
             </div>
           )}
