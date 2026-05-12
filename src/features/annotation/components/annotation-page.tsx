@@ -236,9 +236,9 @@ export function AnnotationPage() {
     setUtteranceEdits((prev) => {
       const next = [...prev];
       if (next[index]) {
-        // Automatically mark as DRAFT if it was NEW (no status or not OK/DRAFT)
-        const newStatus = next[index].status === 'OK' ? 'OK' : 'DRAFT';
-        next[index] = { ...next[index], ...updates, status: newStatus };
+        // Revert status to DRAFT whenever any change is made — even if it was OK.
+        // This signals to the user that the utterance needs to be re-saved & re-cropped.
+        next[index] = { ...next[index], ...updates, status: 'DRAFT' };
       }
       return next;
     });
@@ -279,6 +279,7 @@ export function AnnotationPage() {
       }
 
       // Update current utterance: start is fixed, only end can change
+      // Also revert status to DRAFT if it was OK (trim modification requires re-crop)
       const offset = (current.global_start ?? current.start) - current.start;
       next[activeUtteranceIndex] = {
         ...current,
@@ -286,6 +287,7 @@ export function AnnotationPage() {
         end: newGlobalEnd - offset,
         global_start: newGlobalStart,
         global_end: newGlobalEnd,
+        status: current.status === 'OK' ? 'DRAFT' : current.status,
       };
       return next;
     });
