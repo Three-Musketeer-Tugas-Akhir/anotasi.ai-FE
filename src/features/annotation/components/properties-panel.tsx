@@ -193,9 +193,9 @@ export function PropertiesPanel({
                 value={activeEdit.text}
                 onChange={(e) => onUtteranceChange(activeUtteranceIndex!, { text: e.target.value })}
                 placeholder="Ketik hasil terjemahan bahasa isyarat di sini..."
-                disabled={actionsDisabled || activeEdit.status === 'OK'}
+                disabled={actionsDisabled}
                 className={`flex-1 w-full p-4 text-lg border-2 rounded-xl resize-none outline-none transition-shadow ${
-                  activeEdit.status === 'OK' || actionsDisabled
+                  actionsDisabled
                     ? 'bg-slate-50 border-slate-200 text-slate-500 cursor-not-allowed'
                     : 'bg-white border-teal-200 focus:border-teal-500 focus:ring-4 focus:ring-teal-500/20 shadow-inner'
                 }`}
@@ -215,41 +215,29 @@ export function PropertiesPanel({
       {/* Action Buttons (Footer) */}
       {activeEdit && (
         <div className="p-5 bg-white border-t border-slate-200 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] flex-shrink-0">
-          {activeEdit.status === 'OK' ? (
-            <div className="flex gap-3">
-              <button 
-                onClick={handleReset}
-                disabled={actionsDisabled || resetting}
-                className="flex-1 py-4 flex items-center justify-center gap-2 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-colors disabled:opacity-50"
-              >
-                {resetting ? <Loader2 size={20} className="animate-spin" /> : <RotateCcw size={20} />}
-                Reset Ulang
-              </button>
-            </div>
-          ) : (
-            <div className="flex gap-3">
-              <button
-                onClick={onSaveDraft}
-                disabled={actionsDisabled || isSaving}
-                className="px-6 py-4 rounded-xl font-bold text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors flex flex-col items-center justify-center gap-1 disabled:opacity-50"
-                title="Simpan sementara jika belum yakin"
-              >
-                {isSaving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
-                <span className="text-[10px] uppercase">Draft</span>
-              </button>
-              
-              <button
-                onClick={() => onMarkOk(activeUtteranceIndex!)}
-                disabled={actionsDisabled || isSaving}
-                className="flex-1 py-4 rounded-xl font-bold text-white bg-teal-600 hover:bg-teal-500 active:bg-teal-700 transition-all shadow-[0_4px_14px_0_rgba(13,148,136,0.39)] hover:shadow-[0_6px_20px_rgba(13,148,136,0.23)] flex flex-col items-center justify-center disabled:opacity-50"
-              >
-                <div className="flex items-center gap-2 text-lg">
-                  {isSaving ? <Loader2 size={24} className="animate-spin" /> : <CheckCircle2 size={24} />} 
-                  SIMPAN & LANJUT
-                </div>
-              </button>
-            </div>
-          )}
+          {/* Tugas tambahan: Annotator bisa revisi meskipun sudah OK (human error) */}
+          <div className="flex gap-3">
+            <button
+              onClick={onSaveDraft}
+              disabled={actionsDisabled || isSaving}
+              className="px-6 py-4 rounded-xl font-bold text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors flex flex-col items-center justify-center gap-1 disabled:opacity-50"
+              title="Simpan sementara jika belum yakin"
+            >
+              {isSaving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+              <span className="text-[10px] uppercase">Draft</span>
+            </button>
+            
+            <button
+              onClick={() => onMarkOk(activeUtteranceIndex!)}
+              disabled={actionsDisabled || isSaving}
+              className="flex-1 py-4 rounded-xl font-bold text-white bg-teal-600 hover:bg-teal-500 active:bg-teal-700 transition-all shadow-[0_4px_14px_0_rgba(13,148,136,0.39)] hover:shadow-[0_6px_20px_rgba(13,148,136,0.23)] flex flex-col items-center justify-center disabled:opacity-50"
+            >
+              <div className="flex items-center gap-2 text-lg">
+                {isSaving ? <Loader2 size={24} className="animate-spin" /> : <CheckCircle2 size={24} />} 
+                SIMPAN & LANJUT
+              </div>
+            </button>
+          </div>
           {activeEdit.status !== 'OK' && !actionsDisabled && (
             <p className="text-center text-xs text-slate-400 mt-3 font-medium">
               Tombol "Simpan & Lanjut" akan otomatis membawa Anda ke kalimat berikutnya.

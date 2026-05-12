@@ -46,6 +46,9 @@ interface TimelineEditorProps {
   onNextUtterance?: () => void;
   utteranceCount?: number;
   activeUtterancePosition?: number;
+  // VIDEO-EDITOR-SIBI STYLE props
+  disableTrimIn?: boolean;  // If true, only end marker is draggable (no trim-in)
+  videoNDuration?: number;  // Duration of video N (for marker boundary line)
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -77,6 +80,8 @@ export function TimelineEditor({
   onNextUtterance,
   utteranceCount,
   activeUtterancePosition,
+  disableTrimIn = false,
+  videoNDuration = 0,
 }: TimelineEditorProps) {
   const outerRef = useRef<HTMLDivElement>(null);   // scrollable outer container
   const innerRef = useRef<HTMLDivElement>(null);    // zoomed inner strip
@@ -277,11 +282,13 @@ export function TimelineEditor({
       e.stopPropagation();
       e.preventDefault();
       if (isLocked) return;
+      // VIDEO-EDITOR-SIBI STYLE: disable trim-in (start drag and region drag)
+      if (disableTrimIn && (type === 'start' || type === 'region')) return;
       setDragging(type);
       dragStartClientX.current = e.clientX;
       dragStartValues.current = { start: trimStart, end: trimEnd };
     },
-    [trimStart, trimEnd, isLocked]
+    [trimStart, trimEnd, isLocked, disableTrimIn]
   );
 
   useEffect(() => {
@@ -306,6 +313,8 @@ export function TimelineEditor({
         const newEnd = Math.max(origStart + 0.05, Math.min(windowEnd, origEnd + deltaTime));
         onTrimChange(origStart, newEnd);
       } else {
+        // Region drag disabled in SIBI style
+        if (disableTrimIn) return;
         const regionDur = origEnd - origStart;
         let newStart = origStart + deltaTime;
         let newEnd = origEnd + deltaTime;
@@ -460,8 +469,16 @@ export function TimelineEditor({
           <div className={`absolute top-0 bottom-0 border-2 pointer-events-none rounded-sm ${isLocked ? 'border-gray-500 bg-gray-500/20' : 'border-teal-400'}`}
             style={{ left: `${regionLeftPx}px`, width: `${regionRightPx - regionLeftPx}px` }} />
 
-          {/* Drag handle — start */}
-          {!isLocked && (
+          {/* VIDEO-EDITOR-SIBI STYLE: Marker boundary line (video N duration) */}
+          {videoNDuration > 0 && (
+            <div className="absolute top-0 bottom-0 w-0.5 bg-yellow-400 z-25 pointer-events-none"
+              style={{ left: `${timeToInnerPx((activeUtterance?.start ?? 0) + videoNDuration)}px` }}>
+              <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-yellow-400 rounded-full" />
+            </div>
+          )}
+
+          {/* Drag handle — start (hidden in SIBI style) */}
+          {!isLocked && !disableTrimIn && (
             <div className="absolute top-0 bottom-0 w-4 cursor-col-resize z-20 group flex items-center justify-center"
               style={{ left: `${regionLeftPx - 8}px` }}
               onMouseDown={(e) => handleMouseDown('start', e)}
@@ -480,15 +497,17 @@ export function TimelineEditor({
             </div>
           )}
 
-          {/* Region drag overlay */}
-          <div className="absolute top-0 bottom-0 z-10"
-            style={{
-              left: `${regionLeftPx}px`,
-              width: `${regionRightPx - regionLeftPx}px`,
-              cursor: isLocked ? 'not-allowed' : (dragging === 'region' ? 'grabbing' : 'grab'),
-            }}
-            onMouseDown={(e) => handleMouseDown('region', e)}
-            onClick={(e) => e.stopPropagation()} />
+          {/* Region drag overlay (hidden in SIBI style) */}
+          {!disableTrimIn && (
+            <div className="absolute top-0 bottom-0 z-10"
+              style={{
+                left: `${regionLeftPx}px`,
+                width: `${regionRightPx - regionLeftPx}px`,
+                cursor: isLocked ? 'not-allowed' : (dragging === 'region' ? 'grabbing' : 'grab'),
+              }}
+              onMouseDown={(e) => handleMouseDown('region', e)}
+              onClick={(e) => e.stopPropagation()} />
+          )}
 
           {/* Playhead */}
           <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-30 pointer-events-none"

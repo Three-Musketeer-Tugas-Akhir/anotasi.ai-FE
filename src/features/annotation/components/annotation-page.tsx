@@ -38,9 +38,9 @@ export function AnnotationPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [duration, setDuration] = useState(0);
-  // Cross-segment: when last utterance of segment N finishes, we switch to N+1's video.
-  // This tracks the override URL so the workspace (activeUtteranceIndex) stays on N.
-  const [crossSegmentVideoUrl, setCrossSegmentVideoUrl] = useState<string | null>(null);
+  // VIDEO-EDITOR-SIBI STYLE: merged video (utterance N + N+1)
+  const [mergedVideoUrl, setMergedVideoUrl] = useState<string | null>(null);
+  const [videoNDuration, setVideoNDuration] = useState<number>(0);
 
   // ── Action State ──────────────────────────────────────────────
   const [isSaving, setIsSaving] = useState(false);
@@ -205,8 +205,7 @@ export function AnnotationPage() {
     }
   }, [selectedJobId, loadJob]);
 
-  // NOTE: crossSegmentVideoUrl is reset synchronously inside handleSelectUtterance
-  // to avoid a render cycle with stale video URL.
+  // NOTE: mergedVideoUrl is loaded asynchronously inside handleSelectUtterance
 
   // ── Handlers ──────────────────────────────────────────────────
 
@@ -249,34 +248,12 @@ export function AnnotationPage() {
       const current = next[activeUtteranceIndex];
       if (!current) return next;
 
-      let newGlobalStart = globalStart;
+      // VIDEO-EDITOR-SIBI STYLE: start cannot be changed (no trim-in)
+      const newGlobalStart = current.global_start ?? current.start;
       let newGlobalEnd = globalEnd;
-      const prevUtterance = next[activeUtteranceIndex - 1];
       const nextUtterance = next[activeUtteranceIndex + 1];
 
-      // Left Spillover (using global timestamps)
-      if (prevUtterance) {
-        const prevGlobalEnd = prevUtterance.global_end ?? prevUtterance.end;
-        if (prevUtterance.status === 'OK') {
-          newGlobalStart = Math.max(newGlobalStart, prevGlobalEnd);
-        } else {
-          if (newGlobalStart < prevGlobalEnd) {
-            const shift = prevGlobalEnd - newGlobalStart;
-            next[activeUtteranceIndex - 1] = {
-              ...prevUtterance,
-              end: prevUtterance.end - shift,
-              global_end: newGlobalStart,
-            };
-            if (next[activeUtteranceIndex - 1].end <= next[activeUtteranceIndex - 1].start) {
-              next[activeUtteranceIndex - 1].end = next[activeUtteranceIndex - 1].start + 0.1;
-              next[activeUtteranceIndex - 1].global_end = (next[activeUtteranceIndex - 1].global_start ?? 0) + 0.1;
-              newGlobalStart = next[activeUtteranceIndex - 1].global_end!;
-            }
-          }
-        }
-      }
-
-      // Right Spillover (using global timestamps — allows cross-segment overlap)
+      // Right Spillover only (using global timestamps)
       if (nextUtterance) {
         const nextGlobalStart = nextUtterance.global_start ?? nextUtterance.start;
         if (nextUtterance.status === 'OK') {
@@ -298,8 +275,7 @@ export function AnnotationPage() {
         }
       }
 
-      // Update current utterance: both local and global
-      // offset converts global→ASR so start/end stay in ASR coordinate space
+      // Update current utterance: start is fixed, only end can change
       const offset = (current.global_start ?? current.start) - current.start;
       next[activeUtteranceIndex] = {
         ...current,
@@ -312,16 +288,29 @@ export function AnnotationPage() {
     });
   };
 
-  const handleSelectUtterance = (index: number) => {
-    // Reset cross-segment override synchronously so the first render after
-    // selection already uses the correct video URL (not the stale N+1 video).
-    setCrossSegmentVideoUrl(null);
+  const handleSelectUtterance = async (index: number) => {
     setActiveUtteranceIndex(index);
     const utt = utteranceEdits[index];
     if (utt) {
       // Use global timestamp for seeking so playhead is correct in continuous timeline
       setCurrentTime(utt.global_start ?? utt.start);
       setIsPlaying(false);
+    }
+    
+    // VIDEO-EDITOR-SIBI STYLE: Load merged video for this utterance
+    if (utt && utt.segment_id) {
+      try {
+        const merged = await annotationApi.getMergedVideo(
+          utt.segment_id,
+          utt.utterance_index
+        );
+        setMergedVideoUrl(merged.merged_video_url);
+        setVideoNDuration(merged.video_n_duration);
+      } catch (err) {
+        console.warn('Failed to load merged video:', err);
+        setMergedVideoUrl(null);
+        setVideoNDuration(0);
+      }
     }
   };
 
@@ -439,17 +428,17 @@ export function AnnotationPage() {
     [activeUtteranceIndex, utteranceEdits],
   );
 
-  // When crossSegmentVideoUrl is set, we're playing N+1's video — use N+1 as the time context.
+  // VIDEO-EDITOR-SIBI STYLE: playing utterance is always the active one (merged video handles N+1)
   const playingUtterance = useMemo(() => {
-    if (crossSegmentVideoUrl && nextUtterance) return nextUtterance;
     return activeUtterance;
-  }, [crossSegmentVideoUrl, nextUtterance, activeUtterance]);
+  }, [activeUtterance]);
 
+  // VIDEO-EDITOR-SIBI STYLE: Use merged video (N + N+1) if available
   const videoSrc = useMemo(() => {
-    if (crossSegmentVideoUrl) return crossSegmentVideoUrl;
+    if (mergedVideoUrl) return mergedVideoUrl;
     if (activeUtterance?.segment_video_url) return activeUtterance.segment_video_url;
     return jobVideoUrl ?? '';
-  }, [crossSegmentVideoUrl, activeUtterance, jobVideoUrl]);
+  }, [mergedVideoUrl, activeUtterance, jobVideoUrl]);
 
   // Offset: segment-local time = global time + videoOffset
   const videoOffset = useMemo(() => {
@@ -484,22 +473,10 @@ export function AnnotationPage() {
     }
   };
 
-  // Called when the HTML5 video element fires onEnded (file naturally finished).
-  // For cross-segment case: switch to N+1's video and keep playing.
+  // VIDEO-EDITOR-SIBI STYLE: Video is already merged (N + N+1), no need to switch
   const handleVideoEnded = useCallback(() => {
-    if (!activeUtterance || !nextUtterance) { setIsPlaying(false); return; }
-    const nextUrl = nextUtterance.segment_video_url ?? '';
-    const activeUrl = activeUtterance.segment_video_url ?? '';
-    // Only do cross-segment switch if they are different files and we haven't switched yet
-    if (nextUrl && nextUrl !== activeUrl && !crossSegmentVideoUrl) {
-      setCrossSegmentVideoUrl(nextUrl);
-      // currentTime stays at N.global_end; playerTime will compute N+1.start automatically.
-      setCurrentTime(nextUtterance.global_start ?? nextUtterance.start);
-      // Keep isPlaying true so the new video starts immediately after load
-    } else {
-      setIsPlaying(false);
-    }
-  }, [activeUtterance, nextUtterance, crossSegmentVideoUrl]);
+    setIsPlaying(false);
+  }, []);
 
   // For the filmstrip: when N+1 is in a different segment video, pass it for composite frames.
   const nextVideoUrl = useMemo(() => {
@@ -682,18 +659,17 @@ export function AnnotationPage() {
 
               <div className="flex-shrink-0 mt-auto bg-slate-950 p-2 border-t border-slate-800">
                 <TimelineEditor
-                  videoUrl={activeUtterance?.segment_video_url ?? jobVideoUrl ?? ''}
-                  videoOffset={videoOffset}
-                  nextVideoUrl={nextVideoUrl}
-                  nextVideoBoundaryGlobal={activeUtterance?.global_end}
-                  nextVideoOffset={nextVideoOffset}
-                  duration={segmentEnd}
+                  videoUrl={mergedVideoUrl ?? activeUtterance?.segment_video_url ?? jobVideoUrl ?? ''}
+                  videoOffset={0}
+                  duration={mergedVideoUrl ? (videoNDuration + (activeUtterance?.global_end ?? segmentEnd) - (activeUtterance?.global_start ?? segmentStart)) : segmentEnd}
                   currentTime={currentTime}
                   isPlaying={isPlaying}
                   onTimeUpdate={setCurrentTime}
                   trimStart={activeUtterance?.global_start ?? segmentStart}
                   trimEnd={activeUtterance?.global_end ?? segmentEnd}
                   onTrimChange={handleTrimChange}
+                  disableTrimIn={true}
+                  videoNDuration={videoNDuration}
                   activeUtterance={activeUtterance && activeUtteranceIndex !== null ? { index: activeUtteranceIndex, start: activeUtterance.global_start ?? activeUtterance.start, end: activeUtterance.global_end ?? activeUtterance.end, status: activeUtterance.status } : null}
                   allUtterances={utteranceEdits}
                   onPrevUtterance={handlePrevUtterance}

@@ -82,6 +82,18 @@ export const annotationApi = {
       .post<{ status: string; message: string }>(`/annotations/${segmentId}/utterances/${utteranceIndex}/crop`)
       .then((r) => r.data),
 
+  /** GET /annotations/segments/:segmentId/utterances/:utteranceIndex/merged-video — get merged video (SIBI style) */
+  getMergedVideo: (segmentId: string, utteranceIndex: number) =>
+    apiClient
+      .get<{
+        merged_video_url: string;
+        merged_video_path: string;
+        video_n_duration: number;
+        total_duration: number;
+        is_single_video?: boolean;
+      }>(`/annotations/segments/${segmentId}/utterances/${utteranceIndex}/merged-video`)
+      .then((r) => r.data),
+
   // ═══════════════════════════════════════════════════════════════════
   // Draft & Preview
   // ═══════════════════════════════════════════════════════════════════
