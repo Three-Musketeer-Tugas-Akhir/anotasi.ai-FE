@@ -21,9 +21,37 @@ interface YoutubeDownloadContextValue {
 
 const YoutubeDownloadContext = createContext<YoutubeDownloadContextValue | null>(null);
 
+const STORAGE_KEY = 'anotasi-yt-downloads-v1';
+
+function loadDownloadsFromStorage(): YTDownloadState[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as YTDownloadState[];
+    return parsed;
+  } catch {
+    return [];
+  }
+}
+
+function saveDownloadsToStorage(downloads: YTDownloadState[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(downloads));
+  } catch {
+    // ignore
+  }
+}
+
 export function YoutubeDownloadProvider({ children }: { children: ReactNode }) {
-  const [downloads, setDownloads] = useState<YTDownloadState[]>([]);
+  const [downloads, setDownloads] = useState<YTDownloadState[]>(loadDownloadsFromStorage);
   const pollRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+
+  // Persist downloads to localStorage
+  useEffect(() => {
+    saveDownloadsToStorage(downloads);
+  }, [downloads]);
 
   const dismissDownload = useCallback((downloadId: string) => {
     setDownloads((prev) => prev.filter((d) => d.downloadId !== downloadId));

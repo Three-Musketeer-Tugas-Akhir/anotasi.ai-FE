@@ -48,7 +48,7 @@ export function YTDownloadBanner() {
   ).length;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-80 shadow-2xl rounded-xl overflow-hidden border border-white/10 bg-gray-900 text-white">
+    <div className="w-80 shadow-2xl rounded-xl overflow-hidden border border-white/10 bg-gray-900 text-white">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 bg-gray-800 border-b border-white/10">
         <div className="flex items-center gap-2">

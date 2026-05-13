@@ -8,8 +8,7 @@ import { DatasetProvider } from '@/features/dataset';
 import { Toaster } from '@/components/ui/sonner';
 import { YoutubeDownloadProvider } from '@/features/classification/context/youtube-download-context';
 import { FileUploadProvider } from '@/features/classification/context/file-upload-context';
-import { YTDownloadBanner } from '@/features/classification/components/youtube-download-banner';
-import { FileUploadBanner } from '@/features/classification/components/file-upload-banner';
+import { DownloadUploadContainer } from '@/features/classification/components/download-upload-container';
 import './globals.css';
 
 const inter = Inter({
@@ -40,9 +39,8 @@ export default function RootLayout({
                     <TourProvider>
                       {children}
                       <AppTour />
+                      <DownloadUploadContainer />
                     </TourProvider>
-                    <YTDownloadBanner />
-                    <FileUploadBanner />
                   </FileUploadProvider>
                 </YoutubeDownloadProvider>
               </DatasetProvider>

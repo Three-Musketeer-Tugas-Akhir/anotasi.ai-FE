@@ -6,6 +6,7 @@ import {
   useState,
   useCallback,
   useRef,
+  useEffect,
   type ReactNode,
 } from 'react';
 import { toast } from 'sonner';
@@ -29,9 +30,42 @@ interface FileUploadContextValue {
 
 const FileUploadContext = createContext<FileUploadContextValue | null>(null);
 
+const STORAGE_KEY = 'anotasi-uploads-v1';
+
+function loadUploadsFromStorage(): FileUploadState[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as FileUploadState[];
+    // Mark any in-progress uploads as failed (can't recover AbortController)
+    return parsed.map((u) =>
+      u.status === 'uploading' || u.status === 'pending'
+        ? { ...u, status: 'failed' as const, error: 'Upload terputus karena halaman dimuat ulang.' }
+        : u,
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveUploadsToStorage(uploads: FileUploadState[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(uploads));
+  } catch {
+    // ignore
+  }
+}
+
 export function FileUploadProvider({ children }: { children: ReactNode }) {
-  const [uploads, setUploads] = useState<FileUploadState[]>([]);
+  const [uploads, setUploads] = useState<FileUploadState[]>(loadUploadsFromStorage);
   const abortRefs = useRef<Record<string, AbortController>>({});
+
+  // Persist uploads to localStorage on every change
+  useEffect(() => {
+    saveUploadsToStorage(uploads);
+  }, [uploads]);
 
   const dismissUpload = useCallback((uploadId: string) => {
     setUploads((prev) => prev.filter((u) => u.uploadId !== uploadId));
@@ -75,6 +109,10 @@ export function FileUploadProvider({ children }: { children: ReactNode }) {
       };
 
       setUploads((prev) => [...prev, initialState]);
+      toast.info('Upload dimulai', {
+        description: `${file.name} sedang diunggah...`,
+        position: 'top-center',
+      });
 
       classificationRepository
         .uploadVideo(file, datasetId, {
