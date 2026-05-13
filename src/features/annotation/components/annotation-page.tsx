@@ -630,6 +630,7 @@ export function AnnotationPage() {
               <div className="flex-1 p-6 flex flex-col items-center justify-center relative min-h-0">
                 <div className="w-full max-w-4xl max-h-full aspect-video">
                   <VideoPlayer
+                    key={`utt-${activeUtteranceIndex ?? 'none'}`}
                     src={videoSrc}
                     isPlaying={isPlaying}
                     onPlayPause={setIsPlaying}

@@ -45,9 +45,9 @@ export function VideoPlayer({
 
   // ── Build the playable video URL ──────────────────────────────
   useEffect(() => {
+    setVideoError(null); // Always reset error on src change
     if (!src) { setVideoUrl(null); return; }
     setVideoUrl(src);
-    setVideoError(null);
   }, [src]);
 
   // Sync play state
