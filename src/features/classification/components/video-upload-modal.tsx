@@ -1,20 +1,16 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { Upload, X, Loader2, Link2, Film } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUploadJob } from '@/features/classification/hooks/use-classification';
 import { classificationRepository } from '@/features/classification/api/classification.repository';
-import type { YTDownloadState } from './youtube-download-banner';
+import { useYoutubeDownloads } from '@/features/classification/context/youtube-download-context';
 
 interface VideoUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUploadSuccess: (jobId: string) => void;
-  /** Called when a YouTube download is started in background */
-  onYtDownloadStarted: (state: YTDownloadState) => void;
-  /** Called on every poll tick so parent can update the download state */
-  onYtProgressUpdate: (downloadId: string, update: Partial<YTDownloadState>) => void;
   /** Currently selected dataset ID to associate with the upload */
   datasetId?: string;
 }
@@ -25,8 +21,6 @@ export function VideoUploadModal({
   isOpen,
   onClose,
   onUploadSuccess,
-  onYtDownloadStarted,
-  onYtProgressUpdate,
   datasetId,
 }: VideoUploadModalProps) {
   const [activeTab, setActiveTab] = useState<UploadTab>('file');
@@ -35,8 +29,7 @@ export function VideoUploadModal({
   const [ytUrl, setYtUrl] = useState('');
   const [ytSubmitting, setYtSubmitting] = useState(false);
 
-  // Track intervals per download so multiple can co-exist
-  const pollRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+  const { startDownload } = useYoutubeDownloads();
 
   const { mutate: upload, isPending } = useUploadJob((data) => {
     onUploadSuccess(String(data.id));
@@ -81,54 +74,13 @@ export function VideoUploadModal({
       const result = await classificationRepository.startYoutubeDownload(trimmed, undefined, datasetId);
       const downloadId = result.download_id;
 
-      // Initial state pushed up to parent
-      const initialState: YTDownloadState = {
-        downloadId,
-        status: 'pending',
-        title: null,
-        percent: 0,
-        speed: null,
-        eta: null,
-        error: null,
-        job_id: null,
-      };
-      onYtDownloadStarted(initialState);
+      // Start global background tracking
+      startDownload(downloadId, datasetId);
 
       // Close modal immediately — download runs in background
       onClose();
       setYtUrl('');
       setYtSubmitting(false);
-
-      // Start polling — managed here so we can clear on terminal state
-      pollRefs.current[downloadId] = setInterval(async () => {
-        try {
-          const data = await classificationRepository.getYoutubeDownloadProgress(downloadId);
-          onYtProgressUpdate(downloadId, {
-            status: data.status as YTDownloadState['status'],
-            title: data.title,
-            percent: data.percent,
-            speed: data.speed,
-            eta: data.eta,
-            error: data.error,
-            job_id: data.job_id,
-          });
-
-          if (data.status === 'completed' || data.status === 'failed') {
-            clearInterval(pollRefs.current[downloadId]);
-            delete pollRefs.current[downloadId];
-
-            if (data.status === 'completed' && data.job_id) {
-              onUploadSuccess(data.job_id);
-              toast.success('Download YouTube selesai', {
-                description: 'Video siap untuk diklasifikasikan.',
-                position: 'top-center',
-              });
-            }
-          }
-        } catch {
-          // silently retry
-        }
-      }, 1500);
     } catch (err: unknown) {
       const resp = (err as { response?: { data?: { detail?: string } } })?.response;
       setError(resp?.data?.detail || 'Gagal memulai download YouTube.');

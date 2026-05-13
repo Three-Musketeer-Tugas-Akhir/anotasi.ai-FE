@@ -103,4 +103,10 @@ export const adminApi = {
     apiClient
       .get<PremergeJobStatus>(`/pipeline/jobs/${jobId}/premerge-status`)
       .then((r) => r.data),
+
+  /** POST /pipeline/jobs/:job_id/premerge — manually trigger pre-merge */
+  triggerPremerge: (jobId: string) =>
+    apiClient
+      .post(`/pipeline/jobs/${jobId}/premerge`)
+      .then((r) => r.data),
 };

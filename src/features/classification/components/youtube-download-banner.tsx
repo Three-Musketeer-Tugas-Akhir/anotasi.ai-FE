@@ -2,6 +2,7 @@
 
 import { Film, CheckCircle2, AlertTriangle, Loader2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
+import { useYoutubeDownloads } from '@/features/classification/context/youtube-download-context';
 
 export type YTStatus =
   | 'pending'
@@ -36,12 +37,8 @@ function getYTStatusDisplay(status: YTStatus): { label: string; color: string } 
   }
 }
 
-interface YTDownloadBannerProps {
-  downloads: YTDownloadState[];
-  onDismiss: (downloadId: string) => void;
-}
-
-export function YTDownloadBanner({ downloads, onDismiss }: YTDownloadBannerProps) {
+export function YTDownloadBanner() {
+  const { downloads, dismissDownload } = useYoutubeDownloads();
   const [collapsed, setCollapsed] = useState(false);
 
   if (downloads.length === 0) return null;
@@ -99,7 +96,7 @@ export function YTDownloadBanner({ downloads, onDismiss }: YTDownloadBannerProps
                   </div>
                   {(isDone || isFailed) && (
                     <button
-                      onClick={() => onDismiss(dl.downloadId)}
+                      onClick={() => dismissDownload(dl.downloadId)}
                       className="flex-shrink-0 p-0.5 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-colors"
                     >
                       <X size={12} />

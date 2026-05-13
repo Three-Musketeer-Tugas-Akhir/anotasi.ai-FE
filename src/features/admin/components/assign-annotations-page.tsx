@@ -84,14 +84,14 @@ export function AssignAnnotationsPage() {
       queryClient.invalidateQueries({ queryKey: ['admin', 'queue-status'] });
       setSelectedJobId(null);
       setSelectedAnnotatorId(null);
-      toast.success('Penggantian penanggung jawab berhasil', {
+      toast.success('Penggantian Annotator berhasil', {
         description: data.message,
         position: 'top-center',
       });
     },
     onError: (err: any) => {
       toast.error('Penggantian gagal', {
-        description: err?.response?.data?.detail || 'Terjadi kesalahan saat mengganti penanggung jawab.',
+        description: err?.response?.data?.detail || 'Terjadi kesalahan saat mengganti Annotator.',
         position: 'top-center',
       });
     },
@@ -150,7 +150,7 @@ export function AssignAnnotationsPage() {
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Distribusi Tugas JBI</h1>
           </div>
           <p className="text-slate-500 text-sm max-w-2xl leading-relaxed">
-            Pilih video yang telah siap, lalu tugaskan kepada annotator JBI. Job yang sudah ditugaskan dapat diganti penanggung jawabnya kapan saja.
+            Pilih video yang telah siap, lalu tugaskan kepada annotator JBI. Job yang sudah ditugaskan dapat diganti Annotatornya kapan saja.
           </p>
         </div>
 
@@ -420,7 +420,7 @@ export function AssignAnnotationsPage() {
                 ) : isReassigning ? (
                   <>
                     <RefreshCw className="w-4 h-4" />
-                    Ganti Penanggung Jawab
+                    Ganti Annotator
                   </>
                 ) : (
                   <>
@@ -438,7 +438,7 @@ export function AssignAnnotationsPage() {
                       ? 'Pilih annotator pengganti'
                       : 'Pilih annotator untuk menugaskan job ini'
                     : isReassigning
-                      ? 'Siap mengganti penanggung jawab. Pekerjaan sebelumnya tetap tersimpan.'
+                      ? 'Siap mengganti Annotator. Pekerjaan sebelumnya tetap tersimpan.'
                       : 'Siap ditugaskan. Tindakan ini tidak bisa dibatalkan.'}
               </p>
             </div>
