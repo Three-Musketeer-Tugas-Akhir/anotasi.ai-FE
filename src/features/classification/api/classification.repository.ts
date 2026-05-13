@@ -79,6 +79,10 @@ export const classificationRepository = {
   uploadVideo: async (
     file: File,
     datasetId?: string,
+    options?: {
+      signal?: AbortSignal;
+      onProgress?: (percent: number) => void;
+    },
   ): Promise<JobCreateResponse> => {
     const formData = new FormData();
     formData.append('video', file);
@@ -88,6 +92,13 @@ export const classificationRepository = {
 
     const { data } = await apiClient.post<JobCreateResponse>('/pipeline/jobs', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      signal: options?.signal,
+      onUploadProgress: (progressEvent) => {
+        if (options?.onProgress && progressEvent.total) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          options.onProgress(percent);
+        }
+      },
     });
     return data;
   },

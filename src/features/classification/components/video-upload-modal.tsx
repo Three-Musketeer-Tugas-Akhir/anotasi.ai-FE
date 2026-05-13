@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { Upload, X, Loader2, Link2, Film } from 'lucide-react';
 import { toast } from 'sonner';
-import { useUploadJob } from '@/features/classification/hooks/use-classification';
-import { classificationRepository } from '@/features/classification/api/classification.repository';
 import { useYoutubeDownloads } from '@/features/classification/context/youtube-download-context';
+import { classificationRepository } from '@/features/classification/api/classification.repository';
+import { useFileUploads } from '@/features/classification/context/file-upload-context';
 
 interface VideoUploadModalProps {
   isOpen: boolean;
@@ -30,17 +30,12 @@ export function VideoUploadModal({
   const [ytSubmitting, setYtSubmitting] = useState(false);
 
   const { startDownload } = useYoutubeDownloads();
+  const { startUpload, uploads } = useFileUploads();
 
-  const { mutate: upload, isPending } = useUploadJob((data) => {
-    onUploadSuccess(String(data.id));
-    onClose();
-    setFile(null);
-    setError(null);
-    toast.success('Video berhasil diupload', {
-      description: 'Video telah ditambahkan ke daftar klasifikasi.',
-      position: 'top-center',
-    });
-  });
+  // Find active upload for the currently selected file
+  const activeUpload = uploads.find(
+    (u) => u.fileName === file?.name && (u.status === 'uploading' || u.status === 'pending'),
+  );
 
   if (!isOpen) return null;
 
@@ -49,12 +44,9 @@ export function VideoUploadModal({
     e.preventDefault();
     if (!file) { setError('File video harus dipilih.'); return; }
     setError(null);
-    upload({ file, datasetId }, {
-      onError: (err: unknown) => {
-        const resp = (err as { response?: { data?: { detail?: string } } })?.response;
-        setError(resp?.data?.detail || 'Terjadi kesalahan saat mengunggah.');
-      },
-    });
+    startUpload(file, datasetId);
+    setFile(null);
+    onClose();
   };
 
   // ── YouTube download ──────────────────────────────────────────────────
@@ -102,14 +94,14 @@ export function VideoUploadModal({
           </h2>
           <button
             onClick={() => {
-              if (!isPending) {
+              if (!activeUpload) {
                 onClose();
                 setFile(null);
                 setError(null);
               }
             }}
             className="text-gray-400 hover:text-gray-600 p-1 rounded-md hover:bg-gray-100 transition-colors"
-            disabled={isPending}
+            disabled={!!activeUpload}
           >
             <X size={20} />
           </button>
@@ -118,24 +110,24 @@ export function VideoUploadModal({
         {/* Tab Selector */}
         <div className="flex border-b border-gray-100">
           <button
-            onClick={() => { if (!isPending) { setActiveTab('file'); setError(null); } }}
+            onClick={() => { if (!activeUpload) { setActiveTab('file'); setError(null); } }}
             className={`flex-1 px-4 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
               activeTab === 'file'
                 ? 'text-teal-700 border-b-2 border-teal-600 bg-teal-50/50'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             }`}
-            disabled={isPending}
+            disabled={!!activeUpload}
           >
             <Film size={14} /> File Lokal
           </button>
           <button
-            onClick={() => { if (!isPending) { setActiveTab('youtube'); setError(null); } }}
+            onClick={() => { if (!activeUpload) { setActiveTab('youtube'); setError(null); } }}
             className={`flex-1 px-4 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
               activeTab === 'youtube'
                 ? 'text-teal-700 border-b-2 border-teal-600 bg-teal-50/50'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             }`}
-            disabled={isPending}
+            disabled={!!activeUpload}
           >
             <Link2 size={14} /> YouTube URL
           </button>
@@ -167,7 +159,7 @@ export function VideoUploadModal({
                         accept="video/mp4,video/webm,video/x-matroska,video/quicktime,video/avi"
                         className="sr-only"
                         onChange={(e) => setFile(e.target.files?.[0] || null)}
-                        disabled={isPending}
+                        disabled={!!activeUpload}
                       />
                     </label>
                   </div>
@@ -184,18 +176,18 @@ export function VideoUploadModal({
               <button
                 type="button"
                 onClick={onClose}
-                disabled={isPending}
+                disabled={!!activeUpload}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Batal
               </button>
               <button
                 type="submit"
-                disabled={isPending || !file}
+                disabled={!file || !!activeUpload}
                 className="px-4 py-2 text-sm font-medium text-white bg-teal-600 border border-transparent rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                {isPending && <Loader2 size={16} className="animate-spin" />}
-                {isPending ? 'Mengunggah...' : 'Unggah Video'}
+                {activeUpload && <Loader2 size={16} className="animate-spin" />}
+                {activeUpload ? 'Mengunggah...' : 'Unggah Video'}
               </button>
             </div>
           </form>
