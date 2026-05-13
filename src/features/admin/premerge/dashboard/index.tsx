@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Layers,
   RefreshCw,
@@ -14,6 +14,8 @@ import {
   ChevronUp,
   Play,
   Pause,
+  AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
 import { adminApi } from '../../admin-api';
 import type { PremergeJobStatus, PremergeBatchDetail } from '../../types';
@@ -62,6 +64,13 @@ function statusBadge(status: string | null) {
         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
           <CheckCircle2 size={12} />
           Completed
+        </span>
+      );
+    case 'COMPLETED_WITH_ERRORS':
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700">
+          <AlertTriangle size={12} />
+          Partial
         </span>
       );
     case 'FAILED':
@@ -120,11 +129,22 @@ function BatchRow({ batch }: { batch: PremergeBatchDetail }) {
 
 function JobCard({ job }: { job: PremergeJobStatus }) {
   const [expanded, setExpanded] = useState(false);
+  const queryClient = useQueryClient();
+
+  const triggerMutation = useMutation({
+    mutationFn: () => adminApi.triggerPremerge(job.job_id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['premerge-queue'] });
+    },
+  });
+
   const total = job.premerge_total_pairs || 0;
   const completed = job.premerge_completed_pairs || 0;
   const failed = job.premerge_failed_pairs || 0;
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
   const batches = job.premerge_batches || [];
+  const canRetrigger = job.premerge_status === 'FAILED' || job.premerge_status === 'COMPLETED_WITH_ERRORS';
+  const isActive = job.premerge_status === 'RUNNING' || job.premerge_status === 'PENDING';
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -132,10 +152,19 @@ function JobCard({ job }: { job: PremergeJobStatus }) {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="truncate font-mono text-sm font-medium text-gray-900">
-                {job.job_id}
-              </span>
+              {job.original_filename ? (
+                <span className="truncate text-sm font-semibold text-gray-900">
+                  {job.original_filename}
+                </span>
+              ) : (
+                <span className="truncate font-mono text-sm font-medium text-gray-900">
+                  {job.job_id.slice(0, 8)}…
+                </span>
+              )}
               {statusBadge(job.premerge_status)}
+            </div>
+            <div className="mt-0.5 truncate font-mono text-[11px] text-gray-400">
+              {job.job_id}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
               <span className="flex items-center gap-1">
@@ -154,13 +183,29 @@ function JobCard({ job }: { job: PremergeJobStatus }) {
               </span>
             </div>
           </div>
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-            title={expanded ? 'Collapse' : 'Expand batches'}
-          >
-            {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-          </button>
+          <div className="flex items-center gap-1">
+            {canRetrigger && (
+              <button
+                onClick={() => triggerMutation.mutate()}
+                disabled={triggerMutation.isPending}
+                className="shrink-0 rounded-md p-1.5 text-amber-600 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-50"
+                title="Re-trigger pre-merge"
+              >
+                {triggerMutation.isPending ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <RotateCcw size={16} />
+                )}
+              </button>
+            )}
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              title={expanded ? 'Collapse' : 'Expand batches'}
+            >
+              {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </button>
+          </div>
         </div>
 
         {/* Progress bar */}
@@ -173,7 +218,11 @@ function JobCard({ job }: { job: PremergeJobStatus }) {
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
             <div
-              className="h-full rounded-full bg-blue-500 transition-all duration-500"
+              className={`h-full rounded-full transition-all duration-500 ${
+                isActive ? 'bg-blue-500' :
+                job.premerge_status === 'COMPLETED' ? 'bg-emerald-500' :
+                job.premerge_status === 'FAILED' ? 'bg-red-400' : 'bg-orange-400'
+              }`}
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -225,7 +274,7 @@ export function PremergeDashboardPage() {
   const jobs = data?.jobs || [];
   const runningCount = jobs.filter((j) => j.premerge_status === 'RUNNING').length;
   const pendingCount = jobs.filter((j) => j.premerge_status === 'PENDING').length;
-  const completedCount = jobs.filter((j) => j.premerge_status === 'COMPLETED').length;
+  const completedCount = jobs.filter((j) => j.premerge_status === 'COMPLETED' || j.premerge_status === 'COMPLETED_WITH_ERRORS').length;
   const failedCount = jobs.filter((j) => j.premerge_status === 'FAILED').length;
 
   return (
@@ -306,9 +355,9 @@ export function PremergeDashboardPage() {
       {!isLoading && !isError && jobs.length === 0 && (
         <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 py-16 text-center">
           <Layers size={40} className="mx-auto mb-3 text-gray-300" />
-          <p className="text-lg font-medium text-gray-600">No pre-merge jobs in queue</p>
+          <p className="text-lg font-medium text-gray-600">No pre-merge jobs found</p>
           <p className="mt-1 text-sm text-gray-400">
-            Jobs will appear here when cropping (CV2) completes
+            Jobs will appear here when cropping (CV2) completes and pre-merge triggers
           </p>
         </div>
       )}

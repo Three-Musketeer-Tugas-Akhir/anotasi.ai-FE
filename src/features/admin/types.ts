@@ -162,7 +162,8 @@ export interface PremergeBatchDetail {
 
 export interface PremergeJobStatus {
   job_id: string;
-  premerge_status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | null;
+  original_filename?: string | null;
+  premerge_status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'FAILED' | null;
   premerge_total_pairs: number;
   premerge_completed_pairs: number;
   premerge_failed_pairs: number;
