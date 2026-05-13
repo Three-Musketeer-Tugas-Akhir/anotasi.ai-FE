@@ -143,14 +143,25 @@ export const pipelineApi = {
   /** POST /upload/files — create Tus upload resource */
   tusCreateUpload: async (
     fileSize: number,
-    metadata: { filename: string; filetype: string; category?: string },
+    metadata: { filename: string; filetype: string; category?: string; dataset_id?: string },
   ): Promise<string> => {
-    // Base64-encode metadata values per Tus spec
+    // Safe base64 encode that supports unicode characters
+    const toB64 = (str: string) => {
+      try {
+        return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) => String.fromCharCode(Number('0x' + p1))));
+      } catch {
+        return btoa(str);
+      }
+    };
+
     const metaParts: string[] = [];
-    metaParts.push(`filename ${btoa(metadata.filename)}`);
-    metaParts.push(`filetype ${btoa(metadata.filetype)}`);
+    metaParts.push(`filename ${toB64(metadata.filename)}`);
+    metaParts.push(`filetype ${toB64(metadata.filetype)}`);
     if (metadata.category) {
-      metaParts.push(`category ${btoa(metadata.category)}`);
+      metaParts.push(`category ${toB64(metadata.category)}`);
+    }
+    if (metadata.dataset_id) {
+      metaParts.push(`dataset_id ${toB64(metadata.dataset_id)}`);
     }
 
     const response = await apiClient.post('/upload/files', null, {
@@ -159,39 +170,67 @@ export const pipelineApi = {
         'Upload-Metadata': metaParts.join(','),
         'Content-Type': 'application/offset+octet-stream',
       },
+      timeout: 60_000, // 60s timeout for create
     });
 
-    // Extract upload ID from Location header
-    const location = response.headers['location'] || '';
-    const uploadId = location.split('/').pop() || '';
+    // Try Upload-Id header first (our custom header), then fallback to Location
+    const uploadId =
+      response.headers['upload-id'] ||
+      (response.headers['location'] || '').split('/').pop() ||
+      '';
+
+    if (!uploadId) {
+      throw new Error('Server did not return a valid upload ID (Upload-Id / Location header missing)');
+    }
     return uploadId;
   },
 
   /** HEAD /upload/files/:id — get current upload offset */
   tusGetOffset: async (uploadId: string): Promise<number> => {
-    const response = await apiClient.head(`/upload/files/${uploadId}`);
+    const response = await apiClient.head(`/upload/files/${uploadId}`, {
+      timeout: 30_000,
+    });
     return parseInt(response.headers['upload-offset'] || '0', 10);
   },
 
-  /** PATCH /upload/files/:id — send a chunk */
+  /** PATCH /upload/files/:id — send a chunk using fetch() for reliable binary transport */
   tusUploadChunk: async (
     uploadId: string,
     chunk: ArrayBuffer,
     offset: number,
+    signal?: AbortSignal,
   ): Promise<number> => {
-    const response = await apiClient.patch(
-      `/upload/files/${uploadId}`,
-      chunk,
-      {
-        headers: {
-          'Upload-Offset': String(offset),
-          'Content-Length': String(chunk.byteLength),
-          'Content-Type': 'application/offset+octet-stream',
-        },
-        timeout: 120_000, // 2 min per chunk
-      },
-    );
-    return parseInt(response.headers['upload-offset'] || '0', 10);
+    // Use fetch() instead of axios for raw binary uploads
+    // Axios can interfere with Content-Type and body encoding
+    const token = typeof window !== 'undefined'
+      ? localStorage.getItem('auth_token')
+      : null;
+
+    const headers: Record<string, string> = {
+      'Upload-Offset': String(offset),
+      'Content-Length': String(chunk.byteLength),
+      'Content-Type': 'application/offset+octet-stream',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${env.API_URL}/upload/files/${uploadId}`, {
+      method: 'PATCH',
+      headers,
+      body: chunk,
+      signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(
+        `Chunk upload failed (HTTP ${response.status}): ${errorText}`
+      );
+    }
+
+    const newOffset = parseInt(response.headers.get('upload-offset') || '0', 10);
+    return newOffset;
   },
 
   /** DELETE /upload/files/:id — cancel upload */
@@ -201,55 +240,211 @@ export const pipelineApi = {
   /** GET /upload/files/:id/status — detailed upload status */
   tusGetDetailedStatus: (uploadId: string) =>
     apiClient
-      .get<UploadDetailedStatus>(`/upload/files/${uploadId}/status`)
+      .get<UploadDetailedStatus>(`/upload/files/${uploadId}/status`, {
+        timeout: 30_000,
+      })
       .then((r) => r.data),
 };
 
-// ── Tus Chunked Upload Helper ───────────────────────────────────────
+// ── Robust Tus Chunked Upload Helper ─────────────────────────────────
 
-const TUS_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunk
+const TUS_CHUNK_SIZE = 10 * 1024 * 1024; // 10MB per chunk (matches backend)
+const MAX_RETRIES = 5;
+const RETRY_BASE_DELAY_MS = 1000;
+const ASSEMBLY_POLL_INTERVAL_MS = 3000;
+const ASSEMBLY_MAX_POLL_MS = 10 * 60 * 1000; // 10 minutes for large file assembly
+
+interface TusUploadResult {
+  uploadId: string;
+  jobId: string | null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function uploadChunkWithRetry(
+  uploadId: string,
+  chunk: ArrayBuffer,
+  offset: number,
+  signal?: AbortSignal,
+): Promise<number> {
+  let lastError: Error | undefined;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (signal?.aborted) {
+      throw new DOMException('Upload cancelled', 'AbortError');
+    }
+
+    try {
+      const newOffset = await pipelineApi.tusUploadChunk(uploadId, chunk, offset, signal);
+      return newOffset;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (signal?.aborted) {
+        throw new DOMException('Upload cancelled', 'AbortError');
+      }
+
+      // Parse error for HTTP status
+      const errMsg = lastError.message || '';
+      const statusMatch = errMsg.match(/HTTP (\d+)/);
+      const httpStatus = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+
+      // Don't retry on 4xx client errors (except 409 conflict / 423 locked)
+      if (httpStatus >= 400 && httpStatus < 500 && httpStatus !== 409 && httpStatus !== 423) {
+        throw lastError;
+      }
+
+      if (attempt < MAX_RETRIES) {
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+        console.warn(
+          `[TUS] Chunk at offset ${offset} failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}), ` +
+          `retrying in ${delay}ms: ${errMsg}`
+        );
+        await sleep(delay);
+      }
+    }
+  }
+
+  throw lastError ?? new Error(`Failed to upload chunk at offset ${offset} after ${MAX_RETRIES} retries`);
+}
 
 /**
  * Upload a file using the Tus resumable upload protocol.
- * Splits the file into 5MB chunks, sends them sequentially.
+ *
+ * Features:
+ * - Resume capability: checks server offset before starting
+ * - Sequential upload: sends chunks one at a time (reliable for large files)
+ * - Retry with exponential backoff: each chunk retried up to 5 times
+ * - Assembly polling: waits for server-side assembly and job creation
+ * - Returns the created job_id once complete
  */
 export async function tusUploadFile(
   file: File,
   options: {
     category?: string;
+    dataset_id?: string;
     onProgress?: (percent: number) => void;
     abortSignal?: AbortSignal;
   } = {},
-): Promise<string> {
-  const { category, onProgress, abortSignal } = options;
+): Promise<TusUploadResult> {
+  const { category, dataset_id, onProgress, abortSignal } = options;
+
+  if (abortSignal?.aborted) {
+    throw new DOMException('Upload cancelled', 'AbortError');
+  }
 
   // 1. Create upload resource
+  console.log(`[TUS] Creating upload for ${file.name} (${file.size} bytes)`);
   const uploadId = await pipelineApi.tusCreateUpload(file.size, {
     filename: file.name,
     filetype: file.type || 'video/mp4',
     category,
+    dataset_id,
   });
+  console.log(`[TUS] Upload created: ${uploadId}`);
 
-  // 2. Upload chunks sequentially
-  let offset = 0;
+  // 2. Check if resumable (get current server offset)
+  let currentOffset = 0;
+  try {
+    currentOffset = await pipelineApi.tusGetOffset(uploadId);
+    if (currentOffset > 0) {
+      console.log(`[TUS] Resuming from offset ${currentOffset}`);
+    }
+  } catch {
+    // If HEAD fails, start from 0
+    currentOffset = 0;
+  }
+
   const totalSize = file.size;
+  const totalChunks = Math.ceil(totalSize / TUS_CHUNK_SIZE);
 
-  while (offset < totalSize) {
+  // Progress helper
+  const reportProgress = (bytesUploaded: number) => {
+    if (!onProgress) return;
+    const percent = Math.min(99, Math.round((bytesUploaded / totalSize) * 100));
+    onProgress(percent);
+  };
+
+  reportProgress(currentOffset);
+
+  // 3. Upload chunks SEQUENTIALLY (reliable, avoids race conditions)
+  while (currentOffset < totalSize) {
     if (abortSignal?.aborted) {
-      await pipelineApi.tusCancelUpload(uploadId);
+      // Try to cancel on server
+      try { await pipelineApi.tusCancelUpload(uploadId); } catch { /* ignore */ }
       throw new DOMException('Upload cancelled', 'AbortError');
     }
 
-    const end = Math.min(offset + TUS_CHUNK_SIZE, totalSize);
-    const chunk = await file.slice(offset, end).arrayBuffer();
+    const chunkStart = currentOffset;
+    const chunkEnd = Math.min(chunkStart + TUS_CHUNK_SIZE, totalSize);
+    const chunkBlob = file.slice(chunkStart, chunkEnd);
+    const chunkBuffer = await chunkBlob.arrayBuffer();
 
-    const newOffset = await pipelineApi.tusUploadChunk(uploadId, chunk, offset);
-    offset = newOffset;
+    const chunkIndex = Math.floor(chunkStart / TUS_CHUNK_SIZE);
+    console.log(
+      `[TUS] Uploading chunk ${chunkIndex + 1}/${totalChunks} ` +
+      `(${chunkStart}-${chunkEnd}, ${chunkBuffer.byteLength} bytes)`
+    );
 
-    if (onProgress) {
-      onProgress(Math.round((offset / totalSize) * 100));
-    }
+    const newOffset = await uploadChunkWithRetry(
+      uploadId,
+      chunkBuffer,
+      chunkStart,
+      abortSignal,
+    );
+
+    currentOffset = newOffset;
+    reportProgress(currentOffset);
   }
 
-  return uploadId;
+  console.log(`[TUS] All chunks uploaded. Polling for assembly...`);
+
+  // 4. Poll assembly status until job is created
+  if (onProgress) onProgress(99);
+
+  const startPoll = Date.now();
+  let jobId: string | null = null;
+
+  while (Date.now() - startPoll < ASSEMBLY_MAX_POLL_MS) {
+    if (abortSignal?.aborted) {
+      throw new DOMException('Upload cancelled', 'AbortError');
+    }
+
+    try {
+      const uploadStatus = await pipelineApi.tusGetDetailedStatus(uploadId);
+
+      if (uploadStatus.status === 'complete' && uploadStatus.pipeline_job?.job_id) {
+        jobId = uploadStatus.pipeline_job.job_id;
+        console.log(`[TUS] Assembly complete. Job ID: ${jobId}`);
+        break;
+      }
+
+      if (uploadStatus.status === 'failed') {
+        throw new Error('Upload assembly failed on the server');
+      }
+
+      console.log(`[TUS] Assembly status: ${uploadStatus.status}, waiting...`);
+    } catch (err) {
+      // If it's a real error (not just "still assembling"), check if critical
+      if (err instanceof Error && err.message.includes('assembly failed')) {
+        throw err;
+      }
+      // Otherwise keep polling
+      console.warn(`[TUS] Poll error (will retry): ${err}`);
+    }
+
+    await sleep(ASSEMBLY_POLL_INTERVAL_MS);
+  }
+
+  if (!jobId) {
+    throw new Error(
+      'Upload completed but server timed out assembling the file. ' +
+      'The file may still be processing — check the dashboard.'
+    );
+  }
+
+  if (onProgress) onProgress(100);
+
+  return { uploadId, jobId };
 }

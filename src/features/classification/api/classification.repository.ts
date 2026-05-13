@@ -1,4 +1,5 @@
 import { apiClient } from '@/core/api/axios-client';
+import { tusUploadFile } from '@/features/pipeline/pipeline-api';
 import {
   toCategoryStatus,
   type ClassificationJob,
@@ -101,6 +102,39 @@ export const classificationRepository = {
       },
     });
     return data;
+  },
+
+  /**
+   * Upload a large video using chunked Tus protocol.
+   * For files > 200MB to avoid timeout and memory issues.
+   */
+  uploadVideoChunked: async (
+    file: File,
+    datasetId?: string,
+    options?: {
+      signal?: AbortSignal;
+      onProgress?: (percent: number) => void;
+    },
+  ): Promise<JobCreateResponse> => {
+    const result = await tusUploadFile(file, {
+      dataset_id: datasetId,
+      onProgress: options?.onProgress,
+      abortSignal: options?.signal,
+    });
+
+    // Return a shape compatible with JobCreateResponse
+    // IMPORTANT: Both 'id' and 'job_id' are set for compatibility with
+    // file-upload-context.tsx handleUploadSuccess which checks both fields
+    return {
+      id: result.jobId || result.uploadId,
+      job_id: result.jobId,
+      status: 'UPLOADED',
+      original_filename: file.name,
+      file_size: file.size,
+      category: null,
+      created_at: new Date().toISOString(),
+      message: 'Video uploaded successfully via chunked upload',
+    } as JobCreateResponse & { job_id?: string | null };
   },
 
   /**
