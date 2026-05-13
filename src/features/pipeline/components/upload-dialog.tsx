@@ -29,7 +29,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { pipelineApi } from '../pipeline-api';
+import { pipelineApi, tusUploadFile } from '../pipeline-api';
 import type { SignLanguageCategory } from '../types';
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -106,11 +106,24 @@ export function UploadDialog({ open, onOpenChange, onJobCreated }: UploadDialogP
     setUploadProgress(0);
     setErrorMessage('');
 
+    // Create fresh abort controller for this upload
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
     try {
-      // Use simple multipart upload (works for most files)
-      await pipelineApi.uploadVideo(file, (percent) => {
-        setUploadProgress(percent);
-      });
+      if (file.size > MAX_SIMPLE_UPLOAD) {
+        // ── Chunked Tus upload for large files ──────────────────────
+        await tusUploadFile(file, {
+          category: category || undefined,
+          onProgress: (percent) => setUploadProgress(percent),
+          abortSignal: signal,
+        });
+      } else {
+        // ── Simple multipart upload for small files ─────────────────
+        await pipelineApi.uploadVideo(file, (percent) => {
+          setUploadProgress(percent);
+        }, signal);
+      }
 
       setUploadState('success');
       setUploadProgress(100);
@@ -125,6 +138,13 @@ export function UploadDialog({ open, onOpenChange, onJobCreated }: UploadDialogP
         resetDialog();
       }, 1500);
     } catch (err: unknown) {
+      if ((err as Error).name === 'AbortError') {
+        setUploadState('idle');
+        setUploadProgress(0);
+        setErrorMessage('Upload dibatalkan.');
+        return;
+      }
+
       setUploadState('error');
       const msg =
         (err as { response?: { data?: { detail?: { error?: { message?: string } }; message?: string } } })

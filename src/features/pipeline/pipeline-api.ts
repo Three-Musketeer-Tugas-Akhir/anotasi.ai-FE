@@ -42,7 +42,11 @@ export const pipelineApi = {
       .then((r) => r.data),
 
   /** POST /pipeline/jobs — upload video (simple multipart) */
-  uploadVideo: (file: File, onProgress?: (percent: number) => void) => {
+  uploadVideo: (
+    file: File,
+    onProgress?: (percent: number) => void,
+    signal?: AbortSignal,
+  ) => {
     const formData = new FormData();
     formData.append('video', file);
 
@@ -50,6 +54,7 @@ export const pipelineApi = {
       .post<JobCreateResponse>('/pipeline/jobs', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 600_000, // 10 min timeout for large uploads
+        signal,
         onUploadProgress: (e) => {
           if (e.total && onProgress) {
             onProgress(Math.round((e.loaded / e.total) * 100));
