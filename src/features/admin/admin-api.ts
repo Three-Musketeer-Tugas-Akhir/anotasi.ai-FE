@@ -13,6 +13,8 @@ import type {
   FailedJobsResponse,
   FailedJobsParams,
   ASRConfidenceStatsResponse,
+  PremergeJobStatus,
+  PremergeQueueResponse,
 } from './types';
 
 /**
@@ -86,5 +88,19 @@ export const adminApi = {
   getASRConfidenceStats: () =>
     apiClient
       .get<ASRConfidenceStatsResponse>('/admin/asr/confidence-stats')
+      .then((r) => r.data),
+
+  // ── Pre-merge ───────────────────────────────────────────────────
+
+  /** GET /pipeline/jobs/premerge-queue */
+  getPremergeQueue: () =>
+    apiClient
+      .get<PremergeQueueResponse>('/pipeline/jobs/premerge-queue')
+      .then((r) => r.data),
+
+  /** GET /pipeline/jobs/:job_id/premerge-status */
+  getPremergeStatus: (jobId: string) =>
+    apiClient
+      .get<PremergeJobStatus>(`/pipeline/jobs/${jobId}/premerge-status`)
       .then((r) => r.data),
 };

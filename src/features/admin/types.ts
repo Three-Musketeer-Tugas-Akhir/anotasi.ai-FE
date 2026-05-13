@@ -145,3 +145,34 @@ export interface ASRConfidenceStatsResponse {
   total_segments: number;
   confidence_distribution: ConfidenceDistribution;
 }
+
+// ── Pre-merge ──────────────────────────────────────────────────────
+
+export interface PremergeBatchDetail {
+  segment_id: string;
+  segment_code: string;
+  batch_index: number;
+  total_batches: number;
+  utterance_indices: number[];
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  started_at?: string | null;
+  completed_at?: string | null;
+  error?: string | null;
+}
+
+export interface PremergeJobStatus {
+  job_id: string;
+  premerge_status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | null;
+  premerge_total_pairs: number;
+  premerge_completed_pairs: number;
+  premerge_failed_pairs: number;
+  premerge_started_at?: string | null;
+  premerge_completed_at?: string | null;
+  premerge_batches?: PremergeBatchDetail[] | null;
+  premerge_error?: string | null;
+}
+
+export interface PremergeQueueResponse {
+  jobs: PremergeJobStatus[];
+  total: number;
+}
