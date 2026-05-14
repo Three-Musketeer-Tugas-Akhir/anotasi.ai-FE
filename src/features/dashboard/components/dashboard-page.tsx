@@ -88,11 +88,8 @@ export function DashboardPage() {
     }
   }, [activeTour, hasCompletedTour, startTour]);
 
-  // Non-admin roles: delegate to role-specific dashboards
-  if (isAnnotator) return <AnnotatorDashboard />;
-  if (isCurator) return <CuratorDashboard />;
-
-  // Fetch admin dashboard data
+  // Admin dashboard data — hooks MUST be called unconditionally (Rules of Hooks)
+  // enabled:isAdmin prevents actual API fetch for non-admin roles
   const {
     data: dashboard,
     isLoading,
@@ -104,6 +101,10 @@ export function DashboardPage() {
     refetchInterval: 60_000,
     enabled: isAdmin,
   });
+
+  // Non-admin roles: delegate to role-specific dashboards (after all hooks)
+  if (isAnnotator) return <AnnotatorDashboard />;
+  if (isCurator) return <CuratorDashboard />;
 
   const stats: DashboardStatsCard[] = dashboard?.stats ?? [];
   const pipelineStages: DashboardPipelineStage[] = dashboard?.pipeline_progress ?? [];
