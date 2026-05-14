@@ -248,15 +248,24 @@ export const pipelineApi = {
 
 // ── Robust Tus Chunked Upload Helper ─────────────────────────────────
 
-const TUS_CHUNK_SIZE = 10 * 1024 * 1024; // 10MB per chunk (matches backend)
+const TUS_CHUNK_SIZE = 50 * 1024 * 1024; // 50MB per chunk (matches backend)
 const MAX_RETRIES = 5;
 const RETRY_BASE_DELAY_MS = 1000;
 const ASSEMBLY_POLL_INTERVAL_MS = 3000;
 const ASSEMBLY_MAX_POLL_MS = 10 * 60 * 1000; // 10 minutes for large file assembly
+const PARALLEL_CHUNKS = 3; // Upload 3 chunks concurrently
 
 interface TusUploadResult {
   uploadId: string;
   jobId: string | null;
+}
+
+interface TusUploadProgress {
+  percent: number;
+  speed: number;      // bytes per second
+  eta: number;         // seconds remaining
+  uploaded: number;    // bytes uploaded so far
+  total: number;       // total bytes
 }
 
 function sleep(ms: number): Promise<void> {
@@ -312,12 +321,12 @@ async function uploadChunkWithRetry(
 /**
  * Upload a file using the Tus resumable upload protocol.
  *
- * Features:
- * - Resume capability: checks server offset before starting
- * - Sequential upload: sends chunks one at a time (reliable for large files)
- * - Retry with exponential backoff: each chunk retried up to 5 times
- * - Assembly polling: waits for server-side assembly and job creation
- * - Returns the created job_id once complete
+ * Performance features:
+ * - **Parallel uploads**: sends up to 3 chunks concurrently (sliding window)
+ * - **50 MB chunks**: 5× fewer HTTP round-trips than 10 MB
+ * - **Resume capability**: checks server offset before starting
+ * - **Retry with exponential backoff**: each chunk retried up to 5 times
+ * - **Speed & ETA**: reports upload speed and estimated time remaining
  */
 export async function tusUploadFile(
   file: File,
@@ -325,10 +334,11 @@ export async function tusUploadFile(
     category?: string;
     dataset_id?: string;
     onProgress?: (percent: number) => void;
+    onDetailedProgress?: (detail: TusUploadProgress) => void;
     abortSignal?: AbortSignal;
   } = {},
 ): Promise<TusUploadResult> {
-  const { category, dataset_id, onProgress, abortSignal } = options;
+  const { category, dataset_id, onProgress, onDetailedProgress, abortSignal } = options;
 
   if (abortSignal?.aborted) {
     throw new DOMException('Upload cancelled', 'AbortError');
@@ -345,62 +355,108 @@ export async function tusUploadFile(
   console.log(`[TUS] Upload created: ${uploadId}`);
 
   // 2. Check if resumable (get current server offset)
-  let currentOffset = 0;
+  let startOffset = 0;
   try {
-    currentOffset = await pipelineApi.tusGetOffset(uploadId);
-    if (currentOffset > 0) {
-      console.log(`[TUS] Resuming from offset ${currentOffset}`);
+    startOffset = await pipelineApi.tusGetOffset(uploadId);
+    if (startOffset > 0) {
+      console.log(`[TUS] Resuming from offset ${startOffset}`);
     }
   } catch {
-    // If HEAD fails, start from 0
-    currentOffset = 0;
+    startOffset = 0;
   }
 
   const totalSize = file.size;
   const totalChunks = Math.ceil(totalSize / TUS_CHUNK_SIZE);
 
-  // Progress helper
-  const reportProgress = (bytesUploaded: number) => {
-    if (!onProgress) return;
-    const percent = Math.min(99, Math.round((bytesUploaded / totalSize) * 100));
-    onProgress(percent);
+  // ── Speed / ETA tracking ──────────────────────────────────────────
+  let bytesConfirmed = startOffset;
+  const uploadStartTime = Date.now();
+  let lastReportTime = uploadStartTime;
+  let lastReportBytes = startOffset;
+
+  const reportProgress = () => {
+    const percent = Math.min(99, Math.round((bytesConfirmed / totalSize) * 100));
+    onProgress?.(percent);
+
+    // Calculate speed over the last window (avoid division by zero)
+    const now = Date.now();
+    const elapsed = (now - lastReportTime) / 1000;
+    const totalElapsed = (now - uploadStartTime) / 1000;
+
+    let speed = 0;
+    if (elapsed > 0.5) {
+      speed = (bytesConfirmed - lastReportBytes) / elapsed;
+      lastReportTime = now;
+      lastReportBytes = bytesConfirmed;
+    } else if (totalElapsed > 0) {
+      speed = (bytesConfirmed - startOffset) / totalElapsed;
+    }
+
+    const remaining = totalSize - bytesConfirmed;
+    const eta = speed > 0 ? remaining / speed : 0;
+
+    onDetailedProgress?.({ percent, speed, eta, uploaded: bytesConfirmed, total: totalSize });
   };
 
-  reportProgress(currentOffset);
+  reportProgress();
 
-  // 3. Upload chunks SEQUENTIALLY (reliable, avoids race conditions)
-  while (currentOffset < totalSize) {
+  // 3. Build list of chunks that still need to be uploaded
+  const startChunkIndex = Math.floor(startOffset / TUS_CHUNK_SIZE);
+  const pendingChunks: Array<{ index: number; offset: number; end: number }> = [];
+
+  for (let i = startChunkIndex; i < totalChunks; i++) {
+    const chunkOffset = i * TUS_CHUNK_SIZE;
+    if (chunkOffset < startOffset) continue; // skip already-uploaded chunks
+    const chunkEnd = Math.min(chunkOffset + TUS_CHUNK_SIZE, totalSize);
+    pendingChunks.push({ index: i, offset: chunkOffset, end: chunkEnd });
+  }
+
+  // 4. Upload chunks with PARALLEL sliding window
+  console.log(
+    `[TUS] Uploading ${pendingChunks.length} chunks (${PARALLEL_CHUNKS} parallel, ${TUS_CHUNK_SIZE / 1024 / 1024}MB each)`
+  );
+
+  let cursor = 0;
+  const inFlight = new Map<number, Promise<void>>();
+
+  while (cursor < pendingChunks.length || inFlight.size > 0) {
     if (abortSignal?.aborted) {
-      // Try to cancel on server
       try { await pipelineApi.tusCancelUpload(uploadId); } catch { /* ignore */ }
       throw new DOMException('Upload cancelled', 'AbortError');
     }
 
-    const chunkStart = currentOffset;
-    const chunkEnd = Math.min(chunkStart + TUS_CHUNK_SIZE, totalSize);
-    const chunkBlob = file.slice(chunkStart, chunkEnd);
-    const chunkBuffer = await chunkBlob.arrayBuffer();
+    // Launch new chunks up to PARALLEL_CHUNKS concurrency
+    while (cursor < pendingChunks.length && inFlight.size < PARALLEL_CHUNKS) {
+      const chunk = pendingChunks[cursor];
+      const chunkBlob = file.slice(chunk.offset, chunk.end);
 
-    const chunkIndex = Math.floor(chunkStart / TUS_CHUNK_SIZE);
-    console.log(
-      `[TUS] Uploading chunk ${chunkIndex + 1}/${totalChunks} ` +
-      `(${chunkStart}-${chunkEnd}, ${chunkBuffer.byteLength} bytes)`
-    );
+      const chunkPromise = (async () => {
+        const chunkBuffer = await chunkBlob.arrayBuffer();
+        console.log(
+          `[TUS] Uploading chunk ${chunk.index + 1}/${totalChunks} ` +
+          `(${chunk.offset}-${chunk.end}, ${chunkBuffer.byteLength} bytes)`
+        );
+        await uploadChunkWithRetry(uploadId, chunkBuffer, chunk.offset, abortSignal);
+        bytesConfirmed = Math.max(bytesConfirmed, chunk.end);
+        reportProgress();
+      })();
 
-    const newOffset = await uploadChunkWithRetry(
-      uploadId,
-      chunkBuffer,
-      chunkStart,
-      abortSignal,
-    );
+      inFlight.set(chunk.index, chunkPromise);
+      cursor++;
+    }
 
-    currentOffset = newOffset;
-    reportProgress(currentOffset);
+    // Wait for at least one to complete before launching more
+    if (inFlight.size > 0) {
+      const settled = await Promise.race(
+        [...inFlight.entries()].map(([idx, p]) => p.then(() => idx).catch(() => idx))
+      );
+      inFlight.delete(settled);
+    }
   }
 
   console.log(`[TUS] All chunks uploaded. Polling for assembly...`);
 
-  // 4. Poll assembly status until job is created
+  // 5. Poll assembly status until job is created
   if (onProgress) onProgress(99);
 
   const startPoll = Date.now();
@@ -426,11 +482,9 @@ export async function tusUploadFile(
 
       console.log(`[TUS] Assembly status: ${uploadStatus.status}, waiting...`);
     } catch (err) {
-      // If it's a real error (not just "still assembling"), check if critical
       if (err instanceof Error && err.message.includes('assembly failed')) {
         throw err;
       }
-      // Otherwise keep polling
       console.warn(`[TUS] Poll error (will retry): ${err}`);
     }
 
@@ -448,3 +502,4 @@ export async function tusUploadFile(
 
   return { uploadId, jobId };
 }
+

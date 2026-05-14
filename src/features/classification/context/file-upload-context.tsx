@@ -35,7 +35,7 @@ const FileUploadContext = createContext<FileUploadContextValue | null>(null);
 
 const STORAGE_KEY = 'anotasi-uploads-v1';
 const SESSION_KEY = 'anotasi-active-uploads';
-const MAX_SIMPLE_UPLOAD = 200 * 1024 * 1024; // 200MB — files larger than this use chunked Tus upload
+const MAX_SIMPLE_UPLOAD = 50 * 1024 * 1024; // 50MB — files larger than this use chunked Tus upload
 
 function loadUploadsFromStorage(): FileUploadState[] {
   if (typeof window === 'undefined') return [];

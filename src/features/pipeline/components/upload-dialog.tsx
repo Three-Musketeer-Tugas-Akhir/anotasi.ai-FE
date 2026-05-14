@@ -36,7 +36,7 @@ import type { SignLanguageCategory } from '../types';
 
 const ACCEPTED_TYPES = ['video/mp4', 'video/avi', 'video/x-msvideo', 'video/x-matroska', 'video/quicktime'];
 const ACCEPTED_EXTENSIONS = ['.mp4', '.avi', '.mkv', '.mov'];
-const MAX_SIMPLE_UPLOAD = 200 * 1024 * 1024; // 200MB for simple upload
+const MAX_SIMPLE_UPLOAD = 50 * 1024 * 1024; // 50MB for simple upload
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 
@@ -53,6 +53,8 @@ export function UploadDialog({ open, onOpenChange, onJobCreated }: UploadDialogP
   const [category, setCategory] = useState<SignLanguageCategory | ''>('');
   const [uploadState, setUploadState] = useState<UploadState>('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadSpeed, setUploadSpeed] = useState(0);
+  const [uploadEta, setUploadEta] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -116,6 +118,10 @@ export function UploadDialog({ open, onOpenChange, onJobCreated }: UploadDialogP
         await tusUploadFile(file, {
           category: category || undefined,
           onProgress: (percent) => setUploadProgress(percent),
+          onDetailedProgress: (detail) => {
+            setUploadSpeed(detail.speed);
+            setUploadEta(detail.eta);
+          },
           abortSignal: signal,
         });
       } else {
@@ -210,6 +216,8 @@ export function UploadDialog({ open, onOpenChange, onJobCreated }: UploadDialogP
     setCategory('');
     setUploadState('idle');
     setUploadProgress(0);
+    setUploadSpeed(0);
+    setUploadEta(0);
     setErrorMessage('');
     setActiveTab('file');
     onOpenChange(false);
@@ -222,6 +230,19 @@ export function UploadDialog({ open, onOpenChange, onJobCreated }: UploadDialogP
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
+
+  const formatSpeed = (bytesPerSec: number): string => {
+    if (bytesPerSec <= 0) return '—';
+    if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
+    return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+  };
+
+  const formatEta = (seconds: number): string => {
+    if (seconds <= 0) return '—';
+    if (seconds < 60) return `${Math.ceil(seconds)}d`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.ceil(seconds % 60)}d`;
+    return `${Math.floor(seconds / 3600)}j ${Math.floor((seconds % 3600) / 60)}m`;
   };
 
   // ── Render ──────────────────────────────────────────────────────
@@ -319,7 +340,14 @@ export function UploadDialog({ open, onOpenChange, onJobCreated }: UploadDialogP
                             <CheckCircle2 size={12} /> Upload berhasil!
                           </span>
                         ) : (
-                          'Mengupload video...'
+                          <span className="flex items-center gap-2">
+                            Mengupload video...
+                            {uploadSpeed > 0 && (
+                              <span className="text-gray-400 font-mono text-[10px]">
+                                {formatSpeed(uploadSpeed)} • ETA {formatEta(uploadEta)}
+                              </span>
+                            )}
+                          </span>
                         )}
                       </span>
                       <span className="text-xs font-mono text-gray-400">{uploadProgress}%</span>
