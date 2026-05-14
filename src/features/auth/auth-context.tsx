@@ -165,10 +165,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!isAuthenticated && !isPublic) {
       router.push('/login');
-    } else if (isAuthenticated && isPublic) {
-      router.replace('/');
+      return;
     }
-  }, [isLoading, isAuthenticated, pathname, router]);
+
+    if (isAuthenticated && isPublic) {
+      router.replace('/');
+      return;
+    }
+
+    // Role-based route protection
+    if (isAuthenticated && user) {
+      const ANNOTATOR_PATHS = ['/', '/classification', '/asr-review', '/annotation', '/profile'];
+      const CURATOR_PATHS = ['/', '/curation', '/profile'];
+
+      const role = user.role;
+
+      if (role === 'annotator') {
+        const allowed = ANNOTATOR_PATHS.some((p) =>
+          pathname === p || pathname.startsWith(p + '/')
+        );
+        if (!allowed) {
+          router.replace('/');
+          return;
+        }
+      }
+
+      if (role === 'curator') {
+        const allowed = CURATOR_PATHS.some((p) =>
+          pathname === p || pathname.startsWith(p + '/')
+        );
+        if (!allowed) {
+          router.replace('/');
+          return;
+        }
+      }
+      // admin → no restriction
+    }
+  }, [isLoading, isAuthenticated, user, pathname, router]);
 
   const value = useMemo<AuthState>(
     () => ({

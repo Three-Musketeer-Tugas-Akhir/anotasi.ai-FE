@@ -7,6 +7,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth';
 import { dashboardApi } from '../dashboard-api';
 import type { DashboardStatsCard, DashboardPipelineStage, DashboardSystemActivity } from '../dashboard-api';
+import { AnnotatorDashboard } from './annotator-dashboard';
+import { CuratorDashboard } from './curator-dashboard';
 
 // ── Icon mapping from API string → Lucide component ────────────────
 
@@ -72,6 +74,8 @@ function formatTimeAgo(iso: string): string {
 export function DashboardPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const isAnnotator = user?.role === 'annotator';
+  const isCurator = user?.role === 'curator';
 
   // Sidebar tour: fires only on first-ever Dashboard visit
   const { startTour, activeTour, hasCompletedTour } = useTour();
@@ -84,7 +88,11 @@ export function DashboardPage() {
     }
   }, [activeTour, hasCompletedTour, startTour]);
 
-  // Fetch dashboard data from API
+  // Non-admin roles: delegate to role-specific dashboards
+  if (isAnnotator) return <AnnotatorDashboard />;
+  if (isCurator) return <CuratorDashboard />;
+
+  // Fetch admin dashboard data
   const {
     data: dashboard,
     isLoading,
@@ -92,7 +100,7 @@ export function DashboardPage() {
   } = useQuery({
     queryKey: ['dashboard'],
     queryFn: dashboardApi.getDashboard,
-    staleTime: 60_000, // 1 minute
+    staleTime: 60_000,
     refetchInterval: 60_000,
     enabled: isAdmin,
   });
@@ -133,15 +141,6 @@ export function DashboardPage() {
             <AlertCircle className="text-red-500 mx-auto mb-2" size={28} />
             <p className="text-sm text-red-700 font-medium">Gagal memuat data dashboard</p>
             <p className="text-xs text-red-500 mt-1">Pastikan Anda memiliki akses admin dan backend sedang berjalan.</p>
-          </div>
-        )}
-
-        {/* Non-admin info */}
-        {!isAdmin && !isLoading && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
-            <AlertCircle className="text-amber-500 mx-auto mb-2" size={28} />
-            <p className="text-sm text-amber-700 font-medium">Dashboard hanya tersedia untuk admin</p>
-            <p className="text-xs text-amber-500 mt-1">Hubungi administrator jika Anda memerlukan akses.</p>
           </div>
         )}
 

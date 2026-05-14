@@ -29,7 +29,7 @@ export interface NavItemConfig {
 }
 
 /** All navigation items matching the blueprint */
-const navItems: NavItemConfig[] = [
+const ALL_NAV_ITEMS: NavItemConfig[] = [
   { icon: <LayoutDashboard size={20} />, label: 'Dashboard', href: '/' },
   { icon: <VideoIcon size={20} />, label: 'Klasifikasi JBI', href: '/classification' },
   { icon: <Cog size={20} />, label: 'Pemrosesan', href: '/pipeline', badge: '3' },
@@ -39,6 +39,22 @@ const navItems: NavItemConfig[] = [
   { icon: <ScrollText size={20} />, label: 'Audit Trail', href: '/audit' },
   { icon: <Package size={20} />, label: 'Unduh Dataset', href: '/export' },
 ];
+
+/** Role-based nav filtering */
+function getNavItems(role?: string): NavItemConfig[] {
+  if (role === 'annotator') {
+    return ALL_NAV_ITEMS.filter((item) =>
+      ['/', '/classification', '/asr-review', '/annotation'].includes(item.href)
+    );
+  }
+  if (role === 'curator') {
+    return ALL_NAV_ITEMS.filter((item) =>
+      ['/', '/curation'].includes(item.href)
+    );
+  }
+  // admin or undefined → all items
+  return ALL_NAV_ITEMS;
+}
 
 /** Admin-only navigation items */
 const adminNavItems: NavItemConfig[] = [
@@ -61,6 +77,7 @@ export function Sidebar({ activePath = '/' }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(true);
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const navItems = getNavItems(user?.role);
 
   // Listen for global events to collapse/expand from other components
   useEffect(() => {
