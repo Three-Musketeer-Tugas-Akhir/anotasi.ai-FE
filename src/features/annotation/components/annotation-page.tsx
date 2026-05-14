@@ -42,6 +42,8 @@ export function AnnotationPage() {
   const [mergedVideoUrl, setMergedVideoUrl] = useState<string | null>(null);
   const [videoNDuration, setVideoNDuration] = useState<number>(0);
   const [mergedTotalDuration, setMergedTotalDuration] = useState<number>(0);
+  // Loading state saat merge video sedang diproses on-demand
+  const [isMergeLoading, setIsMergeLoading] = useState<boolean>(false);
   // Ref untuk menghindari race condition saat load merged video
   const activeUttRequestRef = useRef<number | null>(null);
 
@@ -317,18 +319,17 @@ export function AnnotationPage() {
     setActiveUtteranceIndex(index);
     const utt = utteranceEdits[index];
     if (utt) {
-      // Use global timestamp for seeking so playhead is correct in continuous timeline
       setCurrentTime(utt.global_start ?? utt.start);
       setIsPlaying(false);
     }
     
-    // Reset merged video sebelum load yang baru (hindari flash video lama)
+    // Reset merged video + show loading overlay
     setMergedVideoUrl(null);
     setVideoNDuration(0);
     setMergedTotalDuration(0);
-    // Reset readiness for play guard
     setVideoReady(false);
     setFilmstripReady(false);
+    setIsMergeLoading(true);
     
     // VIDEO-EDITOR-SIBI STYLE: Load merged video for this utterance
     if (utt && utt.segment_id) {
@@ -339,7 +340,6 @@ export function AnnotationPage() {
           utt.segment_id,
           utt.utterance_index
         );
-        // Hindari race condition: hanya update jika user masih di utterance yang sama
         if (activeUttRequestRef.current === requestId) {
           setMergedVideoUrl(merged.merged_video_url);
           setVideoNDuration(merged.video_n_duration);
@@ -352,7 +352,13 @@ export function AnnotationPage() {
           setVideoNDuration(0);
           setMergedTotalDuration(0);
         }
+      } finally {
+        if (activeUttRequestRef.current === requestId) {
+          setIsMergeLoading(false);
+        }
       }
+    } else {
+      setIsMergeLoading(false);
     }
   };
 
@@ -683,7 +689,65 @@ export function AnnotationPage() {
             </div>
           </div>
         ) : jobMetadata ? (
-          <div className="flex-1 flex bg-slate-900 overflow-hidden">
+          <div className="flex-1 flex bg-slate-900 overflow-hidden relative">
+
+            {/* ══════════════════════════════════════════════════════════
+                MERGE LOADING OVERLAY — shown while on-demand merge runs.
+                Blurs entire workspace + animated spinner + text.
+            ══════════════════════════════════════════════════════════ */}
+            {isMergeLoading && (
+              <div
+                className="absolute inset-0 z-50 flex items-center justify-center"
+                style={{
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  backgroundColor: 'rgba(15,23,42,0.72)',
+                }}
+              >
+                <div
+                  className="flex flex-col items-center gap-5 px-10 py-8 rounded-2xl text-center"
+                  style={{
+                    background: 'rgba(15,23,42,0.90)',
+                    border: '1px solid rgba(20,184,166,0.35)',
+                    boxShadow: '0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(20,184,166,0.1)',
+                  }}
+                >
+                  {/* Animated triple-ring spinner */}
+                  <div className="relative w-20 h-20">
+                    <div className="absolute inset-0 rounded-full border-4 border-teal-900/60" />
+                    <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-teal-400 animate-spin" style={{ animationDuration: '0.9s' }} />
+                    <div className="absolute inset-2 rounded-full border-4 border-transparent border-t-teal-300/50 animate-spin" style={{ animationDuration: '1.4s', animationDirection: 'reverse' }} />
+                    <div className="absolute inset-[18px] rounded-full bg-teal-500/15 flex items-center justify-center">
+                      <div className="w-3 h-3 rounded-full bg-teal-400 animate-pulse" />
+                    </div>
+                  </div>
+
+                  {/* Message */}
+                  <div className="space-y-2">
+                    <p className="text-white font-bold text-lg tracking-wide">Mohon Tunggu</p>
+                    <p className="text-teal-300 text-sm font-semibold">Video sedang diproses...</p>
+                    <p className="text-slate-400 text-xs leading-relaxed max-w-[240px]">
+                      Sistem sedang menyiapkan tampilan video<br />
+                      untuk kalimat yang dipilih.
+                    </p>
+                  </div>
+
+                  {/* Animated bouncing dots */}
+                  <div className="flex items-end gap-1.5 h-5">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className="w-2 h-2 rounded-full bg-teal-400"
+                        style={{
+                          animation: `bounce 1s ease-in-out ${i * 0.15}s infinite`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 2. LEFT PANEL: VIDEO & TIMELINE */}
             <div className="flex-[0_0_60%] flex flex-col bg-slate-900 relative">
               <div className="flex-1 p-4 flex flex-col items-center justify-start relative min-h-0 gap-3">
