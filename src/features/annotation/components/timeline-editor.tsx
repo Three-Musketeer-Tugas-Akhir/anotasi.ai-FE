@@ -473,14 +473,14 @@ export function TimelineEditor({
           <div className="absolute top-0 bottom-0 border-2 pointer-events-none rounded-sm border-teal-400"
             style={{ left: `${regionLeftPx}px`, width: `${regionRightPx - regionLeftPx}px` }} />
 
-          {/* VIDEO-EDITOR-SIBI STYLE: Marker boundary line (video N duration) */}
+          {/* Marker boundary line showing where two video clips are joined */}
           {videoNDuration > 0 && activeUtterance && (
-            <div className="absolute top-0 bottom-0 w-0.5 bg-yellow-400 z-25 pointer-events-none"
+            <div className="absolute top-0 bottom-0 w-0.5 bg-yellow-400/70 z-25 pointer-events-none"
               style={{ left: `${timeToInnerPx((activeUtterance.global_start ?? activeUtterance.start ?? 0) + videoNDuration)}px` }}
-              title="Batas Video N | N+1">
+              title="Batas sambungan video pertama dan kedua">
               <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-yellow-400 rounded-full" />
               <div className="absolute top-1 left-2 text-[9px] text-yellow-300 font-semibold whitespace-nowrap bg-black/60 px-1 rounded pointer-events-none select-none">
-                N | N+1
+                ✂️ Sambungan
               </div>
             </div>
           )}

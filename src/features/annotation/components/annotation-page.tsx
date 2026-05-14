@@ -649,7 +649,7 @@ export function AnnotationPage() {
           <div className="flex-1 flex bg-slate-900 overflow-hidden">
             {/* 2. LEFT PANEL: VIDEO & TIMELINE */}
             <div className="flex-[0_0_60%] flex flex-col bg-slate-900 relative">
-              <div className="flex-1 p-6 flex flex-col items-center justify-center relative min-h-0">
+              <div className="flex-1 p-4 flex flex-col items-center justify-start relative min-h-0 gap-3">
                 <div className="w-full max-w-4xl max-h-full aspect-video">
                   <VideoPlayer
                     key={`utt-${activeUtteranceIndex ?? 'none'}`}
@@ -668,7 +668,7 @@ export function AnnotationPage() {
                 </div>
                 
                 {/* Contextual Trigger for Sheet */}
-                <div className="mt-6 flex items-center justify-center gap-2">
+                <div className="flex items-center justify-center gap-2 shrink-0">
                   <button
                     onClick={handlePrevUtterance}
                     disabled={activeUtteranceIndex === null || activeUtteranceIndex === 0}
