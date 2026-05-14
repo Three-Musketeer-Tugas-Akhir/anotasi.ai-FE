@@ -804,7 +804,6 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
               <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
               <div>
                 <strong className="block mb-0.5">Pipeline gagal pada tahap: {getFailedStageName()}</strong>
-                <span>{job.error_message}</span>
               </div>
             </div>
             
