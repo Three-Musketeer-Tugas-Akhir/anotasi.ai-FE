@@ -467,26 +467,40 @@ export function AnnotationPage() {
     return jobVideoUrl ?? '';
   }, [mergedVideoUrl, activeUtterance, jobVideoUrl]);
 
-  // Offset: segment-local time = global time + videoOffset
-  const videoOffset = useMemo(() => {
-    if (!playingUtterance) return 0;
-    return (playingUtterance.start ?? 0) - (playingUtterance.global_start ?? 0);
-  }, [playingUtterance]);
+  const isMergedVideo = !!mergedVideoUrl;
 
-  // Convert global currentTime → segment-local time for the video element.
+  // Convert global currentTime → video element time.
+  // Merged video: starts at t=0 (freshly concatenated), so videoTime = globalTime - global_start
+  // Segment video: videoTime = segLocalStart + (globalTime - global_start)
   const playerTime = useMemo(() => {
     if (!playingUtterance) return 0;
-    const segLocalStart = playingUtterance.start ?? 0;
-    const elapsed = currentTime - (playingUtterance.global_start ?? 0);
-    return Math.max(0, segLocalStart + elapsed);
-  }, [playingUtterance, currentTime]);
+    const globalStart = playingUtterance.global_start ?? 0;
+    const elapsed = currentTime - globalStart;
+
+    if (isMergedVideo) {
+      // Merged video timeline starts at 0
+      return Math.max(0, elapsed);
+    } else {
+      // Segment video: offset to segment-local time
+      const segLocalStart = playingUtterance.start ?? 0;
+      return Math.max(0, segLocalStart + elapsed);
+    }
+  }, [playingUtterance, currentTime, isMergedVideo]);
 
   const handlePlayerTimeUpdate = (t: number) => {
     if (!activeUtterance || !playingUtterance) return;
-    // Convert segment-local time → global using the currently-playing utterance
-    const segLocalStart = playingUtterance.start ?? 0;
-    const elapsed = t - segLocalStart;
-    const globalTime = (playingUtterance.global_start ?? 0) + elapsed;
+    const globalStart = playingUtterance.global_start ?? 0;
+
+    let globalTime: number;
+    if (isMergedVideo) {
+      // Merged video: t is relative to 0, so globalTime = global_start + t
+      globalTime = globalStart + t;
+    } else {
+      // Segment video: t is segment-local time
+      const segLocalStart = playingUtterance.start ?? 0;
+      const elapsed = t - segLocalStart;
+      globalTime = globalStart + elapsed;
+    }
     setCurrentTime(globalTime);
 
     // Determine end of playback window: end of N+1 (or N if no N+1)
