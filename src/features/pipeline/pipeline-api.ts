@@ -193,44 +193,72 @@ export const pipelineApi = {
     return parseInt(response.headers['upload-offset'] || '0', 10);
   },
 
-  /** PATCH /upload/files/:id — send a chunk using fetch() for reliable binary transport */
+  /** PATCH /upload/files/:id — send a chunk using XMLHttpRequest for reliable progress tracking */
   tusUploadChunk: async (
     uploadId: string,
     chunk: ArrayBuffer,
     offset: number,
     signal?: AbortSignal,
+    onChunkProgress?: (loaded: number) => void,
   ): Promise<number> => {
-    // Use fetch() instead of axios for raw binary uploads
-    // Axios can interfere with Content-Type and body encoding
     const token = typeof window !== 'undefined'
       ? localStorage.getItem('auth_token')
       : null;
 
-    const headers: Record<string, string> = {
-      'Upload-Offset': String(offset),
-      'Content-Length': String(chunk.byteLength),
-      'Content-Type': 'application/offset+octet-stream',
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+    return new Promise<number>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PATCH', `${env.API_URL}/upload/files/${uploadId}`);
 
-    const response = await fetch(`${env.API_URL}/upload/files/${uploadId}`, {
-      method: 'PATCH',
-      headers,
-      body: chunk,
-      signal,
+      // Set headers
+      xhr.setRequestHeader('Upload-Offset', String(offset));
+      xhr.setRequestHeader('Content-Length', String(chunk.byteLength));
+      xhr.setRequestHeader('Content-Type', 'application/offset+octet-stream');
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+
+      // Wire abort signal
+      if (signal) {
+        if (signal.aborted) {
+          xhr.abort();
+          reject(new DOMException('Upload cancelled', 'AbortError'));
+          return;
+        }
+        signal.addEventListener('abort', () => xhr.abort(), { once: true });
+      }
+
+      // ── Upload progress (fires continuously during send) ──
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onChunkProgress) {
+          onChunkProgress(e.loaded);
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const newOffset = parseInt(
+            xhr.getResponseHeader('upload-offset') || '0',
+            10,
+          );
+          resolve(newOffset);
+        } else {
+          reject(
+            new Error(
+              `Chunk upload failed (HTTP ${xhr.status}): ${xhr.responseText || 'Unknown error'}`,
+            ),
+          );
+        }
+      };
+
+      xhr.onerror = () => reject(new Error('Network error during chunk upload'));
+      xhr.ontimeout = () => reject(new Error('Chunk upload timed out'));
+      xhr.onabort = () => reject(new DOMException('Upload cancelled', 'AbortError'));
+
+      // 5 min timeout per chunk (50MB on slow connections)
+      xhr.timeout = 5 * 60 * 1000;
+
+      xhr.send(chunk);
     });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      throw new Error(
-        `Chunk upload failed (HTTP ${response.status}): ${errorText}`
-      );
-    }
-
-    const newOffset = parseInt(response.headers.get('upload-offset') || '0', 10);
-    return newOffset;
   },
 
   /** DELETE /upload/files/:id — cancel upload */
@@ -277,6 +305,7 @@ async function uploadChunkWithRetry(
   chunk: ArrayBuffer,
   offset: number,
   signal?: AbortSignal,
+  onChunkProgress?: (loaded: number) => void,
 ): Promise<number> {
   let lastError: Error | undefined;
 
@@ -286,7 +315,9 @@ async function uploadChunkWithRetry(
     }
 
     try {
-      const newOffset = await pipelineApi.tusUploadChunk(uploadId, chunk, offset, signal);
+      const newOffset = await pipelineApi.tusUploadChunk(
+        uploadId, chunk, offset, signal, onChunkProgress,
+      );
       return newOffset;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
@@ -368,34 +399,38 @@ export async function tusUploadFile(
   const totalSize = file.size;
   const totalChunks = Math.ceil(totalSize / TUS_CHUNK_SIZE);
 
-  // ── Speed / ETA tracking ──────────────────────────────────────────
-  let bytesConfirmed = startOffset;
+  // ── Speed / ETA tracking with intra-chunk granularity ─────────────
+  let bytesConfirmed = startOffset;          // Bytes fully confirmed by server
+  const inFlightProgress = new Map<number, number>(); // chunkIndex → bytes uploaded so far
   const uploadStartTime = Date.now();
   let lastReportTime = uploadStartTime;
   let lastReportBytes = startOffset;
 
   const reportProgress = () => {
-    const percent = Math.min(99, Math.round((bytesConfirmed / totalSize) * 100));
+    // Total = confirmed + partial progress of in-flight chunks
+    const inFlightBytes = [...inFlightProgress.values()].reduce((a, b) => a + b, 0);
+    const effectiveUploaded = bytesConfirmed + inFlightBytes;
+    const percent = Math.min(99, Math.round((effectiveUploaded / totalSize) * 100));
     onProgress?.(percent);
 
-    // Calculate speed over the last window (avoid division by zero)
+    // Calculate speed over the last window
     const now = Date.now();
     const elapsed = (now - lastReportTime) / 1000;
     const totalElapsed = (now - uploadStartTime) / 1000;
 
     let speed = 0;
     if (elapsed > 0.5) {
-      speed = (bytesConfirmed - lastReportBytes) / elapsed;
+      speed = (effectiveUploaded - lastReportBytes) / elapsed;
       lastReportTime = now;
-      lastReportBytes = bytesConfirmed;
+      lastReportBytes = effectiveUploaded;
     } else if (totalElapsed > 0) {
-      speed = (bytesConfirmed - startOffset) / totalElapsed;
+      speed = (effectiveUploaded - startOffset) / totalElapsed;
     }
 
-    const remaining = totalSize - bytesConfirmed;
+    const remaining = totalSize - effectiveUploaded;
     const eta = speed > 0 ? remaining / speed : 0;
 
-    onDetailedProgress?.({ percent, speed, eta, uploaded: bytesConfirmed, total: totalSize });
+    onDetailedProgress?.({ percent, speed, eta, uploaded: effectiveUploaded, total: totalSize });
   };
 
   reportProgress();
@@ -411,7 +446,7 @@ export async function tusUploadFile(
     pendingChunks.push({ index: i, offset: chunkOffset, end: chunkEnd });
   }
 
-  // 4. Upload chunks with PARALLEL sliding window
+  // 4. Upload chunks with PARALLEL sliding window + real-time progress
   console.log(
     `[TUS] Uploading ${pendingChunks.length} chunks (${PARALLEL_CHUNKS} parallel, ${TUS_CHUNK_SIZE / 1024 / 1024}MB each)`
   );
@@ -430,13 +465,28 @@ export async function tusUploadFile(
       const chunk = pendingChunks[cursor];
       const chunkBlob = file.slice(chunk.offset, chunk.end);
 
+      // Track partial progress for this chunk
+      inFlightProgress.set(chunk.index, 0);
+
       const chunkPromise = (async () => {
         const chunkBuffer = await chunkBlob.arrayBuffer();
         console.log(
           `[TUS] Uploading chunk ${chunk.index + 1}/${totalChunks} ` +
           `(${chunk.offset}-${chunk.end}, ${chunkBuffer.byteLength} bytes)`
         );
-        await uploadChunkWithRetry(uploadId, chunkBuffer, chunk.offset, abortSignal);
+        await uploadChunkWithRetry(
+          uploadId,
+          chunkBuffer,
+          chunk.offset,
+          abortSignal,
+          // Intra-chunk progress callback (fires continuously via XHR)
+          (loaded: number) => {
+            inFlightProgress.set(chunk.index, loaded);
+            reportProgress();
+          },
+        );
+        // Chunk complete: move its bytes from in-flight to confirmed
+        inFlightProgress.delete(chunk.index);
         bytesConfirmed = Math.max(bytesConfirmed, chunk.end);
         reportProgress();
       })();
