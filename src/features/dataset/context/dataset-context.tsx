@@ -16,6 +16,8 @@ interface DatasetContextValue {
   selectedDataset: Dataset | null;
   setSelectedDataset: (dataset: Dataset | null) => void;
   isHydrated: boolean;
+  /** True when user needs to pick a dataset (hydrated but nothing selected). */
+  needsDatasetSelection: boolean;
 }
 
 const DatasetContext = createContext<DatasetContextValue | null>(null);
@@ -47,8 +49,10 @@ export function DatasetProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const needsDatasetSelection = isHydrated && selectedDataset === null;
+
   return (
-    <DatasetContext.Provider value={{ selectedDataset, setSelectedDataset, isHydrated }}>
+    <DatasetContext.Provider value={{ selectedDataset, setSelectedDataset, isHydrated, needsDatasetSelection }}>
       {children}
     </DatasetContext.Provider>
   );

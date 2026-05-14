@@ -27,6 +27,7 @@ import {
   List,
 } from 'lucide-react';
 import { annotationApi } from '../annotation-api';
+import { useSelectedDataset } from '@/features/dataset/context/dataset-context';
 import type { QueueItemResponse, ReviewStatusResponse } from '../annotation-types';
 import { QUEUE_STATUS } from '../annotation-types';
 
@@ -158,6 +159,7 @@ type TabView = 'queue' | 'submissions';
 // ── Component ──────────────────────────────────────────────────────
 
 export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onToggleCollapse }: AnnotationQueueProps) {
+  const { selectedDataset } = useSelectedDataset();
   const [tab, setTab] = useState<TabView>('queue');
 
   // Queue state
@@ -201,6 +203,7 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
           page,
           page_size: 50, // Fetch more to build proper groups
           status: statusFilter === 'all' ? undefined : statusFilter,
+          dataset_id: selectedDataset?.id,
         });
         setItems(data.items);
         setTotalItems(data.total);
@@ -215,7 +218,7 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
         if (!silent) setLoading(false);
       }
     },
-    [page, statusFilter],
+    [page, statusFilter, selectedDataset?.id],
   );
 
   const fetchSubmissions = useCallback(async () => {

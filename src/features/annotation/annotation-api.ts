@@ -39,7 +39,7 @@ export const annotationApi = {
   // ═══════════════════════════════════════════════════════════════════
 
   /** GET /annotations/queue — annotator's assigned segments */
-  getQueue: (params?: QueueFilterParams) =>
+  getQueue: (params?: QueueFilterParams & { dataset_id?: string }) =>
     apiClient
       .get<QueueListResponse>('/annotations/queue', { params })
       .then((r) => r.data),

@@ -93,14 +93,18 @@ export type MyDashboardResponse = AnnotatorDashboardResponse | CuratorDashboardR
 
 export const dashboardApi = {
   /** GET /api/v1/dashboard — admin-only dashboard data */
-  getDashboard: async (): Promise<DashboardResponse> => {
-    const { data } = await apiClient.get<DashboardResponse>('/dashboard');
+  getDashboard: async (dataset_id?: string): Promise<DashboardResponse> => {
+    const { data } = await apiClient.get<DashboardResponse>('/dashboard', {
+      params: dataset_id ? { dataset_id } : undefined,
+    });
     return data;
   },
 
   /** GET /api/v1/dashboard/my — personalized dashboard for annotator/curator */
-  getMyDashboard: async (): Promise<MyDashboardResponse> => {
-    const { data } = await apiClient.get<MyDashboardResponse>('/dashboard/my');
+  getMyDashboard: async (dataset_id?: string): Promise<MyDashboardResponse> => {
+    const { data } = await apiClient.get<MyDashboardResponse>('/dashboard/my', {
+      params: dataset_id ? { dataset_id } : undefined,
+    });
     return data;
   },
 };

@@ -26,6 +26,7 @@ import type {
   SlangEntry,
 } from '../types';
 import { curationApi } from '../curation-api';
+import { useSelectedDataset } from '@/features/dataset/context/dataset-context';
 import { toast } from 'sonner';
 
 
@@ -85,6 +86,7 @@ function CategoryBadge({ category }: { category: string | null }) {
 
 export function CurationPage() {
   // ── State ──────────────────────────────────────────────────────────
+  const { selectedDataset } = useSelectedDataset();
   const [videos, setVideos] = useState<CurationVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -99,7 +101,7 @@ export function CurationPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const jobs = await curationApi.getCuratableJobs();
+      const jobs = await curationApi.getCuratableJobs(selectedDataset?.id);
 
       // Map backend jobs → CurationVideo with empty segments initially.
       // Segments are loaded when the user opens a video for curation.
@@ -130,7 +132,7 @@ export function CurationPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedDataset?.id]);
 
   useEffect(() => {
     fetchVideos();

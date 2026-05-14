@@ -14,7 +14,7 @@ import type {
  */
 export const voiceAnnotationApi = {
   /** GET /voice-annotation/jobs — list jobs needing voice annotation */
-  getJobs: (params?: { page?: number; page_size?: number }) =>
+  getJobs: (params?: { page?: number; page_size?: number; dataset_id?: string }) =>
     apiClient
       .get<VoiceAnnotationJobListResponse>('/voice-annotation/jobs', { params })
       .then((r) => r.data),

@@ -5,6 +5,7 @@ import { useTour } from '@/shared/components/tour';
 import { globalSidebarTour } from '@/shared/components/sidebar/sidebar.tour';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth';
+import { useSelectedDataset } from '@/features/dataset/context/dataset-context';
 import { dashboardApi } from '../dashboard-api';
 import type { DashboardStatsCard, DashboardPipelineStage, DashboardSystemActivity } from '../dashboard-api';
 import { AnnotatorDashboard } from './annotator-dashboard';
@@ -73,6 +74,7 @@ function formatTimeAgo(iso: string): string {
 
 export function DashboardPage() {
   const { user } = useAuth();
+  const { selectedDataset } = useSelectedDataset();
   const isAdmin = user?.role === 'admin';
   const isAnnotator = user?.role === 'annotator';
   const isCurator = user?.role === 'curator';
@@ -95,8 +97,8 @@ export function DashboardPage() {
     isLoading,
     isError,
   } = useQuery({
-    queryKey: ['dashboard'],
-    queryFn: dashboardApi.getDashboard,
+    queryKey: ['dashboard', selectedDataset?.id],
+    queryFn: () => dashboardApi.getDashboard(selectedDataset?.id),
     staleTime: 60_000,
     refetchInterval: 60_000,
     enabled: isAdmin,

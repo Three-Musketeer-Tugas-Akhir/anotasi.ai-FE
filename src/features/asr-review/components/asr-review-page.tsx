@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { voiceAnnotationApi } from '../voice-annotation-api';
+import { useSelectedDataset } from '@/features/dataset/context/dataset-context';
 import type {
   VoiceAnnotationJob,
   VoiceAnnotationJobSummary,
@@ -130,6 +131,7 @@ function ProgressBar({
 type FilterMode = 'all' | 'flagged' | 'clean' | 'pending';
 
 function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
+  const { selectedDataset } = useSelectedDataset();
   const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState<VoiceAnnotationJob[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -139,7 +141,11 @@ function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
   useEffect(() => {
     (async () => {
       try {
-        const data = await voiceAnnotationApi.getJobs({ page: 1, page_size: 50 });
+        const data = await voiceAnnotationApi.getJobs({
+          page: 1,
+          page_size: 50,
+          dataset_id: selectedDataset?.id,
+        });
         setJobs(data.items);
       } catch {
         setError('Gagal memuat daftar job');
@@ -147,7 +153,7 @@ function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [selectedDataset?.id]);
 
   const filteredJobs = useMemo(() => {
     return jobs.filter((job) => {

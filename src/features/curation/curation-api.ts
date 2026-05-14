@@ -70,9 +70,11 @@ export const curationApi = {
    * Fetch jobs that are ready for curation.
    * These are jobs with status "READY_FOR_ANNOTATION" — pipeline complete.
    */
-  getCuratableJobs: async (): Promise<RawCurationJob[]> => {
+  getCuratableJobs: async (dataset_id?: string): Promise<RawCurationJob[]> => {
+    const params: Record<string, unknown> = { status: 'READY_FOR_ANNOTATION', limit: 100, offset: 0 };
+    if (dataset_id) params.dataset_id = dataset_id;
     const { data } = await apiClient.get<RawJobListResponse>('/jobs', {
-      params: { status: 'READY_FOR_ANNOTATION', limit: 100, offset: 0 },
+      params,
       timeout: 300000,
     });
     return data.jobs;

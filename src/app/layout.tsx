@@ -4,7 +4,7 @@ import { QueryProvider } from '@/core/providers/query-provider';
 import { TourProvider, AppTour } from '@/shared/components/tour';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/features/auth';
-import { DatasetProvider } from '@/features/dataset';
+import { DatasetProvider, DatasetGate } from '@/features/dataset';
 import { Toaster } from '@/components/ui/sonner';
 import { YoutubeDownloadProvider } from '@/features/classification/context/youtube-download-context';
 import { FileUploadProvider } from '@/features/classification/context/file-upload-context';
@@ -34,6 +34,7 @@ export default function RootLayout({
           <TooltipProvider>
             <AuthProvider>
               <DatasetProvider>
+                <DatasetGate />
                 <YoutubeDownloadProvider>
                   <FileUploadProvider>
                     <TourProvider>

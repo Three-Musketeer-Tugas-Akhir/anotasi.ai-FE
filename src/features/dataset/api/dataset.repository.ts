@@ -3,7 +3,7 @@ import type { Dataset, DatasetListResponse, CreateDatasetRequest } from '@/featu
 
 /**
  * Dataset Repository — Data access layer.
- * All API calls related to dataset/project management.
+ * All API calls related to dataset management.
  */
 export const datasetRepository = {
   /**
