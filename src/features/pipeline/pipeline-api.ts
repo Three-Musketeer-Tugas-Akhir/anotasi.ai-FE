@@ -14,6 +14,7 @@ import type {
   Stage1ResultsResponse,
   Stage2ResultsResponse,
   Stage3ResultsResponse,
+  JobRetryResponse,
 } from './types';
 
 /**
@@ -74,6 +75,12 @@ export const pipelineApi = {
   cancelJob: (jobId: string) =>
     apiClient
       .delete<JobCancelResponse>(`/pipeline/jobs/${jobId}`)
+      .then((r) => r.data),
+
+  /** POST /pipeline/jobs/:id/retry — retry a failed job */
+  retryJob: (jobId: string, mode: 'full' | 'from_failed_stage') =>
+    apiClient
+      .post<JobRetryResponse>(`/pipeline/jobs/${jobId}/retry`, { mode })
       .then((r) => r.data),
 
   /** POST /pipeline/jobs/:id/start — start processing for a single classified job */

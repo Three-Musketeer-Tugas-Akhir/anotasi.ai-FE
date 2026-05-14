@@ -57,6 +57,14 @@ import type {
   Stage3Utterance,
 } from '../types';
 import { JOB_STATUS, PROCESSING_STATUSES } from '../types';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -325,6 +333,8 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryDialogMode, setRetryDialogMode] = useState<'full' | null>(null);
   const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({
     detection: false, asr: false, cropping: true,
   });
@@ -587,6 +597,29 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
     }
   };
 
+  const handleRetry = async (mode: 'full' | 'from_failed_stage') => {
+    if (!job) return;
+    setRetrying(true);
+    setRetryDialogMode(null);
+    try {
+      await pipelineApi.retryJob(jobId, mode);
+      await fetchJob();
+      onJobChanged();
+      toast.success('Retry dimulai', {
+        description: mode === 'full' ? 'Memulai ulang seluruh pipeline.' : 'Melanjutkan pipeline dari stage yang gagal.',
+        position: 'top-center',
+      });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Gagal melakukan retry';
+      toast.error('Gagal Retry', {
+        description: typeof msg === 'string' ? msg : 'Terjadi kesalahan saat memulai retry.',
+        position: 'top-center',
+      });
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   const toggleStage = (name: string) => {
     setExpandedStages((prev) => ({ ...prev, [name]: !prev[name] }));
   };
@@ -757,9 +790,36 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
         )}
 
         {isFailed && job.error_message && (
-          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-start gap-2">
-            <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
-            <span>{job.error_message}</span>
+          <div className="mt-3 p-4 bg-red-50 border border-red-200 rounded-lg flex flex-col gap-3">
+            <div className="flex items-start gap-2 text-sm text-red-700">
+              <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+              <div>
+                <strong className="block mb-0.5">Pipeline gagal pada tahap: {job.current_stage || 'Unknown'}</strong>
+                <span>{job.error_message}</span>
+              </div>
+            </div>
+            
+            <div className="flex flex-wrap gap-2 mt-1">
+              <Button 
+                size="sm" 
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => handleRetry('from_failed_stage')}
+                disabled={retrying || !job.current_stage}
+              >
+                {retrying ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <RotateCcw size={14} className="mr-1.5" />}
+                Ulangi dari {job.current_stage ? (job.current_stage.charAt(0).toUpperCase() + job.current_stage.slice(1)) : 'Tahap Gagal'}
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="border-red-200 text-red-600 hover:bg-red-50"
+                onClick={() => setRetryDialogMode('full')}
+                disabled={retrying}
+              >
+                <AlertTriangle size={14} className="mr-1.5" />
+                Ulangi Seluruhnya
+              </Button>
+            </div>
           </div>
         )}
 
@@ -895,13 +955,47 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
       {/* ── Video Preview Modal ── */}
       {previewVideo && (
         <VideoPreviewModal
-          open={!!previewVideo}
-          onClose={() => setPreviewVideo(null)}
-          videoUrl={previewVideo.url}
-          title={previewVideo.title}
-          subtitle={previewVideo.subtitle}
-        />
+        open={!!previewVideo}
+        onClose={() => setPreviewVideo(null)}
+        videoUrl={previewVideo?.url || ''}
+        title={previewVideo?.title || ''}
+        subtitle={previewVideo?.subtitle}
+      />
       )}
+
+      {/* ── Retry Confirmation Dialog ── */}
+      <Dialog open={!!retryDialogMode} onOpenChange={(open) => !open && setRetryDialogMode(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle size={18} /> Ulangi Seluruh Pipeline?
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-gray-600">
+              <p className="mb-2">Semua data hasil pemrosesan akan dihapus secara permanen:</p>
+              <ul className="list-disc list-inside mb-4 text-sm space-y-1">
+                <li>Segmen video yang terdeteksi</li>
+                <li>Hasil transkripsi (ASR)</li>
+                <li>Video yang sudah dipotong</li>
+                <li>Anotasi dan review yang terkait</li>
+              </ul>
+              <p className="text-sm font-medium">Proses akan dimulai ulang dari awal (Deteksi).</p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-2">
+            <Button variant="outline" onClick={() => setRetryDialogMode(null)} disabled={retrying}>
+              Batal
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => handleRetry('full')}
+              disabled={retrying}
+            >
+              {retrying ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
+              Ya, Ulangi Seluruhnya
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

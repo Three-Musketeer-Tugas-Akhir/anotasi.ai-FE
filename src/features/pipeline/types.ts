@@ -70,12 +70,20 @@ export interface JobCreateFromUrlRequest {
   video_url: string;
 }
 
-// ── Job Cancel ──────────────────────────────────────────────────────
-
 export interface JobCancelResponse {
   id: string;
   status: string;
   queue_jobs_cancelled: number;
+  message: string;
+}
+
+// ── Job Retry ───────────────────────────────────────────────────────
+
+export interface JobRetryResponse {
+  id: string;
+  status: string;
+  retry_mode: string;
+  failed_stage: string | null;
   message: string;
 }
 
