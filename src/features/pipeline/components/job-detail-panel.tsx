@@ -653,7 +653,7 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
   const stages = mapJobToStages(job);
   const isProcessing = PROCESSING_STATUSES.has(job.status);
   const isCancelled = job.status === JOB_STATUS.CANCELLED;
-  const isFailed = job.status === JOB_STATUS.FAILED;
+  const isFailed = job.status === JOB_STATUS.FAILED || job.status === JOB_STATUS.CROPPING_FAILED;
   const isCompleted = job.status === JOB_STATUS.READY_FOR_ANNOTATION;
 
   return (
