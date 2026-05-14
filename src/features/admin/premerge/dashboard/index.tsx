@@ -104,23 +104,61 @@ function batchStatusIcon(status: string) {
 }
 
 function BatchRow({ batch }: { batch: PremergeBatchDetail }) {
+  const pairsCount = batch.pairs_count || batch.utterance_indices.length;
+  const mergedCount = batch.merged_count || 0;
+  const failedCount = batch.failed_count || 0;
+  const batchProgress = pairsCount > 0 ? Math.round((mergedCount / pairsCount) * 100) : 0;
+  const isRunning = batch.status === 'RUNNING';
+  const isDone = batch.status === 'COMPLETED' || batch.status === 'FAILED';
+
   return (
-    <div className="flex items-center gap-3 rounded-md border border-gray-100 bg-white px-3 py-2">
-      <div className="shrink-0">{batchStatusIcon(batch.status)}</div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-800">{batch.segment_code}</span>
-          <span className="text-xs text-gray-500">
-            Batch {batch.batch_index + 1}/{batch.total_batches}
-          </span>
+    <div className="rounded-lg border border-gray-100 bg-white px-3 py-2.5 shadow-sm">
+      <div className="flex items-center gap-2.5">
+        <div className="shrink-0">{batchStatusIcon(batch.status)}</div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-gray-800">{batch.segment_code}</span>
+            {batch.total_batches > 1 && (
+              <span className="text-[11px] text-gray-400">
+                Batch {batch.batch_index + 1}/{batch.total_batches}
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 flex items-center gap-3 text-[11px] text-gray-500">
+            <span>
+              {mergedCount}/{pairsCount} pair{pairsCount !== 1 && 's'}
+            </span>
+            {failedCount > 0 && (
+              <span className="text-red-500">{failedCount} failed</span>
+            )}
+            {batch.started_at && (
+              <span className="text-gray-400">
+                {formatDuration(batch.started_at, batch.completed_at)}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="text-xs text-gray-500">
-          {batch.utterance_indices.length} utterance{batch.utterance_indices.length !== 1 && 's'}
-        </div>
+        {batch.error && (
+          <div className="shrink-0" title={batch.error}>
+            <AlertCircle size={14} className="text-red-500" />
+          </div>
+        )}
       </div>
-      {batch.error && (
-        <div className="shrink-0" title={batch.error}>
-          <AlertCircle size={14} className="text-red-500" />
+      {/* Mini progress bar for running/completed batches */}
+      {(isRunning || isDone) && pairsCount > 0 && (
+        <div className="mt-1.5">
+          <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${
+                batch.status === 'COMPLETED'
+                  ? 'bg-emerald-400'
+                  : batch.status === 'FAILED'
+                    ? 'bg-red-400'
+                    : 'bg-blue-400'
+              }`}
+              style={{ width: `${batchProgress}%` }}
+            />
+          </div>
         </div>
       )}
     </div>
@@ -128,7 +166,8 @@ function BatchRow({ batch }: { batch: PremergeBatchDetail }) {
 }
 
 function JobCard({ job }: { job: PremergeJobStatus }) {
-  const [expanded, setExpanded] = useState(false);
+  const isActive = job.premerge_status === 'RUNNING' || job.premerge_status === 'PENDING';
+  const [expanded, setExpanded] = useState(isActive); // Auto-expand running jobs
   const queryClient = useQueryClient();
 
   const triggerMutation = useMutation({
@@ -144,10 +183,19 @@ function JobCard({ job }: { job: PremergeJobStatus }) {
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
   const batches = job.premerge_batches || [];
   const canRetrigger = job.premerge_status === 'FAILED' || job.premerge_status === 'COMPLETED_WITH_ERRORS';
-  const isActive = job.premerge_status === 'RUNNING' || job.premerge_status === 'PENDING';
+
+  // Batch status counts
+  const runningBatches = batches.filter((b) => b.status === 'RUNNING').length;
+  const completedBatches = batches.filter((b) => b.status === 'COMPLETED').length;
+  const pendingBatches = batches.filter((b) => b.status === 'PENDING').length;
+  const failedBatches = batches.filter((b) => b.status === 'FAILED').length;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div
+      className={`rounded-xl border bg-white shadow-sm transition-colors ${
+        isActive ? 'border-blue-200 ring-1 ring-blue-100' : 'border-gray-200'
+      }`}
+    >
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -181,6 +229,13 @@ function JobCard({ job }: { job: PremergeJobStatus }) {
                 <Clock size={12} />
                 {formatDuration(job.premerge_started_at, job.premerge_completed_at)}
               </span>
+              {/* Concurrent batch indicator */}
+              {isActive && runningBatches > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                  <Loader2 size={10} className="animate-spin" />
+                  {runningBatches} batch{runningBatches !== 1 && 'es'} active
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -213,6 +268,11 @@ function JobCard({ job }: { job: PremergeJobStatus }) {
           <div className="mb-1 flex items-center justify-between text-xs">
             <span className="font-medium text-gray-700">
               {completed} / {total} pairs
+              {batches.length > 0 && (
+                <span className="ml-2 font-normal text-gray-400">
+                  ({completedBatches}✓ {runningBatches > 0 ? `${runningBatches}⟳ ` : ''}{pendingBatches > 0 ? `${pendingBatches}… ` : ''}{failedBatches > 0 ? `${failedBatches}✗` : ''} of {batches.length} batches)
+                </span>
+              )}
             </span>
             <span className="text-gray-500">{progress}%</span>
           </div>

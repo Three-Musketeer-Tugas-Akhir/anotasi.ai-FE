@@ -155,6 +155,9 @@ export interface PremergeBatchDetail {
   total_batches: number;
   utterance_indices: number[];
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  pairs_count: number;
+  merged_count: number;
+  failed_count: number;
   started_at?: string | null;
   completed_at?: string | null;
   error?: string | null;
