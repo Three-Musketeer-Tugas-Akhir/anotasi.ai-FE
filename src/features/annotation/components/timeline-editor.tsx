@@ -49,6 +49,8 @@ interface TimelineEditorProps {
   // VIDEO-EDITOR-SIBI STYLE props
   disableTrimIn?: boolean;  // If true, only end marker is draggable (no trim-in)
   videoNDuration?: number;  // Duration of video N (for marker boundary line)
+  /** Fires when filmstrip frame extraction completes (true) or starts (false) */
+  onReady?: (ready: boolean) => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -82,6 +84,7 @@ export function TimelineEditor({
   activeUtterancePosition,
   disableTrimIn = false,
   videoNDuration = 0,
+  onReady,
 }: TimelineEditorProps) {
   const outerRef = useRef<HTMLDivElement>(null);   // scrollable outer container
   const innerRef = useRef<HTMLDivElement>(null);    // zoomed inner strip
@@ -108,7 +111,7 @@ export function TimelineEditor({
     return () => observer.disconnect();
   }, []);
 
-  const isLocked = activeUtterance?.status === 'OK';
+  // Note: We intentionally do NOT lock OK utterances — users can re-sync anytime
 
   // ── Zoom helpers ──────────────────────────────────────────────
 
@@ -154,6 +157,7 @@ export function TimelineEditor({
 
     let cancelled = false;
     setIsExtracting(true);
+    onReady?.(false);
     setFrames([]);
 
     const extractFrames = async () => {
@@ -220,6 +224,7 @@ export function TimelineEditor({
       if (!cancelled) {
         setFrames(extracted);
         setIsExtracting(false);
+        onReady?.(true);
       }
       video.src = '';
       video.load();
@@ -281,14 +286,13 @@ export function TimelineEditor({
     (type: 'start' | 'end' | 'region', e: React.MouseEvent) => {
       e.stopPropagation();
       e.preventDefault();
-      if (isLocked) return;
       // VIDEO-EDITOR-SIBI STYLE: disable trim-in (start drag and region drag)
       if (disableTrimIn && (type === 'start' || type === 'region')) return;
       setDragging(type);
       dragStartClientX.current = e.clientX;
       dragStartValues.current = { start: trimStart, end: trimEnd };
     },
-    [trimStart, trimEnd, isLocked, disableTrimIn]
+    [trimStart, trimEnd, disableTrimIn]
   );
 
   useEffect(() => {
@@ -466,19 +470,23 @@ export function TimelineEditor({
           })}
 
           {/* Active region border */}
-          <div className={`absolute top-0 bottom-0 border-2 pointer-events-none rounded-sm ${isLocked ? 'border-gray-500 bg-gray-500/20' : 'border-teal-400'}`}
+          <div className="absolute top-0 bottom-0 border-2 pointer-events-none rounded-sm border-teal-400"
             style={{ left: `${regionLeftPx}px`, width: `${regionRightPx - regionLeftPx}px` }} />
 
           {/* VIDEO-EDITOR-SIBI STYLE: Marker boundary line (video N duration) */}
           {videoNDuration > 0 && activeUtterance && (
             <div className="absolute top-0 bottom-0 w-0.5 bg-yellow-400 z-25 pointer-events-none"
-              style={{ left: `${timeToInnerPx((activeUtterance.global_start ?? activeUtterance.start ?? 0) + videoNDuration)}px` }}>
+              style={{ left: `${timeToInnerPx((activeUtterance.global_start ?? activeUtterance.start ?? 0) + videoNDuration)}px` }}
+              title="Batas Video N | N+1">
               <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-yellow-400 rounded-full" />
+              <div className="absolute top-1 left-2 text-[9px] text-yellow-300 font-semibold whitespace-nowrap bg-black/60 px-1 rounded pointer-events-none select-none">
+                N | N+1
+              </div>
             </div>
           )}
 
           {/* Drag handle — start (hidden in SIBI style) */}
-          {!isLocked && !disableTrimIn && (
+          {!disableTrimIn && (
             <div className="absolute top-0 bottom-0 w-4 cursor-col-resize z-20 group flex items-center justify-center"
               style={{ left: `${regionLeftPx - 8}px` }}
               onMouseDown={(e) => handleMouseDown('start', e)}
@@ -488,14 +496,12 @@ export function TimelineEditor({
           )}
 
           {/* Drag handle — end */}
-          {!isLocked && (
-            <div className="absolute top-0 bottom-0 w-4 cursor-col-resize z-20 group flex items-center justify-center"
-              style={{ left: `${regionRightPx - 8}px` }}
-              onMouseDown={(e) => handleMouseDown('end', e)}
-              onClick={(e) => e.stopPropagation()}>
-              <div className="w-1 h-full bg-teal-400 group-hover:bg-teal-300 transition-colors rounded-full" />
-            </div>
-          )}
+          <div className="absolute top-0 bottom-0 w-4 cursor-col-resize z-20 group flex items-center justify-center"
+            style={{ left: `${regionRightPx - 8}px` }}
+            onMouseDown={(e) => handleMouseDown('end', e)}
+            onClick={(e) => e.stopPropagation()}>
+            <div className="w-1 h-full bg-teal-400 group-hover:bg-teal-300 transition-colors rounded-full" />
+          </div>
 
           {/* Region drag overlay (hidden in SIBI style) */}
           {!disableTrimIn && (
@@ -503,7 +509,7 @@ export function TimelineEditor({
               style={{
                 left: `${regionLeftPx}px`,
                 width: `${regionRightPx - regionLeftPx}px`,
-                cursor: isLocked ? 'not-allowed' : (dragging === 'region' ? 'grabbing' : 'grab'),
+                cursor: dragging === 'region' ? 'grabbing' : 'grab',
               }}
               onMouseDown={(e) => handleMouseDown('region', e)}
               onClick={(e) => e.stopPropagation()} />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Play, Pause, Settings2, Video, Loader2, AlertTriangle, Volume2, VolumeX } from 'lucide-react';
@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { toast } from 'sonner';
 
 interface VideoPlayerProps {
   src: string;
@@ -21,6 +22,10 @@ interface VideoPlayerProps {
   onPlaybackRateChange: (rate: number) => void;
   onDurationChange: (duration: number) => void;
   onEnded?: () => void;
+  /** Fires when video element is ready to play */
+  onReady?: (ready: boolean) => void;
+  /** If true, play is externally blocked (e.g. filmstrip not ready) */
+  playDisabled?: boolean;
 }
 
 export function VideoPlayer({
@@ -33,24 +38,36 @@ export function VideoPlayer({
   onPlaybackRateChange,
   onDurationChange,
   onEnded,
+  onReady,
+  playDisabled = false,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(true);
+  const [videoReady, setVideoReady] = useState(false);
 
   // ── Sync State ─────────────────────────────────────────────────────────
   const lastReportedTimeRef = useRef(currentTime);
   const isSeekingRef = useRef(false);
+  const rafIdRef = useRef<number | null>(null);
 
   // ── Build the playable video URL ──────────────────────────────
   useEffect(() => {
-    setVideoError(null); // Always reset error on src change
+    setVideoError(null);
+    setVideoReady(false);
+    onReady?.(false);
     if (!src) { setVideoUrl(null); return; }
     setVideoUrl(src);
-  }, [src]);
+  }, [src]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync play state
+  // ── Video ready handler ────────────────────────────────────────
+  const handleCanPlay = useCallback(() => {
+    setVideoReady(true);
+    onReady?.(true);
+  }, [onReady]);
+
+  // ── Sync play state ────────────────────────────────────────────
   useEffect(() => {
     if (videoRef.current) {
       if (isPlaying && videoRef.current.paused) {
@@ -61,10 +78,40 @@ export function VideoPlayer({
     }
   }, [isPlaying]);
 
-  // Sync currentTime from external source (e.g., clicking utterance/timeline)
+  // ── rAF playhead polling (60fps smooth red marker) ────────────
+  useEffect(() => {
+    if (!isPlaying) {
+      // Cancel any pending rAF when paused
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      return;
+    }
+
+    const tick = () => {
+      if (videoRef.current && !isSeekingRef.current) {
+        const t = videoRef.current.currentTime;
+        lastReportedTimeRef.current = t;
+        onTimeUpdate(t);
+      }
+      rafIdRef.current = requestAnimationFrame(tick);
+    };
+
+    rafIdRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, [isPlaying, onTimeUpdate]);
+
+  // ── Sync currentTime from external source (e.g., clicking utterance/timeline) ──
   useEffect(() => {
     if (!videoRef.current) return;
-    
+
     // If the new prop time is significantly different from what we last reported,
     // it means the user clicked somewhere to seek.
     if (Math.abs(currentTime - lastReportedTimeRef.current) > 0.1) {
@@ -73,9 +120,12 @@ export function VideoPlayer({
         isSeekingRef.current = true;
         videoRef.current.currentTime = currentTime;
         lastReportedTimeRef.current = currentTime;
+
+        // Fallback: force-clear seeking flag after 500ms if seeked never fires
+        setTimeout(() => { isSeekingRef.current = false; }, 500);
       };
 
-      // If video metadata isn't loaded yet, setting currentTime will fail (playing from 0:00).
+      // If video metadata isn't loaded yet, setting currentTime will fail.
       // Wait for it to be ready.
       if (videoRef.current.readyState >= 1) {
         applySeek();
@@ -84,13 +134,6 @@ export function VideoPlayer({
       }
     }
   }, [currentTime]);
-
-  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
-    if (isSeekingRef.current) return; // Ignore stale events during programmatic seek
-    const t = e.currentTarget.currentTime;
-    lastReportedTimeRef.current = t;
-    onTimeUpdate(t);
-  };
 
   const handleSeeked = () => {
     isSeekingRef.current = false;
@@ -102,6 +145,20 @@ export function VideoPlayer({
       videoRef.current.playbackRate = playbackRate;
     }
   }, [playbackRate]);
+
+  // ── Play attempt handler (guards) ──────────────────────────────
+  const handlePlayAttempt = useCallback((wantPlay: boolean) => {
+    if (wantPlay && (playDisabled || !videoReady)) {
+      toast.info('Tunggu sebentar, video sedang dimuat...', {
+        position: 'top-center',
+        duration: 2000,
+      });
+      return;
+    }
+    onPlayPause(wantPlay);
+  }, [playDisabled, videoReady, onPlayPause]);
+
+  const isDisabled = playDisabled || !videoReady;
 
   return (
     <Card className="flex flex-col overflow-hidden border-gray-200 shadow-sm bg-black">
@@ -118,24 +175,31 @@ export function VideoPlayer({
               ref={videoRef}
               src={videoUrl}
               className="absolute inset-0 w-full h-full object-contain"
-              onTimeUpdate={handleTimeUpdate}
               onSeeked={handleSeeked}
               onDurationChange={(e) => onDurationChange(e.currentTarget.duration)}
-              onClick={() => onPlayPause(!isPlaying)}
+              onClick={() => handlePlayAttempt(!isPlaying)}
               onError={() => setVideoError('Gagal memuat video. Coba refresh halaman.')}
               onEnded={onEnded}
+              onCanPlay={handleCanPlay}
               preload="metadata"
               muted={isMuted}
             >
               <track kind="captions" />
             </video>
 
+            {/* Loading overlay when not ready */}
+            {!videoReady && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10">
+                <Loader2 size={28} className="text-teal-400 animate-spin" />
+              </div>
+            )}
+
             {/* ── Centered play/pause overlay ── */}
             <button
-              onClick={() => onPlayPause(!isPlaying)}
+              onClick={() => handlePlayAttempt(!isPlaying)}
               className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
                 isPlaying ? 'opacity-0 hover:opacity-100' : 'opacity-100'
-              }`}
+              } ${!videoReady ? 'z-20' : ''}`}
               style={{ background: isPlaying ? 'transparent' : 'rgba(0,0,0,0.25)' }}
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >
@@ -168,9 +232,12 @@ export function VideoPlayer({
       <div className="bg-gray-900 flex items-center px-3 py-1.5 gap-3 border-t border-gray-700">
         {/* Play/Pause button — prominent */}
         <button
-          onClick={() => onPlayPause(!isPlaying)}
-          disabled={!videoUrl}
-          className="w-8 h-8 rounded-full bg-teal-500 hover:bg-teal-400 disabled:opacity-40 flex items-center justify-center transition-colors flex-shrink-0"
+          onClick={() => handlePlayAttempt(!isPlaying)}
+          className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${
+            isDisabled
+              ? 'bg-gray-600 cursor-not-allowed opacity-50'
+              : 'bg-teal-500 hover:bg-teal-400'
+          }`}
           aria-label={isPlaying ? 'Pause' : 'Play'}
         >
           {isPlaying ? <Pause size={16} className="text-white" /> : <Play size={16} className="text-white ml-0.5" />}

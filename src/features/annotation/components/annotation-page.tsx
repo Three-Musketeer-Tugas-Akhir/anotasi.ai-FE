@@ -51,6 +51,11 @@ export function AnnotationPage() {
   const [reviewStatus, setReviewStatus] = useState<string | null>(null);
   const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
 
+  // ── Readiness State (play guard) ──────────────────────────────
+  const [videoReady, setVideoReady] = useState(false);
+  const [filmstripReady, setFilmstripReady] = useState(false);
+  const playDisabled = !videoReady || !filmstripReady;
+
   // ── Computed Values ───────────────────────────────────────────
   const activeUtterance = useMemo(() => {
     if (activeUtteranceIndex === null || activeUtteranceIndex >= utteranceEdits.length) return null;
@@ -306,6 +311,9 @@ export function AnnotationPage() {
     setMergedVideoUrl(null);
     setVideoNDuration(0);
     setMergedTotalDuration(0);
+    // Reset readiness for play guard
+    setVideoReady(false);
+    setFilmstripReady(false);
     
     // VIDEO-EDITOR-SIBI STYLE: Load merged video for this utterance
     if (utt && utt.segment_id) {
@@ -640,6 +648,8 @@ export function AnnotationPage() {
                     onPlaybackRateChange={setPlaybackRate}
                     onDurationChange={setDuration}
                     onEnded={handleVideoEnded}
+                    onReady={setVideoReady}
+                    playDisabled={!filmstripReady}
                   />
                 </div>
                 
@@ -696,6 +706,7 @@ export function AnnotationPage() {
                   onNextUtterance={handleNextUtterance}
                   utteranceCount={utteranceEdits.length}
                   activeUtterancePosition={activeUtterancePosition}
+                  onReady={setFilmstripReady}
                 />
               </div>
             </div>
