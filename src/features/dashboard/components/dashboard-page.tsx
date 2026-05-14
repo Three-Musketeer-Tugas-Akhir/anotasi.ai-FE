@@ -1,6 +1,6 @@
 'use client';
 import { useEffect } from 'react';
-import { Video as VideoIcon, Scissors, FileText, Package, ArrowRight, Clock, CheckCircle2, AlertCircle, Activity, ExternalLink, Loader2 } from 'lucide-react';
+import { Video as VideoIcon, Scissors, FileText, Package, ArrowRight, Clock, CheckCircle2, AlertCircle, Activity, ExternalLink, Loader2, Sparkles } from 'lucide-react';
 import { useTour } from '@/shared/components/tour';
 import { globalSidebarTour } from '@/shared/components/sidebar/sidebar.tour';
 import { useQuery } from '@tanstack/react-query';
@@ -128,7 +128,19 @@ export function DashboardPage() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-6 lg:p-8 space-y-6">
+      <div className="flex-1 overflow-y-auto p-6 lg:p-8 space-y-8">
+        {/* ── Greeting (Standardized across roles) ──────────────────── */}
+        {!isLoading && !isError && dashboard && (
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center border border-blue-200">
+              <Sparkles size={20} className="text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-slate-800">Ringkasan Pipeline Dataset</h1>
+              <p className="text-sm text-slate-500">Pantau kesehatan data dan progres setiap tahapan secara real-time.</p>
+            </div>
+          </div>
+        )}
 
         {/* Loading State */}
         {isLoading && (
@@ -163,7 +175,7 @@ export function DashboardPage() {
                         <p className="text-3xl font-bold text-slate-800">{stat.value.toLocaleString('id-ID')}</p>
                         <p className={`text-xs mt-2 font-medium ${style.color}`}>{stat.sublabel}</p>
                       </div>
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ring-4 ${style.ring} ${style.bgColor}`}>
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ring-4 ${style.ring} ${style.bgColor} transition-transform group-hover:scale-110 duration-300`}>
                         <IconComp size={24} className={style.color} />
                       </div>
                     </div>

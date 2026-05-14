@@ -121,17 +121,20 @@ export function AnnotatorDashboard() {
                     {/* Stats grid */}
                     <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
                         {[
-                            { label: 'Total Kalimat', value: stats.total_segments, icon: <FileVideo size={20} className="text-slate-600" />, bgIcon: 'bg-slate-100' },
-                            { label: 'Sudah Selesai', value: stats.completed_segments, icon: <CheckCircle2 size={20} className="text-emerald-600" />, bgIcon: 'bg-emerald-100' },
-                            { label: 'Sedang Dikerjakan', value: stats.in_progress_segments, icon: <PenTool size={20} className="text-blue-600" />, bgIcon: 'bg-blue-100' },
-                            { label: 'Belum Dimulai', value: stats.pending_segments, icon: <Clock size={20} className="text-amber-600" />, bgIcon: 'bg-amber-100' },
+                            { label: 'Total Kalimat', value: stats.total_segments, icon: <FileVideo size={20} />, color: 'text-slate-600', bgColor: 'bg-slate-50', ring: 'ring-slate-100' },
+                            { label: 'Sudah Selesai', value: stats.completed_segments, icon: <CheckCircle2 size={20} />, color: 'text-emerald-600', bgColor: 'bg-emerald-50', ring: 'ring-emerald-100' },
+                            { label: 'Sedang Dikerjakan', value: stats.in_progress_segments, icon: <PenTool size={20} />, color: 'text-blue-600', bgColor: 'bg-blue-50', ring: 'ring-blue-100' },
+                            { label: 'Belum Dimulai', value: stats.pending_segments, icon: <Clock size={20} />, color: 'text-amber-600', bgColor: 'bg-amber-50', ring: 'ring-amber-100' },
                         ].map((s) => (
-                            <div key={s.label} className="bg-slate-50 rounded-xl p-4 border border-slate-100 flex flex-col items-center text-center">
-                                <div className={`w-10 h-10 rounded-full ${s.bgIcon} flex items-center justify-center mb-3`}>
-                                    {s.icon}
+                            <div key={s.label} className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col items-center text-center group hover:shadow-md transition-all relative overflow-hidden">
+                                <div className={`w-12 h-12 rounded-xl ${s.bgColor} ${s.ring} ring-4 flex items-center justify-center mb-3 relative z-10 transition-transform group-hover:scale-110 duration-300`}>
+                                    <div className={s.color}>{s.icon}</div>
                                 </div>
-                                <p className="text-2xl font-bold text-slate-800 mb-1">{s.value.toLocaleString('id-ID')}</p>
-                                <span className="text-xs font-semibold text-slate-500">{s.label}</span>
+                                <p className="text-2xl font-bold text-slate-800 mb-0.5 relative z-10">{s.value.toLocaleString('id-ID')}</p>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight relative z-10">{s.label}</span>
+                                
+                                {/* Decoration */}
+                                <div className={`absolute -right-6 -top-6 w-20 h-20 rounded-full opacity-10 group-hover:scale-150 transition-transform duration-500 ${s.bgColor}`}></div>
                             </div>
                         ))}
                     </div>

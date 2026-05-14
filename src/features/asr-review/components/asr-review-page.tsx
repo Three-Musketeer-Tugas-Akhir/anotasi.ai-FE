@@ -13,6 +13,7 @@ import {
   Play,
   Pause,
   FileText,
+  ArrowLeft,
   ChevronLeft,
   Layers,
   Save,
@@ -633,39 +634,44 @@ export function AsrReviewPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
+      {/* Header — aligned with curation page layout */}
+      <header className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0 shadow-sm z-10">
         <div className="flex items-center justify-between">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <Volume2 size={22} className="text-teal-600" />
-              Anotasi Suara
-            </h1>
-            <p className="text-sm text-gray-500 mt-0.5 truncate">
-              {jobSummary?.original_filename || selectedJobId.slice(0, 8) + '...'}
-            </p>
-          </div>
-          <div className="flex gap-2 items-center flex-shrink-0">
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs"
+          <div className="flex items-center gap-4 min-w-0">
+            {/* Back button on the left */}
+            <button
               onClick={() => {
                 setSelectedJobId(null);
                 setJobSummary(null);
                 setUtterances([]);
               }}
+              className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors flex-shrink-0"
             >
-              <ChevronLeft size={14} className="mr-1" />
-              Pilih Job Lain
-            </Button>
+              <ArrowLeft size={16} /> Kembali
+            </button>
+
+            {/* Separator */}
+            <div className="w-px h-6 bg-slate-200 flex-shrink-0"></div>
+
+            <div className="min-w-0">
+              <h1 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <Volume2 size={18} className="text-teal-600" />
+                Anotasi Suara
+              </h1>
+              <p className="text-[11px] font-medium text-slate-500 truncate">
+                {jobSummary?.original_filename || selectedJobId.slice(0, 8) + '...'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 flex-shrink-0">
             <Button
               variant="outline"
               size="sm"
-              className="text-xs"
+              className="text-xs text-teal-700 border-teal-200 bg-white hover:bg-teal-50 shadow-sm font-bold"
               onClick={() => fetchJobData(selectedJobId)}
             >
-              <RefreshCw size={14} className="mr-1" />
+              <RefreshCw size={14} className="mr-1.5" />
               Refresh
             </Button>
           </div>
