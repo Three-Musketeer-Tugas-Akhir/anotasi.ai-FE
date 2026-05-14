@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Save,
   RotateCcw,
+  Undo2,
   Loader2,
   AlertTriangle,
   AlertCircle,
@@ -27,6 +28,7 @@ interface PropertiesPanelProps {
   onSelectUtterance: (index: number) => void;
   onSaveDraft: () => Promise<void>;
   onMarkOk: (index: number) => Promise<void>;
+  onRevert: (index: number) => Promise<void>;
   onReset: () => Promise<void>;
   isSaving: boolean;
   reviewStatus: string | null;
@@ -71,12 +73,14 @@ export function PropertiesPanel({
   onSelectUtterance,
   onSaveDraft,
   onMarkOk,
+  onRevert,
   onReset,
   isSaving,
   reviewStatus,
   reviewFeedback,
 }: PropertiesPanelProps) {
   const [resetting, setResetting] = useState(false);
+  const [reverting, setReverting] = useState(false);
 
   const reviewBadge = getReviewBadge(reviewStatus);
   const isPendingReview = reviewStatus === 'SUBMITTED' || reviewStatus === 'PENDING';
@@ -215,6 +219,26 @@ export function PropertiesPanel({
       {/* Action Buttons (Footer) */}
       {activeEdit && (
         <div className="p-5 bg-white border-t border-slate-200 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] flex-shrink-0">
+          {/* IMPROVEMENT 1: Show revert button for OK utterances */}
+          {activeEdit.status === 'OK' && !actionsDisabled && (
+            <div className="mb-3">
+              <button
+                onClick={async () => {
+                  if (!confirm('Kembalikan kalimat ini ke kondisi sebelum di-trim?')) return;
+                  setReverting(true);
+                  try { await onRevert(activeUtteranceIndex!); } finally { setReverting(false); }
+                }}
+                disabled={reverting || isSaving}
+                className="w-full py-3 rounded-xl font-bold text-amber-700 bg-amber-50 border-2 border-amber-200 hover:bg-amber-100 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {reverting ? <Loader2 size={18} className="animate-spin" /> : <Undo2 size={18} />}
+                Ubah Kembali (Undo Trim)
+              </button>
+              <p className="text-center text-xs text-slate-400 mt-1.5">
+                Mengembalikan batas waktu ke kondisi sebelum kalimat ini di-trim.
+              </p>
+            </div>
+          )}
           {/* Tugas tambahan: Annotator bisa revisi meskipun sudah OK (human error) */}
           <div className="flex gap-3">
             <button

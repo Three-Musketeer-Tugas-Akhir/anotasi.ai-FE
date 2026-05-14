@@ -16,7 +16,4 @@ export type {
   FailedJobsParams,
   ConfidenceDistribution,
   ASRConfidenceStatsResponse,
-  PremergeBatchDetail,
-  PremergeJobStatus,
-  PremergeQueueResponse,
 } from './types';

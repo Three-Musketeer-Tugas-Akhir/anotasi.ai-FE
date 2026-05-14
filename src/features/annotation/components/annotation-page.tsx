@@ -256,12 +256,28 @@ export function AnnotationPage() {
       const current = next[activeUtteranceIndex];
       if (!current) return next;
 
-      // VIDEO-EDITOR-SIBI STYLE: start cannot be changed (no trim-in)
-      const newGlobalStart = current.global_start ?? current.start;
+      // IMPROVEMENT 4: Allow trim-in (start time can change)
+      let newGlobalStart = globalStart;
       let newGlobalEnd = globalEnd;
+
+      // Clamp start: cannot go before the previous utterance's end
+      const prevUtterance = activeUtteranceIndex > 0 ? next[activeUtteranceIndex - 1] : null;
+      if (prevUtterance) {
+        const prevGlobalEnd = prevUtterance.global_end ?? prevUtterance.end;
+        newGlobalStart = Math.max(newGlobalStart, prevGlobalEnd);
+      } else {
+        // First utterance: start cannot go below 0
+        newGlobalStart = Math.max(newGlobalStart, 0);
+      }
+
+      // Ensure start < end
+      if (newGlobalStart >= newGlobalEnd) {
+        newGlobalStart = newGlobalEnd - 0.1;
+      }
+
       const nextUtterance = next[activeUtteranceIndex + 1];
 
-      // Right Spillover only (using global timestamps)
+      // Right Spillover (using global timestamps)
       if (nextUtterance) {
         const nextGlobalStart = nextUtterance.global_start ?? nextUtterance.start;
         if (nextUtterance.status === 'OK') {
@@ -283,8 +299,7 @@ export function AnnotationPage() {
         }
       }
 
-      // Update current utterance: start is fixed, only end can change
-      // Also revert status to DRAFT if it was OK (trim modification requires re-crop)
+      // Update current utterance: both start and end can change
       const offset = (current.global_start ?? current.start) - current.start;
       next[activeUtteranceIndex] = {
         ...current,
@@ -442,6 +457,28 @@ export function AnnotationPage() {
     } catch (err: unknown) {
       const msg = (err as any)?.response?.data?.detail || 'Gagal mereset anotasi';
       setActionMessage(typeof msg === 'string' ? `❌ ${msg}` : '❌ Gagal mereset anotasi');
+    }
+  };
+
+  // IMPROVEMENT 1: Revert a single utterance to pre-trim state
+  const handleRevertUtterance = async (index: number) => {
+    if (!selectedJobId || utteranceEdits.length === 0) return;
+    const targetUtt = utteranceEdits[index];
+    if (!targetUtt || !targetUtt.segment_id) return;
+
+    setIsSaving(true);
+    setActionMessage('↩️ Mengembalikan ke kondisi sebelum trim...');
+    try {
+      const result = await annotationApi.revertUtterance(targetUtt.segment_id, targetUtt.utterance_index);
+      setActionMessage(`✅ ${result.message}`);
+      await loadJob(selectedJobId);
+      // Stay on the same utterance
+      setTimeout(() => handleSelectUtterance(index), 400);
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.detail || 'Gagal mengembalikan kalimat';
+      setActionMessage(typeof msg === 'string' ? `❌ ${msg}` : '❌ Gagal mengembalikan kalimat');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -712,7 +749,7 @@ export function AnnotationPage() {
                   trimStart={activeUtterance?.global_start ?? segmentStart}
                   trimEnd={activeUtterance?.global_end ?? segmentEnd}
                   onTrimChange={handleTrimChange}
-                  disableTrimIn={true}
+                  disableTrimIn={false}
                   videoNDuration={videoNDuration}
                   activeUtterance={activeUtterance && activeUtteranceIndex !== null ? { index: activeUtteranceIndex, start: activeUtterance.global_start ?? activeUtterance.start, end: activeUtterance.global_end ?? activeUtterance.end, status: activeUtterance.status, global_start: activeUtterance.global_start ?? activeUtterance.start } : null}
                   allUtterances={utteranceEdits}
@@ -735,6 +772,7 @@ export function AnnotationPage() {
                 onSelectUtterance={handleSelectUtterance}
                 onSaveDraft={handleSaveDraft}
                 onMarkOk={handleMarkOk}
+                onRevert={handleRevertUtterance}
                 onReset={handleReset}
                 isSaving={isSaving}
                 reviewStatus={reviewStatus}

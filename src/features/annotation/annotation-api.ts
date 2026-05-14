@@ -94,6 +94,14 @@ export const annotationApi = {
       }>(`/annotations/segments/${segmentId}/utterances/${utteranceIndex}/merged-video`)
       .then((r) => r.data),
 
+  /** POST /annotations/:segmentId/utterances/:utteranceIndex/revert — revert a trimmed utterance to pre-trim state */
+  revertUtterance: (segmentId: string, utteranceIndex: number) =>
+    apiClient
+      .post<{ status: string; utterance_index: number; reverted_start: number; reverted_end: number; message: string }>(
+        `/annotations/${segmentId}/utterances/${utteranceIndex}/revert`
+      )
+      .then((r) => r.data),
+
   // ═══════════════════════════════════════════════════════════════════
   // Draft & Preview
   // ═══════════════════════════════════════════════════════════════════
