@@ -624,6 +624,15 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
     setExpandedStages((prev) => ({ ...prev, [name]: !prev[name] }));
   };
 
+  const getFailedStageName = () => {
+    if (!job) return 'Unknown';
+    if (job.status === JOB_STATUS.CROPPING_FAILED) return 'CV-2 (Video Cropping)';
+    if (job.current_stage === 'upload' || job.current_stage === 'detection') return 'CV-1 (Deteksi & Ekstraksi)';
+    if (job.current_stage === 'asr') return 'ASR (Transkripsi)';
+    if (job.current_stage === 'cropping') return 'CV-2 (Video Cropping)';
+    return job.current_stage || 'Unknown';
+  };
+
   // ── Loading / Error / Empty ──────────────────────────────────
 
   if (loading) {
@@ -794,7 +803,7 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
             <div className="flex items-start gap-2 text-sm text-red-700">
               <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
               <div>
-                <strong className="block mb-0.5">Pipeline gagal pada tahap: {job.current_stage || 'Unknown'}</strong>
+                <strong className="block mb-0.5">Pipeline gagal pada tahap: {getFailedStageName()}</strong>
                 <span>{job.error_message}</span>
               </div>
             </div>
@@ -807,7 +816,7 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                 disabled={retrying || !job.current_stage}
               >
                 {retrying ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <RotateCcw size={14} className="mr-1.5" />}
-                Ulangi dari {job.current_stage ? (job.current_stage.charAt(0).toUpperCase() + job.current_stage.slice(1)) : 'Tahap Gagal'}
+                Ulangi dari {getFailedStageName()}
               </Button>
               <Button 
                 variant="outline" 
