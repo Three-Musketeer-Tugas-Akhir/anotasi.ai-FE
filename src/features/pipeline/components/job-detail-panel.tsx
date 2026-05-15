@@ -95,10 +95,10 @@ function mapJobToStages(job: JobStatusDetailResponse): StageInfo[] {
     if (s === JOB_STATUS.CANCELLED) return 'cancelled';
 
     const currentOrder =
-      s === JOB_STATUS.DETECTING ? 1
-      : (s === JOB_STATUS.TRANSCRIBING || s === JOB_STATUS.ASR_COMPLETED) ? 2
-      : (s === JOB_STATUS.CROPPING || s === JOB_STATUS.CROPPING_IN_PROGRESS) ? 3
-      : (s === JOB_STATUS.READY_FOR_ANNOTATION || s === JOB_STATUS.NEEDS_VOICE_ANNOTATION) ? 4
+      (s === JOB_STATUS.UPLOADED || s === JOB_STATUS.QUEUED || s === JOB_STATUS.DETECTING) ? 1
+      : (s === JOB_STATUS.TRANSCRIBING) ? 2
+      : (s === JOB_STATUS.ASR_COMPLETED || s === JOB_STATUS.CROPPING || s === JOB_STATUS.CROPPING_IN_PROGRESS) ? 3
+      : (s === JOB_STATUS.READY_FOR_ANNOTATION || s === JOB_STATUS.NEEDS_VOICE_ANNOTATION || s === JOB_STATUS.VOICE_ANNOTATION_IN_PROGRESS) ? 4
       : 0;
 
     if (s === JOB_STATUS.FAILED || s === JOB_STATUS.CROPPING_FAILED) {
