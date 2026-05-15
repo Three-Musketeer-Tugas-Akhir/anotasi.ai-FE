@@ -741,9 +741,11 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                     return;
                   }
                   setStarting(true);
+                  // ── Optimistic update: immediately show CV-1 as processing ──
+                  setJob(prev => prev ? { ...prev, status: 'QUEUED' } : prev);
                   try {
                     await pipelineApi.startProcessing(jobId);
-                    // Refresh both the detail panel AND the parent list
+                    // Confirm with real data from server
                     await fetchJob();
                     onJobChanged();
                     toast.success('Pemrosesan dimulai', {
@@ -751,6 +753,8 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                       position: 'top-center',
                     });
                   } catch (e) {
+                    // Rollback optimistic update on failure
+                    await fetchJob();
                     console.error(e);
                     toast.error('Gagal memulai', {
                       description: 'Gagal memulai proses. Pastikan kategori sudah dipilih.',
