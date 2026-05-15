@@ -200,12 +200,6 @@ export function AnnotatorDashboard() {
                                                 <Calendar size={16} className="text-slate-400" />
                                                 Ditugaskan: <strong className="text-slate-700">{formatDate(job.assigned_at)}</strong>
                                             </span>
-                                            {job.due_date && (
-                                                <span className="flex items-center gap-2">
-                                                    <Clock size={16} className="text-amber-500" />
-                                                    Tenggat Waktu: <strong className="text-amber-600">{formatDate(job.due_date)}</strong>
-                                                </span>
-                                            )}
                                         </div>
 
                                         {/* Progress bar per job */}
