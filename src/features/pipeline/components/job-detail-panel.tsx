@@ -971,39 +971,62 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
       />
       )}
 
-      {/* ── Retry Confirmation Dialog ── */}
-      <Dialog open={!!retryDialogMode} onOpenChange={(open) => !open && setRetryDialogMode(null)}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
-              <AlertTriangle size={18} /> Ulangi Seluruh Pipeline?
-            </DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-gray-600 space-y-3 py-2">
-            <p>Semua data hasil pemrosesan akan dihapus secara permanen:</p>
-            <ul className="list-disc list-inside text-sm space-y-1">
-              <li>Segmen video yang terdeteksi</li>
-              <li>Hasil transkripsi (ASR)</li>
-              <li>Video yang sudah dipotong</li>
-              <li>Anotasi dan review yang terkait</li>
-            </ul>
-            <p className="font-medium">Proses akan dimulai ulang dari awal (Deteksi).</p>
+      {/* ── Retry Confirmation Dialog (Portal) ── */}
+      {retryDialogMode && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onPointerDown={(e) => {
+            if (e.target === e.currentTarget) setRetryDialogMode(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl w-full max-w-[425px] mx-4 overflow-hidden"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between px-5 pt-5 pb-3">
+              <h2 className="flex items-center gap-2 text-base font-semibold text-red-600">
+                <AlertTriangle size={18} /> Ulangi Seluruh Pipeline?
+              </h2>
+              <button
+                type="button"
+                onClick={() => setRetryDialogMode(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 pb-4 text-sm text-gray-600 space-y-3">
+              <p>Semua data hasil pemrosesan akan dihapus secara permanen:</p>
+              <ul className="list-disc list-inside text-sm space-y-1">
+                <li>Segmen video yang terdeteksi</li>
+                <li>Hasil transkripsi (ASR)</li>
+                <li>Video yang sudah dipotong</li>
+                <li>Anotasi dan review yang terkait</li>
+              </ul>
+              <p className="font-medium">Proses akan dimulai ulang dari awal (Deteksi).</p>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end gap-2 px-5 pb-5">
+              <Button variant="outline" onClick={() => setRetryDialogMode(null)} disabled={retrying}>
+                Batal
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={() => handleRetry('full')}
+                disabled={retrying}
+              >
+                {retrying ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
+                Ya, Ulangi Seluruhnya
+              </Button>
+            </div>
           </div>
-          <DialogFooter className="mt-2">
-            <Button variant="outline" onClick={() => setRetryDialogMode(null)} disabled={retrying}>
-              Batal
-            </Button>
-            <Button 
-              variant="destructive" 
-              onClick={() => handleRetry('full')}
-              disabled={retrying}
-            >
-              {retrying ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
-              Ya, Ulangi Seluruhnya
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
