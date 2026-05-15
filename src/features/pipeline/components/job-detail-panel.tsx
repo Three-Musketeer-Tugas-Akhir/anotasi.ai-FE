@@ -812,7 +812,7 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                 size="sm" 
                 className="bg-emerald-600 hover:bg-emerald-700 text-white"
                 onClick={() => handleRetry('from_failed_stage')}
-                disabled={retrying || !job.current_stage}
+                disabled={retrying || !job.current_stage || job.current_stage === 'upload'}
               >
                 {retrying ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <RotateCcw size={14} className="mr-1.5" />}
                 Ulangi dari {getFailedStageName()}
@@ -978,17 +978,17 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
             <DialogTitle className="flex items-center gap-2 text-red-600">
               <AlertTriangle size={18} /> Ulangi Seluruh Pipeline?
             </DialogTitle>
-            <DialogDescription className="pt-2 text-gray-600">
-              <p className="mb-2">Semua data hasil pemrosesan akan dihapus secara permanen:</p>
-              <ul className="list-disc list-inside mb-4 text-sm space-y-1">
-                <li>Segmen video yang terdeteksi</li>
-                <li>Hasil transkripsi (ASR)</li>
-                <li>Video yang sudah dipotong</li>
-                <li>Anotasi dan review yang terkait</li>
-              </ul>
-              <p className="text-sm font-medium">Proses akan dimulai ulang dari awal (Deteksi).</p>
-            </DialogDescription>
           </DialogHeader>
+          <div className="text-sm text-gray-600 space-y-3 py-2">
+            <p>Semua data hasil pemrosesan akan dihapus secara permanen:</p>
+            <ul className="list-disc list-inside text-sm space-y-1">
+              <li>Segmen video yang terdeteksi</li>
+              <li>Hasil transkripsi (ASR)</li>
+              <li>Video yang sudah dipotong</li>
+              <li>Anotasi dan review yang terkait</li>
+            </ul>
+            <p className="font-medium">Proses akan dimulai ulang dari awal (Deteksi).</p>
+          </div>
           <DialogFooter className="mt-2">
             <Button variant="outline" onClick={() => setRetryDialogMode(null)} disabled={retrying}>
               Batal
