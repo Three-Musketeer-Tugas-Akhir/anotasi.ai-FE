@@ -812,7 +812,7 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                 size="sm" 
                 className="bg-emerald-600 hover:bg-emerald-700 text-white"
                 onClick={() => handleRetry('from_failed_stage')}
-                disabled={retrying || !job.current_stage || job.current_stage === 'upload'}
+                disabled={retrying || (job.status !== JOB_STATUS.CROPPING_FAILED && (!job.current_stage || job.current_stage === 'upload'))}
               >
                 {retrying ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <RotateCcw size={14} className="mr-1.5" />}
                 Ulangi dari {getFailedStageName()}
