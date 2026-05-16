@@ -13,17 +13,22 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     // Guard: prevent submission while auth state is still being hydrated
     // (browser autofill can trigger onSubmit before the page is ready)
-    if (isLoading) return;
+    if (isLoading || isSubmitting) return;
+    
+    setIsSubmitting(true);
     try {
       await login({ email, password });
       router.push('/');
     } catch {
       // error is already set in auth context
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -164,15 +169,15 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={isLoading}
+                disabled={isLoading || isSubmitting}
                 className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600 text-white font-semibold rounded-lg shadow-lg shadow-teal-600/25 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {isLoading ? (
+                {isSubmitting ? (
                   <Loader2 size={18} className="animate-spin" />
                 ) : (
                   <LogIn size={18} />
                 )}
-                {isLoading ? 'Memproses...' : 'Masuk'}
+                {isSubmitting ? 'Memproses...' : 'Masuk'}
               </button>
             </div>
           </div>
