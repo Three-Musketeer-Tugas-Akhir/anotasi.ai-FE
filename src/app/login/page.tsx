@@ -16,6 +16,9 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    // Guard: prevent submission while auth state is still being hydrated
+    // (browser autofill can trigger onSubmit before the page is ready)
+    if (isLoading) return;
     try {
       await login({ email, password });
       router.push('/');
@@ -107,6 +110,7 @@ export default function LoginPage() {
                   id="email"
                   type="email"
                   required
+                  autoComplete="username"
                   value={email}
                   onChange={(e) => { setEmail(e.target.value); clearError(); }}
                   placeholder="Masukkan email"
@@ -125,6 +129,7 @@ export default function LoginPage() {
                     type={showPassword ? 'text' : 'password'}
                     required
                     minLength={6}
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); clearError(); }}
                     placeholder="Masukkan password"
