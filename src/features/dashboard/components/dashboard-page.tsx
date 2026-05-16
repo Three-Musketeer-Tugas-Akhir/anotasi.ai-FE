@@ -80,15 +80,18 @@ export function DashboardPage() {
   const isCurator = user?.role === 'curator';
 
   // Sidebar tour: fires only on first-ever Dashboard visit
+  // Must wait until a dataset is selected so it doesn't overlap with DatasetGate
   const { startTour, activeTour, hasCompletedTour } = useTour();
   useEffect(() => {
+    if (!selectedDataset) return;
+    
     if (!activeTour && !hasCompletedTour(globalSidebarTour.id)) {
       const timer = setTimeout(() => {
         startTour(globalSidebarTour);
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [activeTour, hasCompletedTour, startTour]);
+  }, [activeTour, hasCompletedTour, startTour, selectedDataset]);
 
   // Admin dashboard data — hooks MUST be called unconditionally (Rules of Hooks)
   // enabled:isAdmin prevents actual API fetch for non-admin roles
