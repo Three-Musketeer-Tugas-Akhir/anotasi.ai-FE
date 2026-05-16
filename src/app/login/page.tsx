@@ -100,7 +100,12 @@ export default function LoginPage() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-5" onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSubmit(e as any);
+              }
+            }}>
               {/* Email */}
               <div className="space-y-1.5">
                 <label htmlFor="email" className="text-sm font-medium text-gray-700">
@@ -157,7 +162,8 @@ export default function LoginPage() {
 
               {/* Submit */}
               <button
-                type="submit"
+                type="button"
+                onClick={handleSubmit}
                 disabled={isLoading}
                 className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600 text-white font-semibold rounded-lg shadow-lg shadow-teal-600/25 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
               >
@@ -168,7 +174,7 @@ export default function LoginPage() {
                 )}
                 {isLoading ? 'Memproses...' : 'Masuk'}
               </button>
-            </form>
+            </div>
           </div>
 
           {/* Footer */}
