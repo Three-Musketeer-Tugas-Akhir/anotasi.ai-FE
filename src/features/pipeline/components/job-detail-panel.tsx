@@ -1039,7 +1039,9 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
 
 function StageConnector({ status, isProcessing, index }: { status: string; isProcessing: boolean; index?: number }) {
   const isDone = status === 'done';
-  const isProc = status === 'processing' || isProcessing;
+  // Only animate if this specific stage is processing, or if it's the global processing state but NOT done.
+  // The most accurate is to just rely on status === 'processing' or checking !isDone.
+  const isProc = status === 'processing' || (!isDone && isProcessing && status !== 'cancelled' && status !== 'failed');
   const isPending = !isDone && !isProc;
 
   let color = '#94a3b8'; // slate-400
