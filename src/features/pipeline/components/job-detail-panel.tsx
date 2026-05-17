@@ -854,7 +854,7 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
       {/* ── Pipeline Stages ── */}
       {stages.map((stage, idx) => (
         <div key={stage.name} className="w-full">
-          <StageConnector status={stage.status} isProcessing={isProcessing} />
+          <StageConnector status={stage.status} isProcessing={isProcessing} index={idx} />
           <div className="no-drag w-full" onPointerDown={e => e.stopPropagation()}>
             <StageSection
               stage={stage}
@@ -877,7 +877,7 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
       {/* ── Completion Section ── */}
       {isCompleted && (
         <div className="w-full">
-          <StageConnector status="done" isProcessing={false} />
+          <StageConnector status="done" isProcessing={false} index={3} />
           <div className="no-drag w-full" onPointerDown={e => e.stopPropagation()}>
             <div className="bg-emerald-50 rounded-2xl border-2 border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.2)] p-6 relative">
             <div className="text-center">
@@ -1037,32 +1037,56 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
 
 // ── Sub-Components ──────────────────────────────────────────────────
 
-function StageConnector({ status, isProcessing }: { status: string; isProcessing: boolean }) {
-  if (status === 'done') {
-      return (
-          <div className="flex flex-col items-center h-10 my-1 justify-center relative">
-              <div className="w-1 h-full bg-emerald-400" />
-              <ChevronDown size={14} className="text-emerald-400 absolute -bottom-2 bg-[#f1f5f9]" />
-          </div>
-      );
+function StageConnector({ status, isProcessing, index }: { status: string; isProcessing: boolean; index?: number }) {
+  const isDone = status === 'done';
+  const isProc = status === 'processing' || isProcessing;
+  const isPending = !isDone && !isProc;
+
+  let color = '#94a3b8'; // slate-400
+  if (isDone) color = '#10b981'; // emerald-500
+  else if (isProc) color = '#fbbf24'; // amber-400
+  else if (status === 'failed') color = '#ef4444'; // red-500
+  else if (status === 'cancelled') color = '#cbd5e1'; // slate-300
+
+  const strokeWidth = 3;
+  const isDashed = isProc || isPending || status === 'cancelled';
+  const dashArray = isDashed ? "8 8" : "none";
+
+  const isLeft = (index ?? 0) % 2 === 0;
+
+  let d = "";
+  if (isLeft) {
+    // Left curve bracket
+    d = "M 0,-20 L -30,-20 Q -40,-20 -40,-10 L -40,60 Q -40,70 -30,70 L -5,70";
+  } else {
+    // Right curve bracket
+    d = "M 600,-20 L 630,-20 Q 640,-20 640,-10 L 640,60 Q 640,70 630,70 L 605,70";
   }
 
-  if (status === 'processing' || isProcessing) {
-      return (
-          <div className="flex flex-col items-center h-10 my-1 justify-center relative w-full overflow-hidden">
-              <svg height="100%" width="4" className="absolute">
-                  <line x1="2" y1="0" x2="2" y2="40" stroke="#fbbf24" strokeWidth="4" strokeDasharray="8 8" className="animate-flow" />
-              </svg>
-              <ChevronDown size={14} className="text-amber-400 absolute -bottom-2 bg-[#f1f5f9]" />
-          </div>
-      );
-  }
+  const markerId = `arrow-${color.replace('#', '')}-${index ?? 'default'}`;
 
   return (
-      <div className="flex flex-col items-center h-10 my-1 justify-center relative">
-          <div className="w-1 h-full bg-slate-300 border-dashed" style={{ borderLeft: '3px dashed #cbd5e1', background: 'transparent', width: '3px' }} />
-          <ChevronDown size={14} className="text-slate-300 absolute -bottom-2 bg-[#f1f5f9]" />
-      </div>
+    <div className="flex flex-col items-center h-[50px] my-1 justify-center relative w-full overflow-visible">
+      <svg width="100%" height="100%" className="absolute inset-0 z-0 pointer-events-none">
+        <defs>
+          <marker id={markerId} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill={color} />
+          </marker>
+        </defs>
+        <path
+          d={d}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeDasharray={dashArray}
+          markerEnd={`url(#${markerId})`}
+        >
+          {isProc && (
+            <animate attributeName="stroke-dashoffset" from="16" to="0" dur="0.8s" repeatCount="indefinite" />
+          )}
+        </path>
+      </svg>
+    </div>
   );
 }
 
