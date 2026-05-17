@@ -1067,7 +1067,7 @@ function StageConnector({ status, isProcessing, index }: { status: string; isPro
 
   return (
     <div className="flex flex-col items-center h-[50px] my-1 justify-center relative w-full overflow-visible">
-      <svg width="100%" height="100%" className="absolute inset-0 z-0 pointer-events-none">
+      <svg width="100%" height="100%" className="absolute inset-0 z-0 pointer-events-none" style={{ overflow: 'visible' }}>
         <defs>
           <marker id={markerId} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 1 L 10 5 L 0 9 z" fill={color} />
