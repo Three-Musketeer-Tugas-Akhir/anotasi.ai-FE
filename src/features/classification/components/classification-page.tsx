@@ -113,6 +113,28 @@ export function ClassificationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedJob, isPending]);
 
+  // Handle cross-component upload completion
+  const [highlightedJobId, setHighlightedJobId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleJobUploaded = (e: Event) => {
+      const customEvent = e as CustomEvent<{ jobId: string }>;
+      const { jobId } = customEvent.detail;
+      if (jobId) {
+        refetch();
+        setSelectedJobId(jobId);
+        setHighlightedJobId(jobId);
+        // Clear highlight after 3 seconds
+        setTimeout(() => {
+          setHighlightedJobId((prev) => (prev === jobId ? null : prev));
+        }, 3000);
+      }
+    };
+
+    window.addEventListener('JOB_UPLOADED', handleJobUploaded);
+    return () => window.removeEventListener('JOB_UPLOADED', handleJobUploaded);
+  }, [refetch]);
+
   // ── Handlers ────────────────────────────────────────────────────────
   function handleCategorize(category: 'SIBI' | 'BISINDO') {
     if (!selectedJob) return;
@@ -210,6 +232,7 @@ export function ClassificationPage() {
         <VideoList
           jobs={filteredJobs}
           selectedJobId={effectiveSelectedJobId}
+          highlightedJobId={highlightedJobId}
           filter={filter}
           searchQuery={searchQuery}
           onSelectJob={setSelectedJobId}

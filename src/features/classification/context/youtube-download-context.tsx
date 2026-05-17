@@ -113,6 +113,11 @@ export function YoutubeDownloadProvider({ children }: { children: ReactNode }) {
               description: data.title ? `${data.title} siap untuk diklasifikasikan.` : 'Video siap untuk diklasifikasikan.',
               position: 'top-center',
             });
+            if (data.job_id) {
+              window.dispatchEvent(
+                new CustomEvent('JOB_UPLOADED', { detail: { jobId: data.job_id } }),
+              );
+            }
           } else if (data.status === 'failed') {
             toast.error('Download YouTube gagal', {
               description: data.error || 'Terjadi kesalahan saat mendownload video.',

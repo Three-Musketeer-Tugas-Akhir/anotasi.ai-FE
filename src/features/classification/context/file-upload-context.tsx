@@ -175,6 +175,12 @@ export function FileUploadProvider({ children }: { children: ReactNode }) {
       );
       removeSessionUpload(uploadId);
       delete abortRefs.current[uploadId];
+
+      if (resolvedJobId) {
+        window.dispatchEvent(
+          new CustomEvent('JOB_UPLOADED', { detail: { jobId: resolvedJobId } }),
+        );
+      }
     },
     [],
   );

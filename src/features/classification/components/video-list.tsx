@@ -19,6 +19,7 @@ type FilterValue = 'all' | CategoryStatus;
 interface VideoListProps {
   jobs: ClassificationJob[];
   selectedJobId: string | null;
+  highlightedJobId?: string | null;
   filter: FilterValue;
   searchQuery: string;
   onSelectJob: (id: string) => void;
@@ -38,6 +39,7 @@ interface VideoListProps {
 export function VideoList({
   jobs,
   selectedJobId,
+  highlightedJobId,
   filter,
   searchQuery,
   onSelectJob,
@@ -105,10 +107,12 @@ export function VideoList({
               key={job.job_id}
               onClick={() => onSelectJob(job.job_id)}
               className={cn(
-                'p-4 cursor-pointer hover:bg-gray-50 transition-colors flex gap-3 border-l-4',
-                selectedJobId === job.job_id
+                'p-4 cursor-pointer transition-all duration-700 flex gap-3 border-l-4',
+                highlightedJobId === job.job_id
+                  ? 'bg-green-100/60 border-green-500 animate-pulse'
+                  : selectedJobId === job.job_id
                   ? 'bg-teal-50 border-teal-500 hover:bg-teal-50'
-                  : 'border-transparent',
+                  : 'border-transparent hover:bg-gray-50',
               )}
             >
               {/* Thumbnail */}
