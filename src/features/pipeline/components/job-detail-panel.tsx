@@ -1049,8 +1049,7 @@ function StageConnector({ status, isProcessing, index }: { status: string; isPro
   else if (status === 'cancelled') color = '#cbd5e1'; // slate-300
 
   const strokeWidth = 3;
-  const isDashed = isProc || isPending || status === 'cancelled';
-  const dashArray = isDashed ? "8 8" : "none";
+  const dashArray = "8 8"; // Always dashed as requested
 
   const isLeft = (index ?? 0) % 2 === 0;
 
