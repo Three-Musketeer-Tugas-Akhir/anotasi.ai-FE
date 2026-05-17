@@ -19,7 +19,7 @@ import type { Dataset } from '@/features/dataset/types/dataset.types';
 export function DatasetGate() {
   const { isAuthenticated } = useAuth();
   const { needsDatasetSelection, setSelectedDataset, isHydrated } = useSelectedDataset();
-  const { data: datasetsResponse, isLoading } = useDatasets();
+  const { data: datasetsResponse, isLoading } = useDatasets({ enabled: isAuthenticated });
 
   // Don't render if not authenticated, not hydrated, or dataset is already selected
   if (!isAuthenticated || !isHydrated || !needsDatasetSelection) return null;

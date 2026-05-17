@@ -13,11 +13,12 @@ export const datasetKeys = {
 /**
  * Fetch all datasets.
  */
-export function useDatasets() {
+export function useDatasets(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: datasetKeys.list(),
     queryFn: () => datasetRepository.getDatasets(),
     staleTime: 1000 * 60 * 5, // 5 minutes
+    ...options,
   });
 }
 
