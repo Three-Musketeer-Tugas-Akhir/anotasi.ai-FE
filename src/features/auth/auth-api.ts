@@ -43,10 +43,10 @@ export const authApi = {
       .post<LogoutResponse>('/auth/logout', data)
       .then((r) => r.data),
 
-  /** GET /auth/me (protected — requires JWT) */
+  /** GET /users/me (protected — requires JWT) */
   getMe: () =>
     apiClient
-      .get<UserProfileResponse>('/auth/me')
+      .get<UserProfileResponse>('/users/me')
       .then((r) => ({
         id: r.data.id,
         email: r.data.email,
