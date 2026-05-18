@@ -49,8 +49,10 @@ export default function AdminUsersPage() {
 
   // Create user modal
   const [showCreate, setShowCreate] = useState(false);
-  const [createEmail, setCreateEmail] = useState('');
   const [createRole, setCreateRole] = useState('annotator');
+  const [createFirstName, setCreateFirstName] = useState('');
+  const [createLastName, setCreateLastName] = useState('');
+  const [createEmail, setCreateEmail] = useState('');
   const [createPassword, setCreatePassword] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
   const [createResult, setCreateResult] = useState<string | null>(null);
@@ -86,14 +88,22 @@ export default function AdminUsersPage() {
     setCreateLoading(true);
     setCreateResult(null);
     try {
-      const data: { email: string; role: string; temporary_password?: string } = {
-        email: createEmail,
-        role: createRole,
-      };
-      if (createPassword) data.temporary_password = createPassword;
+      const data: any = { role: createRole };
+      
+      if (createEmail) {
+        data.email = createEmail;
+      } else {
+        data.first_name = createFirstName;
+        data.last_name = createLastName;
+      }
+      
+      if (createPassword) data.password = createPassword;
+      
       const res = await adminApi.createUser(data);
       setCreateResult(`User berhasil dibuat.${res?.temporary_password ? ` Password sementara: ${res.temporary_password}` : ''}`);
       setCreateEmail('');
+      setCreateFirstName('');
+      setCreateLastName('');
       setCreatePassword('');
       fetchUsers();
     } catch (err: unknown) {
@@ -103,6 +113,14 @@ export default function AdminUsersPage() {
       setCreateLoading(false);
     }
   };
+
+  // Preview generated email and password based on names
+  const previewEmail = (createFirstName && createLastName) 
+    ? `${createFirstName.toLowerCase()}.${createLastName.toLowerCase()}@anotasi.ai` 
+    : '';
+  const previewPassword = createFirstName 
+    ? `${createFirstName.charAt(0).toUpperCase() + createFirstName.slice(1).toLowerCase()}123!` 
+    : '';
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     setChangingRole(userId);
@@ -335,7 +353,57 @@ export default function AdminUsersPage() {
 
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-700">Email</label>
+                  <label className="text-sm font-medium text-gray-700">Role</label>
+                  <select
+                    value={createRole}
+                    onChange={(e) => setCreateRole(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Nama Depan</label>
+                    <input
+                      type="text"
+                      value={createFirstName}
+                      onChange={(e) => setCreateFirstName(e.target.value)}
+                      placeholder="Budi"
+                      className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Nama Belakang</label>
+                    <input
+                      type="text"
+                      value={createLastName}
+                      onChange={(e) => setCreateLastName(e.target.value)}
+                      placeholder="Santoso"
+                      className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                    />
+                  </div>
+                </div>
+                
+                {previewEmail && (
+                  <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800 space-y-1">
+                    <p className="font-medium text-blue-900">Auto-generated Credentials:</p>
+                    <p><strong>Email:</strong> {previewEmail}</p>
+                    <p><strong>Password:</strong> {previewPassword}</p>
+                  </div>
+                )}
+                
+                <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-gray-200"></div>
+                  <span className="flex-shrink-0 mx-4 text-gray-400 text-xs uppercase font-medium">Atau manual</span>
+                  <div className="flex-grow border-t border-gray-200"></div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700">Email (Opsional)</label>
                   <input
                     type="email"
                     value={createEmail}
@@ -343,6 +411,7 @@ export default function AdminUsersPage() {
                     placeholder="user@example.com"
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                   />
+                  <p className="text-xs text-gray-500">Jika diisi, fitur auto-generate email dari nama akan diabaikan.</p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -385,7 +454,7 @@ export default function AdminUsersPage() {
                 </button>
                 <button
                   onClick={handleCreateUser}
-                  disabled={createLoading || !createEmail}
+                  disabled={createLoading || (!createEmail && (!createFirstName || !createLastName))}
                   className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {createLoading && <Loader2 size={14} className="animate-spin" />}

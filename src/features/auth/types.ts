@@ -18,6 +18,7 @@ export interface UserInfo {
   id: string;
   email: string;
   role: UserRole;
+  must_change_password?: boolean;
 }
 
 // ── Login ──────────────────────────────────────────────────────────
@@ -32,6 +33,7 @@ export interface LoginResponse {
   refresh_token: string;
   token_type: string;
   expires_in: number;
+  must_change_password?: boolean;
 }
 
 // ── Token Refresh ──────────────────────────────────────────────────
@@ -111,6 +113,17 @@ export interface ChangePasswordResponse {
   message: string;
 }
 
+// ── Force Change Password ──────────────────────────────────────────
+
+export interface ForceChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
+export interface ForceChangePasswordResponse {
+  message: string;
+}
+
 // ── User Profile ──────────────────────────────────────────────────
 
 export interface UpdateProfileRequest {
@@ -129,6 +142,7 @@ export interface UserProfileResponse {
   roles: string[];
   is_active: boolean;
   email_verified: boolean;
+  must_change_password?: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -15,6 +15,9 @@ import type {
   VerifyEmailResponse,
   ResendVerificationRequest,
   ResendVerificationResponse,
+  ForceChangePasswordRequest,
+  ForceChangePasswordResponse,
+  UserProfileResponse,
 } from './types';
 
 /**
@@ -43,8 +46,13 @@ export const authApi = {
   /** GET /auth/me (protected — requires JWT) */
   getMe: () =>
     apiClient
-      .get<UserInfo>('/auth/me')
-      .then((r) => r.data),
+      .get<UserProfileResponse>('/auth/me')
+      .then((r) => ({
+        id: r.data.id,
+        email: r.data.email,
+        role: r.data.roles[0] as any, // mapping from array to single role
+        must_change_password: r.data.must_change_password,
+      })),
 
   /** POST /auth/forgot-password */
   forgotPassword: (data: ForgotPasswordRequest) =>
@@ -68,5 +76,11 @@ export const authApi = {
   resendVerification: (data: ResendVerificationRequest) =>
     apiClient
       .post<ResendVerificationResponse>('/auth/resend-verification', data)
+      .then((r) => r.data),
+
+  /** POST /auth/force-change-password */
+  forceChangePassword: (data: ForceChangePasswordRequest) =>
+    apiClient
+      .post<ForceChangePasswordResponse>('/auth/force-change-password', data)
       .then((r) => r.data),
 };

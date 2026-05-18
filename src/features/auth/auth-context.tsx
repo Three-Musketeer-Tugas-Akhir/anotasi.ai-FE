@@ -138,7 +138,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userInfo = await authApi.getMe();
       setUser(userInfo);
 
-      router.push('/');
+      if (res.must_change_password || userInfo.must_change_password) {
+        router.push('/force-change-password');
+      } else {
+        router.push('/');
+      }
     } catch (err: unknown) {
       const message = extractErrorMessage(err, 'Login gagal. Periksa email dan password.');
       setError(message);
@@ -160,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isLoading) return;
 
-    const publicPaths = ['/login', '/forgot-password', '/reset-password', '/verify-email'];
+    const publicPaths = ['/login', '/forgot-password', '/reset-password', '/verify-email', '/force-change-password'];
     const isPublic = publicPaths.includes(pathname);
 
     if (!isAuthenticated && !isPublic) {
@@ -169,7 +173,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (isAuthenticated && isPublic) {
-      router.replace('/');
+      if (user?.must_change_password && pathname === '/force-change-password') {
+        // Allow access to force-change-password if they must change it
+      } else if (user?.must_change_password) {
+        router.replace('/force-change-password');
+        return;
+      } else {
+        router.replace('/');
+        return;
+      }
+    }
+
+    if (isAuthenticated && user?.must_change_password && pathname !== '/force-change-password') {
+      router.replace('/force-change-password');
       return;
     }
 

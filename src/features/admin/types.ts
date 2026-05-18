@@ -45,9 +45,11 @@ export interface UserDetailResponse {
 // ── Create User ────────────────────────────────────────────────────
 
 export interface CreateUserRequest {
-  email: string;
+  email?: string;
   role: string;
-  temporary_password?: string;
+  password?: string;
+  first_name?: string;
+  last_name?: string;
 }
 
 // ── User Role Update ───────────────────────────────────────────────
