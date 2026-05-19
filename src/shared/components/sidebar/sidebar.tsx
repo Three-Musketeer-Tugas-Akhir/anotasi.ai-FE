@@ -44,16 +44,19 @@ const ALL_NAV_ITEMS: NavItemConfig[] = [
 function getNavItems(role?: string): NavItemConfig[] {
   if (role === 'annotator') {
     return ALL_NAV_ITEMS.filter((item) =>
-      ['/', '/classification', '/asr-review', '/annotation'].includes(item.href)
+      ['/', '/asr-review', '/annotation'].includes(item.href)
     );
   }
   if (role === 'curator') {
     return ALL_NAV_ITEMS.filter((item) =>
-      ['/', '/curation'].includes(item.href)
+      ['/', '/asr-review', '/curation'].includes(item.href)
     );
   }
-  // admin or undefined → all items
-  return ALL_NAV_ITEMS;
+  if (role === 'admin') {
+    return ALL_NAV_ITEMS;
+  }
+  // undefined (loading) → empty array to prevent flash of unauthorized items
+  return [];
 }
 
 /** Admin-only navigation items */

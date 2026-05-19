@@ -3,7 +3,7 @@ import { Inter } from 'next/font/google';
 import { QueryProvider } from '@/core/providers/query-provider';
 import { TourProvider, AppTour } from '@/shared/components/tour';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { AuthProvider } from '@/features/auth';
+import { AuthProvider, AuthGate } from '@/features/auth';
 import { DatasetProvider, DatasetGate } from '@/features/dataset';
 import { Toaster } from '@/components/ui/sonner';
 import { YoutubeDownloadProvider } from '@/features/classification/context/youtube-download-context';
@@ -33,18 +33,20 @@ export default function RootLayout({
         <QueryProvider>
           <TooltipProvider>
             <AuthProvider>
-              <DatasetProvider>
-                <DatasetGate />
-                <YoutubeDownloadProvider>
-                  <FileUploadProvider>
-                    <TourProvider>
-                      {children}
-                      <AppTour />
-                      <DownloadUploadContainer />
-                    </TourProvider>
-                  </FileUploadProvider>
-                </YoutubeDownloadProvider>
-              </DatasetProvider>
+              <AuthGate>
+                <DatasetProvider>
+                  <DatasetGate />
+                  <YoutubeDownloadProvider>
+                    <FileUploadProvider>
+                      <TourProvider>
+                        {children}
+                        <AppTour />
+                        <DownloadUploadContainer />
+                      </TourProvider>
+                    </FileUploadProvider>
+                  </YoutubeDownloadProvider>
+                </DatasetProvider>
+              </AuthGate>
             </AuthProvider>
           </TooltipProvider>
         </QueryProvider>

@@ -26,6 +26,7 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isHydrated: boolean;
   error: string | null;
   login: (data: LoginRequest) => Promise<void>;
   logout: () => void;
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isHydrated, setIsHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
@@ -91,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem(TOKEN_KEY);
     if (!stored) {
       setIsLoading(false);
+      setIsHydrated(true);
       return;
     }
 
@@ -100,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(REFRESH_TOKEN_KEY);
       setIsLoading(false);
+      setIsHydrated(true);
       return;
     }
 
@@ -107,17 +111,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     scheduleLogout(stored);
 
     // Validate token by fetching current user
+    let isSettled = false;
+    const timeoutId = setTimeout(() => {
+      if (!isSettled) {
+        setIsLoading(false);
+        setIsHydrated(true);
+      }
+    }, 5000);
+
     authApi
       .getMe()
       .then((userInfo) => {
         setUser(userInfo);
+        // If user must change password and they're not already on that page,
+        // redirect immediately before releasing the hydration gate
+        if (userInfo.must_change_password && pathname !== '/force-change-password') {
+          router.replace('/force-change-password');
+        }
       })
       .catch(() => {
         // Token is invalid/expired on the server — clear
         performLogout(true);
       })
       .finally(() => {
+        isSettled = true;
+        clearTimeout(timeoutId);
         setIsLoading(false);
+        setIsHydrated(true);
       });
       // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only on mount
@@ -167,32 +187,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const publicPaths = ['/login', '/forgot-password', '/reset-password', '/verify-email', '/force-change-password'];
     const isPublic = publicPaths.includes(pathname);
 
+    // Not authenticated → redirect to login (unless already on a public page)
     if (!isAuthenticated && !isPublic) {
       router.push('/login');
       return;
     }
 
-    if (isAuthenticated && isPublic) {
-      if (user?.must_change_password && pathname === '/force-change-password') {
-        // Allow access to force-change-password if they must change it
-      } else if (user?.must_change_password) {
-        router.replace('/force-change-password');
-        return;
-      } else {
-        router.replace('/');
-        return;
+    // Authenticated user who must change password:
+    // Lock them to /force-change-password only. Skip all other guards.
+    if (isAuthenticated && user?.must_change_password) {
+      if (pathname === '/force-change-password') {
+        return; // Allow them to stay
       }
-    }
-
-    if (isAuthenticated && user?.must_change_password && pathname !== '/force-change-password') {
       router.replace('/force-change-password');
       return;
     }
 
-    // Role-based route protection
+    // Normal authenticated user on a public page → redirect to dashboard
+    if (isAuthenticated && isPublic) {
+      router.replace('/');
+      return;
+    }
+
+    // Role-based route protection (only for normal authenticated users)
     if (isAuthenticated && user) {
-      const ANNOTATOR_PATHS = ['/', '/classification', '/asr-review', '/annotation', '/profile'];
-      const CURATOR_PATHS = ['/', '/curation', '/profile'];
+      const ANNOTATOR_PATHS = ['/', '/asr-review', '/annotation', '/profile'];
+      const CURATOR_PATHS = ['/', '/asr-review', '/curation', '/profile'];
 
       const role = user.role;
 

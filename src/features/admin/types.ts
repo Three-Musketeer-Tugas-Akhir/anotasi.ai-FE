@@ -46,7 +46,7 @@ export interface UserDetailResponse {
 
 export interface CreateUserRequest {
   email?: string;
-  role: string;
+  roles: string[];
   password?: string;
   first_name?: string;
   last_name?: string;

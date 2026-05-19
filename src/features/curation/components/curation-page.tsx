@@ -393,9 +393,9 @@ export function CurationPage() {
                             </button>
                           )}
                           {v.status === 'READY_TO_EXPORT' && (
-                            <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-md w-full justify-center">
-                              <CheckCircle2 size={14} /> Approved
-                            </span>
+                            <button onClick={() => loadSegments(v.id)} className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md hover:bg-emerald-100 shadow-sm transition-colors w-full justify-center">
+                              <CheckCircle2 size={14} /> Lihat Detail
+                            </button>
                           )}
                         </div>
                       </td>

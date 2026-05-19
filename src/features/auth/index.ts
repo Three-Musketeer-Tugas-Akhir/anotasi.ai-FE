@@ -1,4 +1,5 @@
 export { AuthProvider, useAuth } from './auth-context';
+export { AuthGate } from './auth-gate';
 export { authApi } from './auth-api';
 export { usersApi } from './users-api';
 export type {

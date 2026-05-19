@@ -88,7 +88,7 @@ export default function AdminUsersPage() {
     setCreateLoading(true);
     setCreateResult(null);
     try {
-      const data: any = { role: createRole };
+      const data: any = { roles: [createRole] };
       
       if (createEmail) {
         data.email = createEmail;
@@ -105,6 +105,7 @@ export default function AdminUsersPage() {
       setCreateFirstName('');
       setCreateLastName('');
       setCreatePassword('');
+      setShowCreate(false);
       fetchUsers();
     } catch (err: unknown) {
       const resp = (err as { response?: { data?: { detail?: string } } })?.response;
@@ -172,7 +173,7 @@ export default function AdminUsersPage() {
             <p className="text-sm text-gray-500 mt-1">{total} pengguna terdaftar</p>
           </div>
           <button
-            onClick={() => setShowCreate(true)}
+            onClick={() => { setShowCreate(true); setCreateResult(null); }}
             className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600 text-white text-sm font-semibold rounded-lg shadow-lg shadow-teal-600/25 transition-all"
           >
             <Plus size={16} />
@@ -344,7 +345,7 @@ export default function AdminUsersPage() {
 
         {/* Create User Modal */}
         {showCreate && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCreate(false)}>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowCreate(false); setCreateResult(null); }}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                 <Plus size={20} className="text-teal-600" />
