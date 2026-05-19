@@ -245,12 +245,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token,
       isAuthenticated,
       isLoading,
+      isHydrated,
       error,
       login,
       logout,
       clearError,
     }),
-    [user, token, isAuthenticated, isLoading, error, login, logout, clearError],
+    [user, token, isAuthenticated, isLoading, isHydrated, error, login, logout, clearError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
