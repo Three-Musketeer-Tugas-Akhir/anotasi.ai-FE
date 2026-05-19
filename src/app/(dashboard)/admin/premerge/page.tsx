@@ -1,6 +1,5 @@
 'use client';
 
-import { AppLayout } from '@/shared/components/layout/app-layout';
 import { AlertTriangle } from 'lucide-react';
 
 /**
@@ -12,7 +11,7 @@ import { AlertTriangle } from 'lucide-react';
  */
 export default function AdminPremergePage() {
   return (
-    <AppLayout activePath="/admin/premerge">
+    
       <div className="flex flex-1 items-center justify-center">
         <div className="text-center max-w-md">
           <AlertTriangle size={48} className="mx-auto mb-4 text-amber-400" />
@@ -24,6 +23,6 @@ export default function AdminPremergePage() {
           </p>
         </div>
       </div>
-    </AppLayout>
+    
   );
 }

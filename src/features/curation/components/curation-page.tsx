@@ -19,6 +19,7 @@ import {
   ArrowRight,
   RefreshCw,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import type {
   CurationStatus,
   CurationVideo,
@@ -263,10 +264,35 @@ export function CurationPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <Loader2 size={32} className="text-teal-600 animate-spin mx-auto" />
-          <p className="text-sm text-slate-500">Memuat video untuk kurasi...</p>
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:p-8 space-y-6">
+        {/* Header skeleton */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+          <div className="flex gap-2 items-center flex-wrap">
+            <Skeleton className="h-8 w-28 rounded-lg" />
+            <Skeleton className="h-8 w-28 rounded-lg" />
+            <Skeleton className="h-8 w-28 rounded-lg" />
+          </div>
+        </div>
+        {/* Search skeleton */}
+        <Skeleton className="h-10 w-full max-w-md rounded-lg" />
+        {/* Table skeleton */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-5">
+          <Skeleton className="h-5 w-56" />
+          <div className="space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <Skeleton className="h-4 w-8" />
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-5 w-16 rounded" />
+                <Skeleton className="h-5 w-24 rounded" />
+                <Skeleton className="h-8 w-28 rounded-md ml-auto" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -472,10 +498,28 @@ export function CurationPage() {
         {/* Left: Editor Table */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
           {activeVideo.segments.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center space-y-3">
-                <Loader2 size={24} className="text-teal-600 animate-spin mx-auto" />
-                <p className="text-sm text-slate-500">Memuat kalimat transkrip...</p>
+            <div className="space-y-4">
+              {/* Table header skeleton */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-5 border-b border-slate-100 bg-slate-50/50 space-y-2">
+                  <Skeleton className="h-5 w-64" />
+                  <Skeleton className="h-3 w-96" />
+                </div>
+                <div className="p-4 space-y-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex items-start gap-4">
+                      <Skeleton className="h-4 w-6 mt-2" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-16 w-full rounded-lg" />
+                        <Skeleton className="h-16 w-full rounded-lg" />
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-16 w-full rounded-lg" />
+                        <Skeleton className="h-16 w-full rounded-lg" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           ) : (

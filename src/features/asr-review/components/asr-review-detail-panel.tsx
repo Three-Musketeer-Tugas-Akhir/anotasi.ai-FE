@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Combobox } from '@/components/ui/combobox';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -240,8 +241,62 @@ export function AsrReviewDetailPanel({ reviewId, onActionCompleted }: AsrReviewD
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <Loader2 size={24} className="text-teal-600 animate-spin" />
+      <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
+        {/* Video player skeleton */}
+        <div className="bg-slate-900 flex-shrink-0">
+          <div className="relative w-full" style={{ maxHeight: '320px' }}>
+            <Skeleton className="w-full h-[200px] rounded-none bg-slate-800" />
+          </div>
+          {/* Subtitle bar skeleton */}
+          <div className="px-5 py-3 bg-slate-900/95 border-t border-slate-800 space-y-2">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-5 w-32 rounded-md bg-slate-700" />
+              <Skeleton className="h-5 w-20 rounded-full bg-slate-700" />
+            </div>
+            <Skeleton className="h-4 w-full bg-slate-700" />
+            <Skeleton className="h-4 w-3/4 bg-slate-700" />
+          </div>
+        </div>
+
+        {/* Detail content skeleton */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* Info card skeleton */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Skeleton className="w-10 h-10 rounded-lg" />
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+              </div>
+              <Skeleton className="h-5 w-20 rounded-full" />
+            </div>
+            <Skeleton className="h-12 w-full rounded-lg" />
+          </div>
+
+          {/* Action buttons skeleton */}
+          <div className="grid grid-cols-3 gap-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="bg-white border-2 border-gray-200 rounded-xl p-4 text-center space-y-2">
+                <Skeleton className="w-10 h-10 rounded-full mx-auto" />
+                <Skeleton className="h-4 w-16 mx-auto" />
+                <Skeleton className="h-3 w-20 mx-auto" />
+              </div>
+            ))}
+          </div>
+
+          {/* Transcript section skeleton */}
+          <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
+            <Skeleton className="h-3 w-40" />
+            <Skeleton className="h-20 w-full rounded-lg" />
+            <div className="flex gap-4">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

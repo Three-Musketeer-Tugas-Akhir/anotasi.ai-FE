@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminAnnotationsApi } from '../api/admin-annotations-api';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Loader2,
   UserCheck,
@@ -199,9 +200,21 @@ export function AssignAnnotationsPage() {
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 320px)', minHeight: '480px' }}>
             <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50/50 custom-scrollbar">
               {isLoadingJobs ? (
-                <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3">
-                  <Loader2 className="w-8 h-8 animate-spin text-teal-500" />
-                  <p className="text-sm font-medium">Memuat daftar job...</p>
+                <div className="p-3 space-y-2">
+                  {[...Array(6)].map((_, i) => (
+                    <div key={i} className="flex items-start gap-4 p-4 rounded-xl border border-slate-100 bg-white">
+                      <Skeleton className="shrink-0 w-11 h-11 rounded-xl" />
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <Skeleton className="h-4 w-3/4" />
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Skeleton className="h-3 w-20 rounded-md" />
+                          <Skeleton className="h-3 w-24 rounded-md" />
+                          <Skeleton className="h-3 w-28 rounded-md" />
+                        </div>
+                      </div>
+                      <Skeleton className="shrink-0 w-6 h-6 rounded-full" />
+                    </div>
+                  ))}
                 </div>
               ) : filteredJobs.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-3 p-8">
@@ -344,8 +357,17 @@ export function AssignAnnotationsPage() {
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Pilih Annotator</p>
 
               {isLoadingUsers || isLoadingQueueStatus ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-teal-500" />
+                <div className="space-y-2">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="flex items-center p-3 rounded-xl border border-slate-100 bg-white">
+                      <Skeleton className="w-10 h-10 rounded-full shrink-0" />
+                      <div className="ml-3 flex-1 min-w-0 space-y-1.5">
+                        <Skeleton className="h-3.5 w-1/2" />
+                        <Skeleton className="h-3 w-2/3" />
+                      </div>
+                      <Skeleton className="h-5 w-12 rounded-md shrink-0 ml-2" />
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">

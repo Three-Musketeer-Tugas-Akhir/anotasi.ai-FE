@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DatasetExplorer } from './dataset-explorer';
 
 import {
@@ -236,8 +237,17 @@ export function ExportPage() {
 
         {/* ── Table ── */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 size={24} className="text-teal-600 animate-spin" />
+          <div className="p-4 space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 bg-white">
+                <Skeleton className="h-10 w-10 rounded-lg flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+            ))}
           </div>
         ) : error ? (
           <div className="p-12 text-center">

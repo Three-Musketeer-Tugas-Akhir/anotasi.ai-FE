@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { authApi } from '@/features/auth';
 import Link from 'next/link';
 import { Loader2, CheckCircle2, XCircle, Mail, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
@@ -64,10 +65,10 @@ function VerifyEmailContent() {
 
         <div className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100 p-8">
           {status === 'loading' && (
-            <div className="text-center py-8">
-              <Loader2 size={48} className="animate-spin text-teal-600 mx-auto mb-4" />
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Memverifikasi Email...</h2>
-              <p className="text-sm text-gray-500">Mohon tunggu sebentar</p>
+            <div className="text-center py-8 space-y-4">
+              <Skeleton className="h-12 w-12 rounded-full mx-auto" />
+              <Skeleton className="h-7 w-56 mx-auto" />
+              <Skeleton className="h-4 w-40 mx-auto" />
             </div>
           )}
 
@@ -150,7 +151,11 @@ export default function VerifyEmailPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 size={32} className="animate-spin text-teal-600" />
+        <div className="w-full max-w-sm space-y-4 p-8">
+          <Skeleton className="h-12 w-12 rounded-full mx-auto" />
+          <Skeleton className="h-6 w-48 mx-auto" />
+          <Skeleton className="h-4 w-32 mx-auto" />
+        </div>
       </div>
     }>
       <VerifyEmailContent />

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Layout, Loader2, AlertCircle } from 'lucide-react';
+import { Layout, AlertCircle } from 'lucide-react';
 import { useSelectedDataset } from '@/features/dataset';
 import { useJobs, useUpdateCategory } from '@/features/classification/hooks/use-classification';
 import type { CategoryStatus, JobListParams } from '@/features/classification/types/classification.types';
@@ -13,6 +13,7 @@ import { CategorizationPanel } from './categorization-panel';
 import { VideoUploadModal } from './video-upload-modal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 
 type FilterValue = 'all' | CategoryStatus;
@@ -175,8 +176,68 @@ export function ClassificationPage() {
   // ── Loading / Error states ─────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <Loader2 className="animate-spin text-teal-500" size={32} />
+      <div className="flex-1 flex flex-col bg-gray-50">
+        {/* Header skeleton */}
+        <div className="px-6 py-4 bg-white border-b border-gray-200 flex-shrink-0 flex justify-between items-center">
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-64" />
+            <Skeleton className="h-4 w-96" />
+          </div>
+          <Skeleton className="h-9 w-32" />
+        </div>
+
+        {/* Main content skeleton */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left panel skeleton — video list sidebar */}
+          <div className="w-[420px] border-r border-gray-200 bg-white flex flex-col">
+            {/* Search + filter tabs skeleton */}
+            <div className="p-4 border-b border-gray-200 space-y-3">
+              <Skeleton className="h-9 w-full" />
+              <div className="flex gap-2">
+                <Skeleton className="h-7 w-14" />
+                <Skeleton className="h-7 w-14" />
+                <Skeleton className="h-7 w-14" />
+                <Skeleton className="h-7 w-14" />
+              </div>
+            </div>
+            {/* List item skeletons */}
+            <div className="flex-1 p-4 space-y-3 overflow-hidden">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex gap-3 p-3 border border-gray-100 rounded-lg">
+                  <Skeleton className="h-16 w-24 rounded-md flex-shrink-0" />
+                  <div className="flex-1 space-y-2 py-1">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Pagination skeleton */}
+            <div className="p-4 border-t border-gray-200 flex justify-between items-center">
+              <Skeleton className="h-4 w-24" />
+              <div className="flex gap-2">
+                <Skeleton className="h-8 w-8" />
+                <Skeleton className="h-8 w-8" />
+              </div>
+            </div>
+          </div>
+
+          {/* Right panel skeleton — player + categorization */}
+          <div className="flex-1 p-6 space-y-4 bg-gray-50">
+            {/* Video player placeholder */}
+            <Skeleton className="aspect-video w-full rounded-lg" />
+            {/* Categorization panel skeleton */}
+            <div className="space-y-3">
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Skeleton className="h-10 w-28" />
+              <Skeleton className="h-10 w-28" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

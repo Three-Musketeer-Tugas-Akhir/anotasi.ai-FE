@@ -15,6 +15,8 @@ import {
   Server,
   Network,
 } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { cn } from '@/shared/utils/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
@@ -59,25 +61,21 @@ function getNavItems(role?: string): NavItemConfig[] {
   return [];
 }
 
-/** Admin-only navigation items */
 const adminNavItems: NavItemConfig[] = [
   { icon: <Network size={20} />, label: 'Distribusi Tugas JBI', href: '/admin/assign-jbi' },
   { icon: <Users size={20} />, label: 'Kelola User', href: '/admin/users' },
-  { icon: <Server size={20} />, label: 'Sistem', href: '/admin/system' },
 ];
 
-interface SidebarProps {
-  /** Currently active route path */
-  activePath?: string;
-}
+interface SidebarProps {}
 
 /**
  * App sidebar navigation.
  * Collapsible with branding and nav items. Shadcn Tooltip for collapsed labels.
  * Admin section shown only for admin role.
  */
-export function Sidebar({ activePath = '/' }: SidebarProps) {
+export function Sidebar() {
   const [isOpen, setIsOpen] = useState(true);
+  const pathname = usePathname();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const navItems = getNavItems(user?.role);
@@ -112,9 +110,13 @@ export function Sidebar({ activePath = '/' }: SidebarProps) {
             <span className="font-bold text-base tracking-tight">Anotasi.ai</span>
           </div>
         ) : (
-          <div className="w-8 h-8 bg-gradient-to-br from-teal-400 to-teal-600 rounded-lg flex items-center justify-center font-bold text-sm mx-auto shadow-lg shadow-teal-900/30">
-            A
-          </div>
+          <button 
+            onClick={() => setIsOpen(true)}
+            className="w-full flex items-center justify-center p-2 -ml-2 text-slate-400 hover:text-white transition-colors"
+            title="Expand Sidebar"
+          >
+            <Menu size={20} />
+          </button>
         )}
         {isOpen && (
           <button
@@ -135,7 +137,7 @@ export function Sidebar({ activePath = '/' }: SidebarProps) {
             label={item.label}
             badge={item.badge}
             isOpen={isOpen}
-            active={activePath === item.href}
+            active={pathname === item.href || pathname?.startsWith(item.href + '/')}
             href={item.href}
           />
         ))}
@@ -155,7 +157,7 @@ export function Sidebar({ activePath = '/' }: SidebarProps) {
                 icon={item.icon}
                 label={item.label}
                 isOpen={isOpen}
-                active={activePath === item.href}
+                active={pathname === item.href || pathname?.startsWith(item.href + '/')}
                 href={item.href}
               />
             ))}
@@ -163,17 +165,6 @@ export function Sidebar({ activePath = '/' }: SidebarProps) {
         )}
       </nav>
 
-      {/* Collapse toggle when collapsed */}
-      {!isOpen && (
-        <div className="p-3 border-t border-slate-700/50">
-          <button
-            onClick={() => setIsOpen(true)}
-            className="w-full flex items-center justify-center p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <Menu size={18} />
-          </button>
-        </div>
-      )}
     </aside>
   );
 }
@@ -195,7 +186,7 @@ function NavItem({
   href: string;
 }) {
   const content = (
-    <a
+    <Link
       href={href}
       className={cn(
         'flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-150 mb-0.5',
@@ -215,7 +206,7 @@ function NavItem({
           )}
         </div>
       )}
-    </a>
+    </Link>
   );
 
   if (!isOpen) {

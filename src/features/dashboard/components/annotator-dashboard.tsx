@@ -5,6 +5,7 @@ import {
     CheckCircle2, Clock, AlertCircle, Loader2,
     FileVideo, PenTool, Calendar, ChevronRight, Sparkles
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { dashboardApi, type AnnotatorDashboardResponse } from '../dashboard-api';
 import { useSelectedDataset } from '@/features/dataset/context/dataset-context';
 
@@ -75,9 +76,17 @@ export function AnnotatorDashboard() {
 
     if (isLoading) {
         return (
-            <div className="flex flex-1 items-center justify-center py-20">
-                <Loader2 className="animate-spin text-teal-500 mr-2" size={24} />
-                <span className="text-slate-500 font-medium">Memuat tugas Anda...</span>
+            <div className="flex-1 space-y-6 py-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Skeleton className="h-28 rounded-xl" />
+                    <Skeleton className="h-28 rounded-xl" />
+                    <Skeleton className="h-28 rounded-xl" />
+                </div>
+                <Skeleton className="h-64 rounded-xl" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Skeleton className="h-48 rounded-xl" />
+                    <Skeleton className="h-48 rounded-xl" />
+                </div>
             </div>
         );
     }

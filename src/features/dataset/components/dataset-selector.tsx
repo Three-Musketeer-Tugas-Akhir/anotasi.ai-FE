@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Briefcase, ChevronDown, Plus, Check, Loader2, AlertTriangle } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -114,8 +115,10 @@ export function DatasetSelector() {
           {/* List */}
           <div className="max-h-64 overflow-y-auto">
             {isLoading ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 size={18} className="animate-spin text-gray-400" />
+              <div className="px-3 py-4 space-y-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-8 w-full" />
+                ))}
               </div>
             ) : datasets.length === 0 ? (
               <div className="px-3 py-4 text-center">

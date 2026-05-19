@@ -5,6 +5,7 @@ import { useTour } from '@/shared/components/tour';
 import { globalSidebarTour } from '@/shared/components/sidebar/sidebar.tour';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useSelectedDataset } from '@/features/dataset/context/dataset-context';
 import { dashboardApi } from '../dashboard-api';
 import type { DashboardStatsCard, DashboardPipelineStage, DashboardSystemActivity } from '../dashboard-api';
@@ -147,9 +148,14 @@ export function DashboardPage() {
 
         {/* Loading State */}
         {isLoading && (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="animate-spin text-slate-400 mr-2" size={24} />
-            <span className="text-slate-500">Memuat data dashboard...</span>
+          <div className="space-y-6 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Skeleton className="h-28 rounded-xl" />
+              <Skeleton className="h-28 rounded-xl" />
+              <Skeleton className="h-28 rounded-xl" />
+            </div>
+            <Skeleton className="h-64 rounded-xl" />
+            <Skeleton className="h-48 rounded-xl" />
           </div>
         )}
 

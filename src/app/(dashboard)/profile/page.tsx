@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AppLayout } from '@/shared/components/layout/app-layout';
 import { usersApi } from '@/features/auth/users-api';
 import { useAuth } from '@/features/auth';
 import type { UserProfileResponse } from '@/features/auth';
 import {
   User, Mail, Shield, Calendar, Edit3, Save, Loader2, Lock, Eye, EyeOff, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -90,16 +90,93 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <AppLayout activePath="/profile">
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 size={32} className="animate-spin text-teal-600" />
+      
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 max-w-3xl mx-auto">
+          {/* Header skeleton */}
+          <div>
+            <div className="flex items-center gap-2">
+              <Skeleton className="w-6 h-6 rounded-full" />
+              <Skeleton className="w-40 h-7 rounded-md" />
+            </div>
+            <Skeleton className="w-60 h-4 mt-2 rounded-md" />
+          </div>
+
+          {/* Profile Info Card skeleton */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-5">
+            {/* Avatar + Name skeleton */}
+            <div className="flex items-center gap-4">
+              <Skeleton className="w-16 h-16 rounded-full" />
+              <div className="space-y-2">
+                <Skeleton className="w-48 h-5 rounded-md" />
+                <Skeleton className="w-24 h-4 rounded-md" />
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 pt-5 space-y-4">
+              {/* Email row skeleton */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3 min-w-0">
+                  <Skeleton className="w-[18px] h-[18px] mt-0.5 flex-shrink-0 rounded-sm" />
+                  <div className="min-w-0 space-y-1.5">
+                    <Skeleton className="w-10 h-3 rounded-md" />
+                    <Skeleton className="w-56 h-4 rounded-md" />
+                  </div>
+                </div>
+                <Skeleton className="w-7 h-7 rounded-md" />
+              </div>
+
+              {/* Role row skeleton */}
+              <div className="flex items-start gap-3">
+                <Skeleton className="w-[18px] h-[18px] mt-0.5 flex-shrink-0 rounded-sm" />
+                <div className="space-y-1.5">
+                  <Skeleton className="w-8 h-3 rounded-md" />
+                  <div className="flex gap-1.5">
+                    <Skeleton className="w-16 h-6 rounded-full" />
+                    <Skeleton className="w-14 h-6 rounded-full" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Status row skeleton */}
+              <div className="flex items-start gap-3">
+                <Skeleton className="w-[18px] h-[18px] mt-0.5 flex-shrink-0 rounded-sm" />
+                <div className="space-y-1.5">
+                  <Skeleton className="w-10 h-3 rounded-md" />
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="w-20 h-6 rounded-full" />
+                    <Skeleton className="w-32 h-6 rounded-full" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Created row skeleton */}
+              <div className="flex items-start gap-3">
+                <Skeleton className="w-[18px] h-[18px] mt-0.5 flex-shrink-0 rounded-sm" />
+                <div className="space-y-1.5">
+                  <Skeleton className="w-20 h-3 rounded-md" />
+                  <Skeleton className="w-32 h-4 rounded-md" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Change Password Section skeleton */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Skeleton className="w-[18px] h-[18px] rounded-sm" />
+                <Skeleton className="w-32 h-5 rounded-md" />
+              </div>
+              <Skeleton className="w-10 h-4 rounded-md" />
+            </div>
+          </div>
         </div>
-      </AppLayout>
+      
     );
   }
 
   return (
-    <AppLayout activePath="/profile">
+    
       <div className="flex-1 overflow-y-auto p-6 space-y-6 max-w-3xl mx-auto">
         {/* Header */}
         <div>
@@ -319,6 +396,6 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
-    </AppLayout>
+    
   );
 }

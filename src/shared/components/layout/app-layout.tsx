@@ -6,8 +6,6 @@ import { ClientOnly } from '@/shared/components/client-only';
 
 interface AppLayoutProps {
   children: React.ReactNode;
-  /** Current route path for sidebar active state */
-  activePath?: string;
 }
 
 /**
@@ -17,11 +15,11 @@ interface AppLayoutProps {
  * Note: Sidebar tour trigger has been moved to DashboardPage
  * so it only fires on the user's first Dashboard visit.
  */
-export function AppLayout({ children, activePath }: AppLayoutProps) {
+export function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="flex h-screen bg-gray-50 font-sans text-slate-800 overflow-hidden">
       <ClientOnly>
-        <Sidebar activePath={activePath} />
+        <Sidebar />
       </ClientOnly>
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         <TopBar />

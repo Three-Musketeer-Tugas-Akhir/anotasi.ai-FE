@@ -94,14 +94,13 @@ export function YTDownloadBanner() {
                       {dl.title ?? 'Video YouTube'}
                     </span>
                   </div>
-                  {(isDone || isFailed) && (
-                    <button
-                      onClick={() => dismissDownload(dl.downloadId)}
-                      className="flex-shrink-0 p-0.5 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-colors"
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => dismissDownload(dl.downloadId)}
+                    className="flex-shrink-0 p-1 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 hover:text-red-300 transition-all flex items-center justify-center"
+                    title="Hapus / Sembunyikan"
+                  >
+                    <X size={14} strokeWidth={2.5} />
+                  </button>
                 </div>
 
                 {/* Status */}

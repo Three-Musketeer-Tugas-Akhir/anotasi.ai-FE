@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { AppLayout } from '@/shared/components/layout/app-layout';
 import { adminApi } from '@/features/admin';
 import type { UserListItem, UserListParams } from '@/features/admin';
 import { useAuth } from '@/features/auth';
@@ -17,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Pagination,
   PaginationContent,
@@ -148,7 +148,7 @@ export default function AdminUsersPage() {
   // Gate: only admin can use this page
   if (user?.role !== 'admin') {
     return (
-      <AppLayout activePath="/admin/users">
+      
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <Shield size={48} className="mx-auto text-gray-300 mb-4" />
@@ -156,12 +156,12 @@ export default function AdminUsersPage() {
             <p className="text-sm text-gray-500 mt-1">Hanya admin yang dapat mengakses halaman ini.</p>
           </div>
         </div>
-      </AppLayout>
+      
     );
   }
 
   return (
-    <AppLayout activePath="/admin/users">
+    
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -231,11 +231,26 @@ export default function AdminUsersPage() {
               </TableHeader>
               <TableBody className="divide-y divide-gray-100">
                 {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-12">
-                      <Loader2 size={24} className="animate-spin text-teal-600 mx-auto" />
-                    </TableCell>
-                  </TableRow>
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={`skel-${i}`} className="hover:bg-transparent">
+                      <TableCell className="py-4">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-16 mt-1" />
+                      </TableCell>
+                      <TableCell className="py-4">
+                        <Skeleton className="h-6 w-20 rounded-full" />
+                      </TableCell>
+                      <TableCell className="py-4">
+                        <Skeleton className="h-6 w-20 rounded-full" />
+                      </TableCell>
+                      <TableCell className="py-4">
+                        <Skeleton className="h-4 w-24" />
+                      </TableCell>
+                      <TableCell className="py-4 text-right">
+                        <Skeleton className="h-4 w-8 ml-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ))
                 ) : users.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-12 text-sm text-gray-400">
@@ -466,6 +481,6 @@ export default function AdminUsersPage() {
           </div>
         )}
       </div>
-    </AppLayout>
+    
   );
 }

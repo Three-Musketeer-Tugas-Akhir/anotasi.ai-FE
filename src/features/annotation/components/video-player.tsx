@@ -67,6 +67,25 @@ export function VideoPlayer({
     onReady?.(true);
   }, [onReady]);
 
+  // ── Video error handler (ignore abort errors) ─────────────────
+  const handleError = useCallback((e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const video = e.currentTarget;
+    const err = video.error;
+    // code 1 = MEDIA_ERR_ABORTED (user/browser cancelled — not a real error)
+    if (err?.code === 1) {
+      console.log('[VideoPlayer] Load aborted (ignored):', src);
+      return;
+    }
+    // Log real errors for debugging
+    const codeMap: Record<number, string> = {
+      2: 'NETWORK_ERROR',
+      3: 'DECODE_ERROR',
+      4: 'SRC_NOT_SUPPORTED',
+    };
+    console.error('[VideoPlayer] Error:', codeMap[err?.code ?? 0] || `UNKNOWN(${err?.code})`, '- message:', err?.message, '- src:', src);
+    setVideoError(`Gagal memuat video (${codeMap[err?.code ?? 0] || 'unknown'}). Coba refresh halaman.`);
+  }, [src]);
+
   // ── Sync play state ────────────────────────────────────────────
   useEffect(() => {
     if (videoRef.current) {
@@ -172,13 +191,15 @@ export function VideoPlayer({
         ) : videoUrl ? (
           <>
             <video
+              key={videoUrl}
               ref={videoRef}
               src={videoUrl}
               className="absolute inset-0 w-full h-full object-contain"
+              crossOrigin="anonymous"
               onSeeked={handleSeeked}
               onDurationChange={(e) => onDurationChange(e.currentTarget.duration)}
               onClick={() => handlePlayAttempt(!isPlaying)}
-              onError={() => setVideoError('Gagal memuat video. Coba refresh halaman.')}
+              onError={handleError}
               onEnded={onEnded}
               onCanPlay={handleCanPlay}
               preload="metadata"

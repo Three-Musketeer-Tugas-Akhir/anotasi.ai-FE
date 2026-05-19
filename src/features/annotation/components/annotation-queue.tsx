@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 
 import { Combobox } from '@/components/ui/combobox';
 import {
@@ -373,8 +374,25 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
           {/* Queue Items — Grouped by Job */}
           <div className="flex-1 min-h-0 overflow-y-auto">
             {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 size={20} className="text-teal-600 animate-spin" />
+              <div className="p-2 space-y-2">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="rounded-xl border border-gray-100 overflow-hidden p-3.5 bg-white">
+                    <div className="flex items-start gap-3">
+                      <Skeleton className="w-9 h-9 rounded-lg flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <Skeleton className="h-4 w-3/4" />
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Skeleton className="h-4 w-16 rounded-md" />
+                          <Skeleton className="h-4 w-14 rounded-md" />
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Skeleton className="flex-1 h-1.5 rounded-full" />
+                          <Skeleton className="h-3 w-12" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : error ? (
               <div className="p-4 text-center">
@@ -421,8 +439,16 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
       {tab === 'submissions' && (
         <div className="flex-1 min-h-0 overflow-y-auto">
           {subsLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 size={20} className="text-teal-600 animate-spin" />
+            <div className="divide-y divide-gray-100">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="px-4 py-3.5">
+                  <div className="flex items-center justify-between mb-2">
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="h-4 w-14 rounded-md" />
+                  </div>
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              ))}
             </div>
           ) : submissions.length === 0 ? (
             <div className="p-8 text-center">

@@ -13,6 +13,7 @@ import {
   Clock,
   ChevronLeft,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -278,8 +279,20 @@ export function ChatPage() {
           {/* Room list */}
           <ScrollArea className="flex-1">
             {isLoadingRooms ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="animate-spin text-slate-400" size={24} />
+              <div className="space-y-0 divide-y divide-gray-100">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="p-4 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-4 w-10" />
+                    </div>
+                    <Skeleton className="h-3 w-3/4" />
+                    <div className="flex items-center gap-2 pt-0.5">
+                      <Skeleton className="h-3 w-3 rounded-full" />
+                      <Skeleton className="h-3 w-16" />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : rooms.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
@@ -377,8 +390,19 @@ export function ChatPage() {
               {/* Messages area */}
               <ScrollArea className="flex-1 p-4">
                 {isLoadingMessages ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="animate-spin text-slate-400" size={24} />
+                  <div className="space-y-4 max-w-3xl mx-auto">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`flex ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}
+                      >
+                        <Skeleton
+                          className={`h-16 rounded-2xl ${
+                            i % 2 === 0 ? 'w-2/3 rounded-bl-md' : 'w-1/2 rounded-br-md'
+                          }`}
+                        />
+                      </div>
+                    ))}
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center">

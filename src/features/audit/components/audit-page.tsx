@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
   DialogContent,
@@ -336,12 +337,18 @@ export function AuditPage() {
             </TableHeader>
             <TableBody>
               {loading && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12">
-                    <Loader2 size={20} className="text-teal-600 animate-spin mx-auto mb-2" />
-                    <p className="text-sm text-gray-400">Memuat...</p>
-                  </TableCell>
-                </TableRow>
+                <>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))}
+                </>
               )}
               {!loading && logs.length === 0 && (
                 <TableRow>
@@ -448,8 +455,13 @@ export function AuditPage() {
             </DialogTitle>
           </DialogHeader>
           {detailLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 size={20} className="text-teal-600 animate-spin" />
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div><Skeleton className="h-3 w-16 mb-1" /><Skeleton className="h-4 w-24" /></div>
+                <div><Skeleton className="h-3 w-16 mb-1" /><Skeleton className="h-4 w-20" /></div>
+              </div>
+              <div><Skeleton className="h-3 w-16 mb-1" /><Skeleton className="h-4 w-full" /></div>
+              <div><Skeleton className="h-3 w-16 mb-1" /><Skeleton className="h-20 w-full" /></div>
             </div>
           ) : selectedLog && (
             <div className="space-y-4">

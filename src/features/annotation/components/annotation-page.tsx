@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { PenTool, ArrowLeft, Loader2, AlertTriangle, RotateCcw, List, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { VideoPlayer } from './video-player';
 import { TimelineEditor } from './timeline-editor';
@@ -378,7 +379,7 @@ export function AnnotationPage() {
 
   // Strip FE-only virtual fields before sending to backend
   const stripGlobalFields = (utt: UtteranceCorrection): UtteranceCorrection => {
-    const { global_start, global_end, segment_offset, segment_video_url, confidence, ...clean } = utt;
+    const { global_start, global_end, segment_offset, segment_video_url, confidence, cropped_video_path, ...clean } = utt;
     // Clamp start to >= 0
     if (clean.start < 0) {
       clean.start = 0;
@@ -670,8 +671,19 @@ export function AnnotationPage() {
             </div>
           </div>
         ) : jobLoading ? (
-          <div className="flex-1 flex items-center justify-center bg-slate-50">
-            <Loader2 size={24} className="text-teal-600 animate-spin" />
+          <div className="flex-1 p-8 space-y-6 bg-slate-50">
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-12 w-12 rounded-lg" />
+              <div className="space-y-2 flex-1">
+                <Skeleton className="h-5 w-1/2" />
+                <Skeleton className="h-4 w-1/3" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Skeleton className="h-32 rounded-lg" />
+              <Skeleton className="h-32 rounded-lg" />
+            </div>
+            <Skeleton className="h-48 rounded-lg" />
           </div>
         ) : jobError ? (
           <div className="flex-1 flex items-center justify-center bg-slate-50">

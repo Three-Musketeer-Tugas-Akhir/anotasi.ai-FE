@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Combobox } from '@/components/ui/combobox';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Cog,
   Upload,
@@ -324,8 +325,25 @@ export function PipelinePage() {
           {/* Job List */}
           <div className="flex-1 overflow-auto custom-scrollbar">
             {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 size={20} className="text-teal-600 animate-spin" />
+              <div className="p-4 space-y-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="p-4 border-b border-slate-100">
+                    <div className="flex items-start gap-3">
+                      <Skeleton className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" />
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <Skeleton className="h-4 w-[85%]" />
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Skeleton className="h-3 w-10" />
+                          <Skeleton className="h-3 w-1.5" />
+                          <Skeleton className="h-3 w-12" />
+                          <Skeleton className="h-3 w-1.5" />
+                          <Skeleton className="h-3 w-14" />
+                        </div>
+                        <Skeleton className="h-1.5 w-full mt-2" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : error ? (
               <div className="p-4 text-center">

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { authApi } from '@/features/auth';
 import Link from 'next/link';
 import { Loader2, Lock, ArrowLeft, CheckCircle2, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -248,7 +249,13 @@ export default function ResetPasswordPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 size={32} className="animate-spin text-teal-600" />
+        <div className="w-full max-w-sm space-y-4 p-8">
+          <Skeleton className="h-12 w-12 rounded-full mx-auto" />
+          <Skeleton className="h-6 w-48 mx-auto" />
+          <Skeleton className="h-4 w-32 mx-auto" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
       </div>
     }>
       <ResetPasswordForm />

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Combobox } from '@/components/ui/combobox';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Tooltip,
   TooltipContent,
@@ -288,10 +289,7 @@ function VideoPreviewModal({
         {/* Video area */}
         <div className="bg-black min-h-[200px] flex items-center justify-center">
           {videoLoading ? (
-            <div className="flex flex-col items-center gap-2 text-gray-400">
-              <Loader2 size={24} className="animate-spin" />
-              <span className="text-xs">Memuat video...</span>
-            </div>
+            <Skeleton className="w-[90%] max-w-[600px] h-[200px] rounded-lg" />
           ) : videoError ? (
             <div className="flex flex-col items-center gap-2 text-red-400 px-6 text-center">
               <AlertTriangle size={24} />
@@ -637,8 +635,43 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 size={24} className="text-teal-600 animate-spin" />
+      <div className="w-full h-full relative overflow-hidden bg-[#f1f5f9]">
+        <div className="absolute inset-0 flex flex-col items-center pt-10 px-4 overflow-auto">
+          <div className="w-[600px] space-y-4">
+            {/* Root Node Skeleton */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+              <div className="flex items-center gap-3">
+                <Skeleton className="w-10 h-10 rounded-xl flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-3 w-14" />
+                  </div>
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+              </div>
+              <Skeleton className="h-2 w-full" />
+            </div>
+
+            {/* Stage Skeletons */}
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-white rounded-2xl border-2 border-slate-200 p-5 space-y-3">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="w-12 h-12 rounded-xl flex-shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="h-5 w-16 rounded-full" />
+                    </div>
+                    <Skeleton className="h-3 w-64" />
+                  </div>
+                  <Skeleton className="w-8 h-8 rounded-full flex-shrink-0" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

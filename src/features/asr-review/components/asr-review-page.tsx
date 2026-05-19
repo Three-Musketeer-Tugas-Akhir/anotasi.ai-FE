@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Volume2,
   AlertTriangle,
@@ -170,8 +171,39 @@ function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 size={24} className="text-teal-600 animate-spin" />
+      <div className="p-6 space-y-4 max-w-7xl mx-auto">
+        {/* Filter bar skeleton */}
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between mb-2">
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5 w-full sm:w-auto overflow-x-auto shadow-sm flex-shrink-0 h-9">
+            <Skeleton className="h-7 w-24 rounded-md" />
+            <Skeleton className="h-7 w-28 rounded-md" />
+            <Skeleton className="h-7 w-24 rounded-md" />
+            <Skeleton className="h-7 w-32 rounded-md" />
+          </div>
+          <Skeleton className="h-9 w-full sm:max-w-[240px] rounded-lg" />
+        </div>
+        {/* Job cards grid skeleton */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col justify-between h-[140px]">
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <div className="flex gap-2 mt-3">
+                  <Skeleton className="h-5 w-24 rounded-full" />
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </div>
+              </div>
+              <div className="mt-3 space-y-1.5">
+                <Skeleton className="h-1.5 w-full rounded-full" />
+                <div className="flex justify-between">
+                  <Skeleton className="h-3 w-10" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -680,9 +712,56 @@ export function AsrReviewPage() {
 
       {/* Loading */}
       {loading && (
-        <div className="flex items-center justify-center py-16 flex-1">
-          <Loader2 size={24} className="text-teal-600 animate-spin" />
-        </div>
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-6 space-y-4 max-w-5xl mx-auto">
+            {/* Progress bar skeleton */}
+            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-2">
+              <div className="flex justify-between">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-20" />
+              </div>
+              <Skeleton className="h-2.5 w-full rounded-full" />
+            </div>
+            {/* Filter bar skeleton */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5 h-9">
+                <Skeleton className="h-7 w-24 rounded-md" />
+                <Skeleton className="h-7 w-32 rounded-md" />
+              </div>
+              <Skeleton className="h-9 w-full max-w-xs rounded-lg" />
+              <Skeleton className="h-3 w-32 ml-auto" />
+            </div>
+            {/* Utterance row skeletons */}
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50/50 border-b border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-8" />
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="h-5 w-24 rounded-full" />
+                  </div>
+                  <Skeleton className="h-7 w-32 rounded-md" />
+                </div>
+                {/* Audio player */}
+                <div className="px-4 py-2 border-b border-gray-100">
+                  <Skeleton className="h-8 w-full" />
+                </div>
+                {/* Two columns */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-gray-100">
+                  <div className="p-3 space-y-1.5">
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-16 w-full rounded-lg" />
+                  </div>
+                  <div className="p-3 space-y-1.5">
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-16 w-full rounded-lg" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
       )}
 
       {/* Error */}
