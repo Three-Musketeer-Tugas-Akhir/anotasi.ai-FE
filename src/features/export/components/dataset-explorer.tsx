@@ -5,14 +5,6 @@ import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   FolderOpen,
   Film,
   FileText,
@@ -23,12 +15,11 @@ import {
   ArrowLeft,
   Lock,
   Download,
-  FolderTree,
-  AlignLeft,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { apiClient } from '@/core/api/axios-client';
+import { DatasetZipDownloadModal } from './dataset-zip-modal';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -71,7 +62,6 @@ export function DatasetExplorer({ jobId, onBack }: DatasetExplorerProps) {
   const router = useRouter();
   const [expandedGlobalIdx, setExpandedGlobalIdx] = useState<number | null>(null);
   const [zipModalOpen, setZipModalOpen] = useState(false);
-  const [zipLayout, setZipLayout] = useState<'file' | 'sentence'>('file');
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['dataset-explorer', jobId],
@@ -118,38 +108,8 @@ export function DatasetExplorer({ jobId, onBack }: DatasetExplorerProps) {
     setExpandedGlobalIdx(expandedGlobalIdx === idx ? null : idx);
   };
 
-  const handleDownloadZip = (layout: 'file' | 'sentence') => {
-    setZipModalOpen(false);
-    const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/pipeline/jobs/${jobId}/dataset/download?layout=${layout}`;
-    const token = localStorage.getItem('token');
-    fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
-      .then(async (res) => {
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.detail?.error?.message || 'Gagal mengunduh dataset');
-        }
-        return res.blob();
-      })
-      .then((blob) => {
-        const blobUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = `${data.original_filename}_dataset.zip`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        toast.success('Dataset berhasil diunduh', {
-          description: `File ${data.original_filename}_dataset.zip telah diunduh.`,
-          position: 'top-center',
-        });
-      })
-      .catch((err) => {
-        console.error('Failed to download', err);
-        toast.error('Gagal mengunduh', {
-          description: err.message || 'Terjadi kesalahan saat mengunduh dataset ZIP.',
-          position: 'top-center',
-        });
-      });
+  const handleDownloadZip = () => {
+    setZipModalOpen(true);
   };
 
   return (
@@ -174,7 +134,7 @@ export function DatasetExplorer({ jobId, onBack }: DatasetExplorerProps) {
           </div>
         </div>
         <button
-          onClick={() => setZipModalOpen(true)}
+          onClick={handleDownloadZip}
           disabled={flatUtterances.length === 0}
           className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:opacity-50 shadow-sm transition-colors flex-shrink-0"
         >
@@ -318,78 +278,12 @@ export function DatasetExplorer({ jobId, onBack }: DatasetExplorerProps) {
         )}
       </div>
 
-      {/* ── ZIP Layout Selection Modal ── */}
-      <Dialog open={zipModalOpen} onOpenChange={setZipModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-slate-900">Pilih Struktur Folder ZIP</DialogTitle>
-            <DialogDescription className="text-slate-500">
-              Pilih cara pengelompokan file dalam folder dataset.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid grid-cols-1 gap-3 py-2">
-            {/* Option 1: File-focused */}
-            <button
-              onClick={() => setZipLayout('file')}
-              className={`flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all ${
-                zipLayout === 'file'
-                  ? 'border-teal-500 bg-teal-50/50'
-                  : 'border-slate-200 hover:border-slate-300 bg-white'
-              }`}
-            >
-              <div className={`p-2 rounded-lg mt-0.5 ${zipLayout === 'file' ? 'bg-teal-100 text-teal-600' : 'bg-slate-100 text-slate-500'}`}>
-                <FolderTree size={20} />
-              </div>
-              <div>
-                <p className={`text-sm font-bold ${zipLayout === 'file' ? 'text-teal-900' : 'text-slate-800'}`}>
-                  Berdasarkan Jenis File
-                </p>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Folder: video/, audio/, transkripsi/, glosa/<br />
-                  <span className="text-slate-400">Cocok untuk melihat semua video sekaligus</span>
-                </p>
-              </div>
-            </button>
-
-            {/* Option 2: Sentence-focused */}
-            <button
-              onClick={() => setZipLayout('sentence')}
-              className={`flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all ${
-                zipLayout === 'sentence'
-                  ? 'border-teal-500 bg-teal-50/50'
-                  : 'border-slate-200 hover:border-slate-300 bg-white'
-              }`}
-            >
-              <div className={`p-2 rounded-lg mt-0.5 ${zipLayout === 'sentence' ? 'bg-teal-100 text-teal-600' : 'bg-slate-100 text-slate-500'}`}>
-                <AlignLeft size={20} />
-              </div>
-              <div>
-                <p className={`text-sm font-bold ${zipLayout === 'sentence' ? 'text-teal-900' : 'text-slate-800'}`}>
-                  Berdasarkan Kalimat
-                </p>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Folder: kalimat_0001/, kalimat_0002/, ...<br />
-                  <span className="text-slate-400">Cocok untuk melihat semua file per kalimat</span>
-                </p>
-              </div>
-            </button>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setZipModalOpen(false)} className="text-sm">
-              Batal
-            </Button>
-            <Button
-              onClick={() => handleDownloadZip(zipLayout)}
-              className="text-sm bg-teal-600 hover:bg-teal-700 text-white"
-            >
-              <Download size={14} className="mr-1.5" />
-              Download ZIP
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DatasetZipDownloadModal
+        jobId={jobId}
+        filename={data.original_filename}
+        open={zipModalOpen}
+        onOpenChange={setZipModalOpen}
+      />
     </div>
   );
 }

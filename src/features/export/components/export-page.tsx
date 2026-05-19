@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DatasetExplorer } from './dataset-explorer';
+import { DatasetZipDownloadModal } from './dataset-zip-modal';
 
 import {
   Package,
@@ -91,6 +92,7 @@ function formatDate(dateStr: string | null): string {
 export function ExportPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [exploreJobId, setExploreJobId] = useState<string | null>(null);
+  const [zipModalJob, setZipModalJob] = useState<{ id: string; filename: string } | null>(null);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -121,39 +123,10 @@ export function ExportPage() {
     (j) => j.curation_status === 'NORMALIZED' || j.curation_status === 'READY_TO_EXPORT',
   ).length;
 
-  const handleDownload = useCallback(async (jobId: string) => {
-    setDownloadingId(jobId);
-    try {
-      const response = await apiClient.get(
-        `/pipeline/jobs/${jobId}/dataset/download`,
-        { responseType: 'blob' },
-      );
-      const disposition = (response.headers['content-disposition'] as string) || '';
-      const match = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
-      const filename = match ? match[1].replace(/[\"']/g, '').trim() : `dataset_${jobId.slice(0, 8)}.zip`;
-
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success('Dataset berhasil diunduh', {
-        description: `File ${filename} telah diunduh.`,
-        position: 'top-center',
-      });
-    } catch (err) {
-      console.error('Download failed:', err);
-      toast.error('Gagal mengunduh', {
-        description: 'Gagal mengunduh dataset. Pastikan Anda sudah login.',
-        position: 'top-center',
-      });
-    } finally {
-      setDownloadingId(null);
-    }
+  const handleDownloadClick = useCallback((jobId: string, filename: string) => {
+    setZipModalJob({ id: jobId, filename });
   }, []);
+
 
   if (exploreJobId) {
     return <DatasetExplorer jobId={exploreJobId} onBack={() => setExploreJobId(null)} />;
@@ -331,7 +304,7 @@ export function ExportPage() {
                           <button
                             disabled={isDownloading || !isDownloadable}
                             className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
-                            onClick={() => handleDownload(job.id)}
+                            onClick={() => handleDownloadClick(job.id, job.original_filename || 'dataset')}
                             title={!isDownloadable ? 'Belum siap untuk diunduh' : 'Download dataset ZIP'}
                           >
                             {isDownloading ? (
@@ -350,6 +323,13 @@ export function ExportPage() {
           </div>
         )}
       </div>
+
+      <DatasetZipDownloadModal
+        jobId={zipModalJob?.id || null}
+        filename={zipModalJob?.filename || 'dataset'}
+        open={!!zipModalJob}
+        onOpenChange={(open) => { if (!open) setZipModalJob(null); }}
+      />
     </div>
   );
 }
