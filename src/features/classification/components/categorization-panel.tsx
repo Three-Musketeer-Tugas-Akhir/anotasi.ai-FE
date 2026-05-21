@@ -20,7 +20,7 @@ interface CategorizationPanelProps {
  */
 export function CategorizationPanel({ job, isPending, onCategorize, onReset }: CategorizationPanelProps) {
   return (
-    <div id="tour-categorization-panel" className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative overflow-hidden">
+    <div id="tour-categorization-panel" className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 lg:p-5 relative overflow-hidden">
       {/* Loading overlay */}
       {isPending && (
         <div className="absolute inset-0 bg-white/80 z-10 flex items-center justify-center backdrop-blur-[1px]">
@@ -32,7 +32,7 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
       )}
 
       {/* Header */}
-      <div className="flex justify-between items-start mb-6">
+      <div className="flex justify-between items-start mb-3 lg:mb-4">
         <div>
           <h2 className="text-lg font-bold text-slate-800">Klasifikasi JBI</h2>
           <p className="text-slate-500 text-sm">
@@ -57,7 +57,7 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
           onClick={() => onCategorize('SIBI')}
           disabled={isPending}
           className={cn(
-            'relative group flex items-center p-4 rounded-xl border-2 transition-all duration-200 text-left hover:shadow-md',
+            'relative group flex items-center p-2 lg:p-3 rounded-xl border-2 transition-all duration-200 text-left hover:shadow-md',
             job.category === 'SIBI'
               ? 'border-teal-500 bg-teal-50 ring-1 ring-teal-500'
               : 'border-gray-200 hover:border-teal-300 hover:bg-teal-50/50',
@@ -65,7 +65,7 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
         >
           <div
             className={cn(
-              'w-12 h-12 rounded-lg flex items-center justify-center mr-4 transition-colors',
+              'w-10 h-10 lg:w-12 lg:h-12 rounded-lg flex items-center justify-center mr-3 lg:mr-4 transition-colors',
               job.category === 'SIBI'
                 ? 'bg-teal-500 text-white'
                 : 'bg-gray-100 text-gray-500 group-hover:bg-teal-200 group-hover:text-teal-700',
@@ -80,8 +80,8 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
                 Klik untuk pilih
               </span>
             </div>
-            <p className="text-sm text-slate-500 mt-0.5">
-              Bahasa isyarat satu tangan yang menyampaikan abjad, angka, dan kata dengan tata bahasa seperti bahasa Indonesia, termasuk awalan dan akhiran.
+            <p className="text-[11px] lg:text-xs text-slate-500 mt-0.5 line-clamp-1">
+              Tata bahasa baku Indonesia (termasuk imbuhan).
             </p>
           </div>
           {job.category === 'SIBI' && (
@@ -96,7 +96,7 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
           onClick={() => onCategorize('BISINDO')}
           disabled={isPending}
           className={cn(
-            'relative group flex items-center p-4 rounded-xl border-2 transition-all duration-200 text-left hover:shadow-md',
+            'relative group flex items-center p-2 lg:p-3 rounded-xl border-2 transition-all duration-200 text-left hover:shadow-md',
             job.category === 'BISINDO'
               ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500'
               : 'border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/50',
@@ -104,7 +104,7 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
         >
           <div
             className={cn(
-              'w-12 h-12 rounded-lg flex items-center justify-center mr-4 transition-colors',
+              'w-10 h-10 lg:w-12 lg:h-12 rounded-lg flex items-center justify-center mr-3 lg:mr-4 transition-colors',
               job.category === 'BISINDO'
                 ? 'bg-emerald-500 text-white'
                 : 'bg-gray-100 text-gray-500 group-hover:bg-emerald-200 group-hover:text-emerald-700',
@@ -119,8 +119,8 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
                 Klik untuk pilih
               </span>
             </div>
-            <p className="text-sm text-slate-500 mt-0.5">
-              Bahasa isyarat dua tangan dengan struktur sederhana, tanpa imbuhan, menggunakan gestur dan ekspresi wajah, dan fleksibel dalam penggunaan.
+            <p className="text-[11px] lg:text-xs text-slate-500 mt-0.5 line-clamp-1">
+              Gestur natural, ekspresi wajah, & kalimat sederhana.
             </p>
           </div>
           {job.category === 'BISINDO' && (
@@ -132,7 +132,7 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
       </div>
 
       {/* Reset & Info */}
-      <div className="mt-6 pt-4 border-t border-gray-100 flex justify-between items-center">
+      <div className="mt-3 lg:mt-4 pt-2 lg:pt-3 border-t border-gray-100 flex justify-between items-center">
         {onReset && (
           <Button
             variant="ghost"

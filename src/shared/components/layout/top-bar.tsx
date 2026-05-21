@@ -66,9 +66,17 @@ export function TopBar() {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const prevUnreadRef = useRef(0);
   const [mounted, setMounted] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    
+    const handleToggle = (e: Event) => {
+      const customEvent = e as CustomEvent<{hidden: boolean}>;
+      setIsHidden(customEvent.detail.hidden);
+    };
+    window.addEventListener('toggle-top-bar', handleToggle);
+    return () => window.removeEventListener('toggle-top-bar', handleToggle);
   }, []);
 
   const initials = user?.email
@@ -161,6 +169,8 @@ export function TopBar() {
       </header>
     );
   }
+
+  if (isHidden) return null;
 
   return (
     <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0 z-30 relative">

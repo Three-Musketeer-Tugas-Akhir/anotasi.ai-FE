@@ -26,6 +26,8 @@ interface VideoPlayerProps {
   onReady?: (ready: boolean) => void;
   /** If true, play is externally blocked (e.g. filmstrip not ready) */
   playDisabled?: boolean;
+  /** Custom navigation slot to render in the center of the controls bar */
+  navigationSlot?: React.ReactNode;
 }
 
 export function VideoPlayer({
@@ -40,6 +42,7 @@ export function VideoPlayer({
   onEnded,
   onReady,
   playDisabled = false,
+  navigationSlot,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -180,9 +183,9 @@ export function VideoPlayer({
   const isDisabled = playDisabled || !videoReady;
 
   return (
-    <Card className="flex flex-col overflow-hidden border-gray-200 shadow-sm bg-black">
-      {/* Video area — natural aspect ratio, no excess black bars */}
-      <div className="relative w-full bg-black" style={{ aspectRatio: '16/9' }}>
+    <Card className="flex flex-col overflow-hidden bg-transparent border-none shadow-none h-full min-h-0">
+      {/* Video area — natural aspect ratio, shrinks within flex parent */}
+      <div className="relative w-full bg-black flex-1 min-h-0" style={{ aspectRatio: '16/9' }}>
         {videoError ? (
           <div className="flex flex-col items-center justify-center text-red-400 py-12 px-4 text-center">
             <AlertTriangle size={28} className="mb-2" />
@@ -250,50 +253,56 @@ export function VideoPlayer({
       </div>
 
       {/* Controls bar */}
-      <div className="bg-gray-900 flex items-center px-3 py-1.5 gap-3 border-t border-gray-700">
-        {/* Play/Pause button — prominent */}
-        <button
-          onClick={() => handlePlayAttempt(!isPlaying)}
-          className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${
-            isDisabled
-              ? 'bg-gray-600 cursor-not-allowed opacity-50'
-              : 'bg-teal-500 hover:bg-teal-400'
-          }`}
-          aria-label={isPlaying ? 'Pause' : 'Play'}
-        >
-          {isPlaying ? <Pause size={16} className="text-white" /> : <Play size={16} className="text-white ml-0.5" />}
-        </button>
+      <div className="bg-transparent flex items-center px-2 py-1 gap-3">
+        {/* Left: Play/Pause and Time */}
+        <div className="flex items-center gap-3 w-[150px] shrink-0">
+          <button
+            onClick={() => handlePlayAttempt(!isPlaying)}
+            className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${
+              isDisabled
+                ? 'bg-gray-600 cursor-not-allowed opacity-50'
+                : 'bg-teal-500 hover:bg-teal-400'
+            }`}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+          >
+            {isPlaying ? <Pause size={16} className="text-white" /> : <Play size={16} className="text-white ml-0.5" />}
+          </button>
+          <span className="text-sm font-mono text-gray-300">
+            {new Date(currentTime * 1000).toISOString().substr(14, 8)}
+          </span>
+        </div>
 
-        {/* Time display */}
-        <span className="text-sm font-mono text-gray-300 flex-1">
-          {new Date(currentTime * 1000).toISOString().substr(14, 8)}
-        </span>
+        {/* Center: Navigation (Injected) */}
+        <div className="flex-1 flex justify-center items-center min-w-0">
+          {navigationSlot}
+        </div>
 
-        {/* Volume toggle */}
-        <button
-          onClick={() => setIsMuted(!isMuted)}
-          className="w-8 h-8 rounded hover:bg-gray-700 flex items-center justify-center transition-colors flex-shrink-0 text-gray-300 hover:text-white"
-          aria-label={isMuted ? 'Unmute' : 'Mute'}
-          title={isMuted ? 'Unmute' : 'Mute'}
-        >
-          {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-        </button>
-
-        {/* Speed selector */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-1 font-mono text-sm text-gray-300 hover:text-white hover:bg-gray-700 h-8 px-2">
-              <Settings2 size={14} /> {playbackRate}×
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
-              <DropdownMenuItem key={rate} onClick={() => onPlaybackRateChange(rate)}>
-                {rate}× {rate === 1 && '(Normal)'}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Right: Volume and Speed */}
+        <div className="flex items-center justify-end gap-2 w-[150px] shrink-0">
+          <button
+            onClick={() => setIsMuted(!isMuted)}
+            className="w-8 h-8 rounded hover:bg-gray-700 flex items-center justify-center transition-colors flex-shrink-0 text-gray-300 hover:text-white"
+            aria-label={isMuted ? 'Unmute' : 'Mute'}
+            title={isMuted ? 'Unmute' : 'Mute'}
+          >
+            {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+          </button>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-1 font-mono text-sm text-gray-300 hover:text-white hover:bg-gray-700 h-8 px-2">
+                <Settings2 size={14} /> {playbackRate}×
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                <DropdownMenuItem key={rate} onClick={() => onPlaybackRateChange(rate)}>
+                  {rate}× {rate === 1 && '(Normal)'}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
     </Card>
   );

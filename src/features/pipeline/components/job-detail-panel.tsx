@@ -1481,7 +1481,7 @@ function Stage3Content({
   return (
     <div className="pt-3 space-y-4">
       {/* Summary Stats */}
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-50 rounded-lg border border-gray-200 p-2.5 text-center">
           <p className="text-lg font-bold text-gray-800">{summary.total_utterances}</p>
           <p className="text-[9px] text-gray-400 uppercase tracking-wider">Total</p>
@@ -1489,14 +1489,6 @@ function Stage3Content({
         <div className="bg-emerald-50 rounded-lg border border-emerald-200 p-2.5 text-center">
           <p className="text-lg font-bold text-emerald-700">{summary.cropped}</p>
           <p className="text-[9px] text-emerald-500 uppercase tracking-wider">Cropped</p>
-        </div>
-        <div className="bg-red-50 rounded-lg border border-red-200 p-2.5 text-center">
-          <p className="text-lg font-bold text-red-600">{summary.failed}</p>
-          <p className="text-[9px] text-red-400 uppercase tracking-wider">Gagal</p>
-        </div>
-        <div className="bg-amber-50 rounded-lg border border-amber-200 p-2.5 text-center">
-          <p className="text-lg font-bold text-amber-600">{summary.pending}</p>
-          <p className="text-[9px] text-amber-400 uppercase tracking-wider">Pending</p>
         </div>
       </div>
 

@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   AlertCircle,
   ChevronRight,
+  Send,
 } from 'lucide-react';
 import type { TranscriptUtterance, UtteranceCorrection } from '../annotation-types';
 
@@ -30,6 +31,7 @@ interface PropertiesPanelProps {
   onMarkOk: (index: number) => Promise<void>;
   onRevert: (index: number) => Promise<void>;
   onReset: () => Promise<void>;
+  onSubmit: () => Promise<void>;
   isSaving: boolean;
   reviewStatus: string | null;
   reviewFeedback: string | null;
@@ -75,6 +77,7 @@ export function PropertiesPanel({
   onMarkOk,
   onRevert,
   onReset,
+  onSubmit,
   isSaving,
   reviewStatus,
   reviewFeedback,
@@ -106,6 +109,9 @@ export function PropertiesPanel({
   };
 
   const confBadge = activeEdit ? getConfidenceBadge(activeEdit.confidence) : null;
+  const totalUtterances = utteranceEdits.length;
+  const totalCompleted = utteranceEdits.filter(u => u.status === 'OK').length;
+  const isEndGame = totalCompleted === totalUtterances && activeEdit?.status === 'OK';
 
   return (
     <div className="w-full h-full bg-white flex flex-col z-20">
@@ -252,13 +258,17 @@ export function PropertiesPanel({
             </button>
             
             <button
-              onClick={() => onMarkOk(activeUtteranceIndex!)}
+              onClick={isEndGame ? onSubmit : () => onMarkOk(activeUtteranceIndex!)}
               disabled={actionsDisabled || isSaving}
-              className="flex-1 py-4 rounded-xl font-bold text-white bg-teal-600 hover:bg-teal-500 active:bg-teal-700 transition-all shadow-[0_4px_14px_0_rgba(13,148,136,0.39)] hover:shadow-[0_6px_20px_rgba(13,148,136,0.23)] flex flex-col items-center justify-center disabled:opacity-50"
+              className={`flex-1 py-4 rounded-xl font-bold text-white transition-all shadow-[0_4px_14px_0_rgba(13,148,136,0.39)] flex flex-col items-center justify-center disabled:opacity-50 ${
+                isEndGame 
+                  ? 'bg-blue-600 hover:bg-blue-500 active:bg-blue-700 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] hover:shadow-[0_6px_20px_rgba(37,99,235,0.23)]'
+                  : 'bg-teal-600 hover:bg-teal-500 active:bg-teal-700 hover:shadow-[0_6px_20px_rgba(13,148,136,0.23)]'
+              }`}
             >
               <div className="flex items-center gap-2 text-lg">
-                {isSaving ? <Loader2 size={24} className="animate-spin" /> : <CheckCircle2 size={24} />} 
-                SIMPAN & LANJUT
+                {isSaving ? <Loader2 size={24} className="animate-spin" /> : (isEndGame ? <Send size={24} /> : <CheckCircle2 size={24} />)} 
+                {isEndGame ? 'SUBMIT REVIEW' : 'SIMPAN & LANJUT'}
               </div>
             </button>
           </div>

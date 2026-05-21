@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { PenTool, ArrowLeft, Loader2, AlertTriangle, RotateCcw, List, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { PenTool, ArrowLeft, Loader2, AlertTriangle, RotateCcw, List, Search, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { VideoPlayer } from './video-player';
@@ -33,6 +33,7 @@ export function AnnotationPage() {
 
   // ── Sidebar State ─────────────────────────────────────────────
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isFocusMode, setIsFocusMode] = useState(false);
 
   // ── Video State ───────────────────────────────────────────────
   const [isPlaying, setIsPlaying] = useState(false);
@@ -215,6 +216,14 @@ export function AnnotationPage() {
       loadJob(selectedJobId);
     }
   }, [selectedJobId, loadJob]);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('toggle-top-bar', { detail: { hidden: isFocusMode } }));
+    
+    return () => {
+      window.dispatchEvent(new CustomEvent('toggle-top-bar', { detail: { hidden: false } }));
+    };
+  }, [isFocusMode]);
 
   // NOTE: mergedVideoUrl is loaded asynchronously inside handleSelectUtterance
 
@@ -420,6 +429,38 @@ export function AnnotationPage() {
     }
   };
 
+  const handleSubmitReview = async () => {
+    if (!selectedJobId || utteranceEdits.length === 0) return;
+    
+    const unfinished = utteranceEdits.filter(u => u.status !== 'OK').length;
+    if (unfinished > 0) {
+      if (!confirm(`Ada ${unfinished} kalimat yang belum ditandai selesai (OK). Lanjutkan submit?`)) return;
+    } else {
+      if (!confirm('Submit anotasi untuk review oleh kurator?')) return;
+    }
+
+    setIsSaving(true);
+    setActionMessage('Men-submit anotasi...');
+    try {
+      // 1. Save all drafts first to ensure nothing is lost
+      await saveDraftForAllSegments(utteranceEdits);
+      
+      // 2. Find unique segment IDs
+      const uniqueSegmentIds = Array.from(new Set(utteranceEdits.map((u) => u.segment_id).filter(Boolean))) as string[];
+      
+      // 3. Submit all segments
+      await Promise.all(uniqueSegmentIds.map(sid => annotationApi.submitForReview(sid)));
+      
+      setActionMessage('✅ Anotasi berhasil di-submit');
+      await loadJob(selectedJobId);
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.detail || 'Gagal submit anotasi';
+      setActionMessage(typeof msg === 'string' ? `❌ ${msg}` : '❌ Gagal submit anotasi');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleMarkOk = async (index: number) => {
     if (!selectedJobId || utteranceEdits.length === 0) return;
     const targetUtt = utteranceEdits[index];
@@ -455,6 +496,9 @@ export function AnnotationPage() {
 
   const handleReset = async () => {
     if (!selectedJobId) return;
+    if (!confirm('Reset semua edit? Data akan kembali ke ASR original.')) return;
+    setIsSaving(true);
+    setActionMessage('Merest anotasi...');
     try {
       const segmentIds = Array.from(new Set(utteranceEdits.map((u) => u.segment_id).filter(Boolean))) as string[];
       await Promise.all(segmentIds.map((sid) => annotationApi.resetToOriginal(sid)));
@@ -464,6 +508,8 @@ export function AnnotationPage() {
     } catch (err: unknown) {
       const msg = (err as any)?.response?.data?.detail || 'Gagal mereset anotasi';
       setActionMessage(typeof msg === 'string' ? `❌ ${msg}` : '❌ Gagal mereset anotasi');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -642,6 +688,24 @@ export function AnnotationPage() {
 
             <div className="w-px h-10 bg-slate-200 hidden md:block"></div>
 
+            <Button
+              variant="outline"
+              onClick={handleReset}
+              disabled={isSaving}
+              className="gap-2 px-4 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 rounded-xl font-bold transition-all shadow-sm hidden lg:flex"
+            >
+              <RotateCcw size={18} /> Reset
+            </Button>
+
+            <button
+              onClick={() => setIsFocusMode(!isFocusMode)}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-xl font-bold transition-all shadow-sm hidden md:flex"
+              title={isFocusMode ? "Kembali ke mode biasa" : "Fokus pada video dan timeline"}
+            >
+              {isFocusMode ? <Minimize2 size={18} /> : <Maximize2 size={18} />} 
+              {isFocusMode ? 'Mode Normal' : 'Mode Fokus'}
+            </button>
+
             <button
               onClick={() => setIsSheetOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-xl font-bold transition-all shadow-sm"
@@ -761,9 +825,18 @@ export function AnnotationPage() {
             )}
 
             {/* 2. LEFT PANEL: VIDEO & TIMELINE */}
-            <div className="flex-[0_0_60%] flex flex-col bg-slate-900 relative">
-              <div className="flex-1 p-4 flex flex-col items-center justify-start relative min-h-0 gap-3">
-                <div className="w-full max-w-4xl max-h-full aspect-video">
+            <div className={`flex flex-col bg-slate-900 relative overflow-hidden transition-all duration-300 ${isFocusMode ? 'flex-1' : 'flex-[0_0_60%]'}`}>
+              {isFocusMode && (
+                <button 
+                  onClick={() => setIsFocusMode(false)}
+                  className="absolute top-4 right-4 z-40 bg-black/60 hover:bg-black/80 text-white px-4 py-2 rounded-full backdrop-blur-sm font-medium flex items-center gap-2 border border-white/20 shadow-lg transition-all hover:scale-105"
+                >
+                  <Minimize2 size={16} /> Kembali ke Mode Normal
+                </button>
+              )}
+              {/* Video area — flex-1 + min-h-0 + overflow-hidden so it shrinks to fit */}
+              <div className="flex-1 min-h-0 p-1 pb-0 flex flex-col items-center justify-center overflow-hidden">
+                <div className={`w-full ${isFocusMode ? 'max-w-7xl' : 'max-w-4xl'} flex-1 min-h-0 transition-all duration-300`}>
                   <VideoPlayer
                     key={`utt-${activeUtteranceIndex ?? 'none'}`}
                     src={videoSrc}
@@ -777,44 +850,45 @@ export function AnnotationPage() {
                     onEnded={handleVideoEnded}
                     onReady={setVideoReady}
                     playDisabled={!filmstripReady}
+                    navigationSlot={
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        <button
+                          onClick={handlePrevUtterance}
+                          disabled={activeUtteranceIndex === null || activeUtteranceIndex === 0}
+                          className="flex items-center gap-1.5 bg-white/5 border border-white/10 shadow-sm hover:bg-white/10 px-3 py-1.5 rounded-lg group transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                          <ChevronLeft size={18} className="text-gray-400 group-hover:text-white" />
+                          <span className="text-gray-200 font-medium text-sm hidden sm:inline">Kalimat Sebelumnya</span>
+                        </button>
+
+                        <button
+                          onClick={() => setIsSheetOpen(true)}
+                          className="flex items-center gap-2 bg-white/5 border border-white/10 shadow-sm hover:bg-white/10 px-4 py-1.5 rounded-full group cursor-pointer transition-colors whitespace-nowrap"
+                          title="Klik untuk melihat daftar kalimat"
+                        >
+                          <span className="text-gray-400 text-sm hidden sm:inline">Posisi:</span>
+                          <span className="text-white font-semibold text-base flex items-center gap-1.5">
+                            Kalimat ke-{(activeUtteranceIndex ?? 0) + 1}
+                            <Search size={16} className="text-gray-400 group-hover:text-white transition-colors" />
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={handleNextUtterance}
+                          disabled={activeUtteranceIndex === null || activeUtteranceIndex === utteranceEdits.length - 1}
+                          className="flex items-center gap-1.5 bg-white/5 border border-white/10 shadow-sm hover:bg-white/10 px-3 py-1.5 rounded-lg group transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                          <span className="text-gray-200 font-medium text-sm hidden sm:inline">Kalimat Selanjutnya</span>
+                          <ChevronRight size={18} className="text-gray-400 group-hover:text-white" />
+                        </button>
+                      </div>
+                    }
                   />
-                </div>
-                
-                {/* Contextual Trigger for Sheet */}
-                <div className="flex items-center justify-center gap-2 shrink-0">
-                  <button
-                    onClick={handlePrevUtterance}
-                    disabled={activeUtteranceIndex === null || activeUtteranceIndex === 0}
-                    className="flex items-center gap-3 bg-slate-800 hover:bg-slate-700 px-6 py-3 rounded-xl border border-slate-700 shadow-inner group transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronLeft size={16} className="text-slate-400 group-hover:text-white" />
-                    <span className="text-white font-bold text-sm">Kalimat Sebelumnya</span>
-                  </button>
-
-                  <button
-                    onClick={() => setIsSheetOpen(true)}
-                    className="flex items-center gap-4 bg-slate-800 hover:bg-slate-700 px-6 py-3 rounded-[32px] border border-slate-700 shadow-inner group cursor-pointer transition-colors"
-                    title="Klik untuk melihat daftar kalimat"
-                  >
-                    <span className="text-slate-400 text-sm font-medium">Posisi saat ini:</span>
-                    <span className="text-white font-bold text-lg flex items-center gap-2">
-                      Kalimat ke-{(activeUtteranceIndex ?? 0) + 1}
-                      <Search size={16} className="text-slate-400 group-hover:text-white transition-colors" />
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={handleNextUtterance}
-                    disabled={activeUtteranceIndex === null || activeUtteranceIndex === utteranceEdits.length - 1}
-                    className="flex items-center gap-3 bg-slate-800 hover:bg-slate-700 px-6 py-3 rounded-xl border border-slate-700 shadow-inner group transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <span className="text-white font-bold text-sm">Kalimat Selanjutnya</span>
-                    <ChevronRight size={16} className="text-slate-400 group-hover:text-white" />
-                  </button>
                 </div>
               </div>
 
-              <div className="flex-shrink-0 mt-auto bg-slate-950 p-2 border-t border-slate-800">
+              {/* Timeline editor — pinned at bottom, never overlapped */}
+              <div className="flex-shrink-0 bg-slate-950 p-1 border-t border-slate-800">
                 <TimelineEditor
                   videoUrl={mergedVideoUrl ?? activeUtterance?.segment_video_url ?? jobVideoUrl ?? ''}
                   videoOffset={0}
@@ -839,22 +913,27 @@ export function AnnotationPage() {
             </div>
 
             {/* 3. RIGHT PANEL: THE TASK */}
-            <div className="flex-[0_0_40%] bg-white border-l border-slate-200 flex flex-col shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-20 min-w-[350px]">
-              <PropertiesPanel
-                originalUtterances={originalUtterances}
-                utteranceEdits={utteranceEdits}
-                onUtteranceChange={handleUtteranceChange}
-                activeUtteranceIndex={activeUtteranceIndex}
-                onSelectUtterance={handleSelectUtterance}
-                onSaveDraft={handleSaveDraft}
-                onMarkOk={handleMarkOk}
-                onRevert={handleRevertUtterance}
-                onReset={handleReset}
-                isSaving={isSaving}
-                reviewStatus={reviewStatus}
-                reviewFeedback={reviewFeedback}
-              />
-            </div>
+            {!isFocusMode && (
+              <div className="flex-[0_0_40%] bg-slate-50 border-l border-slate-200 flex flex-col shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-20 min-w-[350px]">
+                <div className="flex-1 min-h-0">
+                  <PropertiesPanel
+                    originalUtterances={originalUtterances}
+                    utteranceEdits={utteranceEdits}
+                    onUtteranceChange={handleUtteranceChange}
+                    activeUtteranceIndex={activeUtteranceIndex}
+                    onSelectUtterance={handleSelectUtterance}
+                    onSaveDraft={handleSaveDraft}
+                    onMarkOk={handleMarkOk}
+                    onRevert={handleRevertUtterance}
+                    onReset={handleReset}
+                    onSubmit={handleSubmitReview}
+                    isSaving={isSaving}
+                    reviewStatus={reviewStatus}
+                    reviewFeedback={reviewFeedback}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         ) : null}
       </div>

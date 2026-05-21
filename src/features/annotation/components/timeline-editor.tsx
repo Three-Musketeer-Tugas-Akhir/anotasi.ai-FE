@@ -346,68 +346,56 @@ export function TimelineEditor({
   // ── Render ────────────────────────────────────────────────────
 
   return (
-    <Card className="border-gray-200 shadow-sm p-2 bg-white">
-      {/* ── Header: nav + zoom controls ── */}
-      <div className="flex items-center gap-2 mb-2">
-
-        {/* Utterance nav */}
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="sm" onClick={onPrevUtterance}
-            disabled={!onPrevUtterance || activeUtterancePosition === 1}
-            className="h-7 px-2 text-xs gap-0.5">
-            <ChevronLeft size={14} />
-          </Button>
+    <Card className="border-gray-200 shadow-sm px-1 py-0.5 bg-white">
+      {/* ── Header: info + zoom controls ── */}
+      <div className="flex items-center justify-between gap-2 mb-0.5 px-0.5">
+        {/* Left: Position badge & Title */}
+        <div className="flex items-center gap-2 min-w-0">
           {activeUtterancePosition !== undefined && utteranceCount !== undefined && (
-            <Badge variant="outline" className="text-xs px-2 py-0.5 bg-teal-50 text-teal-600 border-teal-200 h-7">
-              <Crosshair size={10} className="mr-1" />
+            <Badge variant="outline" className="text-xs px-1.5 py-0 bg-teal-50 text-teal-600 border-teal-200 h-5">
+              <Crosshair size={12} className="mr-1" />
               {activeUtterancePosition} / {utteranceCount}
             </Badge>
           )}
-          <Button variant="outline" size="sm" onClick={onNextUtterance}
-            disabled={!onNextUtterance || activeUtterancePosition === utteranceCount}
-            className="h-7 px-2 text-xs gap-0.5">
-            <ChevronRight size={14} />
-          </Button>
-        </div>
-
-        {/* Title */}
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <Film size={14} className="text-teal-600 flex-shrink-0" />
           <span className="text-sm font-semibold text-gray-700 truncate">
             {activeUtterance ? `Kalimat ke-${activeUtterance.index + 1}` : 'Filmstrip Timeline'}
           </span>
         </div>
 
-        {/* Timestamps */}
-        <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-gray-500">
-          <span className="text-teal-600 font-semibold">{formatTimestamp(trimStart)}</span>
-          <span className="text-gray-400">→</span>
-          <span className="text-teal-600 font-semibold">{formatTimestamp(trimEnd > 0 ? trimEnd : windowEnd)}</span>
-          <span className="text-gray-400">({((trimEnd > 0 ? trimEnd : windowEnd) - trimStart).toFixed(1)}s)</span>
-        </div>
+        {/* Right: Timestamps & Zoom controls */}
+        <div className="flex items-center gap-3">
+          {/* Timestamps */}
+          <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-gray-500">
+            <span className="text-teal-600 font-medium">{formatTimestamp(trimStart)}</span>
+            <span className="text-gray-400">→</span>
+            <span className="text-teal-600 font-medium">{formatTimestamp(trimEnd > 0 ? trimEnd : windowEnd)}</span>
+            <span className="text-gray-400">({((trimEnd > 0 ? trimEnd : windowEnd) - trimStart).toFixed(1)}s)</span>
+          </div>
 
-        {/* Zoom controls */}
-        <div className="flex items-center gap-0.5 bg-gray-50 border border-gray-200 rounded-lg px-1 py-0.5">
-          <button onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM}
-            className="p-1 rounded hover:bg-gray-200 text-gray-500 disabled:opacity-30 transition-colors"
-            title="Zoom out">
-            <ZoomOut size={12} />
-          </button>
-          <span className="text-xs font-mono text-gray-600 min-w-[32px] text-center select-none font-medium">
-            {zoom.toFixed(1)}×
-          </span>
-          <button onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM}
-            className="p-1 rounded hover:bg-gray-200 text-gray-500 disabled:opacity-30 transition-colors"
-            title="Zoom in">
-            <ZoomIn size={12} />
-          </button>
-          {zoom > MIN_ZOOM && (
-            <button onClick={handleZoomReset}
-              className="p-1 rounded hover:bg-gray-200 text-gray-400 transition-colors"
-              title="Reset zoom">
-              <Maximize2 size={11} />
+          {/* Zoom controls */}
+          <div className="flex items-center gap-0.5 bg-gray-50 border border-gray-200 rounded px-1 py-0.5">
+            <button onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM}
+              className="p-0.5 rounded hover:bg-gray-200 text-gray-500 disabled:opacity-30 transition-colors"
+              title="Zoom out">
+              <ZoomOut size={12} />
             </button>
-          )}
+            <span className="text-xs font-mono text-gray-600 min-w-[28px] text-center select-none font-medium">
+              {zoom.toFixed(1)}×
+            </span>
+            <button onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM}
+              className="p-0.5 rounded hover:bg-gray-200 text-gray-500 disabled:opacity-30 transition-colors"
+              title="Zoom in">
+              <ZoomIn size={12} />
+            </button>
+            {zoom > MIN_ZOOM && (
+              <button onClick={handleZoomReset}
+                className="p-0.5 rounded hover:bg-gray-200 text-gray-400 transition-colors"
+                title="Reset zoom">
+                <Maximize2 size={12} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -524,7 +512,7 @@ export function TimelineEditor({
       </div>
 
       {/* Timestamp ruler */}
-      <div className="flex items-center justify-between text-xs font-mono text-gray-400 mt-1.5 px-1">
+      <div className="flex items-center justify-between text-xs font-mono text-gray-400 mt-0.5 px-1">
         <span>{formatTimestamp(windowStart)}</span>
         {windowDuration > 0 && <span>{formatTimestamp(windowStart + windowDuration / 2)}</span>}
         <span>{formatTimestamp(windowEnd)}</span>

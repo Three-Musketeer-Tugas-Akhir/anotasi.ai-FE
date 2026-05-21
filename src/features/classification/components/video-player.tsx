@@ -31,7 +31,7 @@ export function VideoPlayer({ job }: VideoPlayerProps) {
   return (
     <div id="tour-video-player">
       {/* HTML5 Video Player Container */}
-      <div className="bg-black rounded-xl overflow-hidden shadow-lg aspect-video max-h-[40vh] md:max-h-[45vh] lg:max-h-[50vh] relative z-0 flex items-center justify-center group">
+      <div className="bg-black rounded-xl overflow-hidden shadow-lg aspect-video max-h-[45vh] lg:max-h-[55vh] xl:max-h-[60vh] relative z-0 flex items-center justify-center group">
 
         {videoUrl ? (
           <video

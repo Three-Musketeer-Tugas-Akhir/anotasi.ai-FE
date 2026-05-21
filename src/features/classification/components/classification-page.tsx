@@ -260,7 +260,7 @@ export function ClassificationPage() {
   return (
     <>
       {/* Top Header */}
-      <div className="px-6 py-4 bg-white border-b border-gray-200 flex-shrink-0 flex justify-between items-center">
+      <div className="px-6 py-3 lg:py-4 bg-white border-b border-gray-200 flex-shrink-0 flex justify-between items-center">
         <div>
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <Layout size={20} className="text-teal-600" />
@@ -307,15 +307,19 @@ export function ClassificationPage() {
         />
 
         {/* Right Panel — Player + Categorisation */}
-        <div id="tour-video-area" className="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50 relative z-10">
+        <div id="tour-video-area" className="flex-1 flex flex-col p-3 lg:p-4 gap-2 lg:gap-3 bg-gray-50 relative z-10 overflow-hidden">
           {selectedJob ? (
             <>
-              <VideoPlayer job={selectedJob} />
-              <CategorizationPanel
-                job={selectedJob}
-                isPending={isPending}
-                onCategorize={handleCategorize}
-              />
+              <div className="flex-shrink-0">
+                <VideoPlayer job={selectedJob} />
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <CategorizationPanel
+                  job={selectedJob}
+                  isPending={isPending}
+                  onCategorize={handleCategorize}
+                />
+              </div>
             </>
           ) : (
             <div className="flex items-center justify-center h-full text-gray-400">
