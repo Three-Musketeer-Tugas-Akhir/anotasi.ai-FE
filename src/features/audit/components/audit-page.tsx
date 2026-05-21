@@ -1,16 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import {
   Table,
   TableBody,
@@ -34,25 +28,29 @@ import {
   User,
   Activity,
   FileText,
-  Eye,
-  Loader2,
   AlertTriangle,
   RotateCcw,
   Download,
   BarChart3,
   Users,
   Calendar,
-  Globe,
-  X,
+  ChevronDown,
+  ChevronUp,
+  PenTool,
+  Mic,
+  Layers,
+  Tag,
+  Wand2,
+  CheckCircle2,
 } from 'lucide-react';
 import { auditApi } from '../audit-api';
 import type {
   AuditLogItem,
   AuditLogListResponse,
-  AuditLogDetailResponse,
   AuditStatsSummary,
   AvailableFilters,
 } from '../types';
+import { AUDIT_MODULES } from '../types';
 
 // ── Action icon/color mapping ──────────────────────────────────────
 
@@ -63,6 +61,12 @@ function getActionStyle(action: string): { color: string; icon: React.ReactNode 
   if (action.includes('role_changed')) return { color: 'bg-purple-50 text-purple-700 border-purple-200', icon: <Shield size={10} /> };
   if (action.includes('cancelled')) return { color: 'bg-amber-50 text-amber-700 border-amber-200', icon: <AlertTriangle size={10} /> };
   if (action.includes('submitted') || action.includes('approved')) return { color: 'bg-teal-50 text-teal-700 border-teal-200', icon: <FileText size={10} /> };
+  if (action.includes('classification')) return { color: 'bg-indigo-50 text-indigo-700 border-indigo-200', icon: <Tag size={10} /> };
+  if (action.includes('voice_annotation')) return { color: 'bg-pink-50 text-pink-700 border-pink-200', icon: <Mic size={10} /> };
+  if (action.includes('jbi_annotation')) return { color: 'bg-cyan-50 text-cyan-700 border-cyan-200', icon: <PenTool size={10} /> };
+  if (action.includes('normalization')) return { color: 'bg-orange-50 text-orange-700 border-orange-200', icon: <Wand2 size={10} /> };
+  if (action.includes('curation')) return { color: 'bg-lime-50 text-lime-700 border-lime-200', icon: <CheckCircle2 size={10} /> };
+  if (action.includes('pipeline')) return { color: 'bg-sky-50 text-sky-700 border-sky-200', icon: <Layers size={10} /> };
   return { color: 'bg-gray-50 text-gray-600 border-gray-200', icon: <Activity size={10} /> };
 }
 
@@ -73,6 +77,52 @@ function formatDate(iso: string): string {
       hour: '2-digit', minute: '2-digit',
     });
   } catch { return iso; }
+}
+
+// ── Expandable Row Detail ──────────────────────────────────────────
+
+function AuditLogDetailRow({ log }: { log: AuditLogItem }) {
+  return (
+    <TableRow className="bg-gray-50/50 border-t-0">
+      <TableCell colSpan={6} className="py-3 px-4">
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Aktor</p>
+              <p className="text-xs font-medium text-gray-800">
+                {log.actor?.email || 'System'}
+              </p>
+              {log.actor?.id && (
+                <p className="text-[10px] font-mono text-gray-400">{log.actor.id}</p>
+              )}
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Resource</p>
+              <p className="text-xs text-gray-700">{log.resource.type}</p>
+              <p className="text-[10px] font-mono text-gray-400">{log.resource.id}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">IP Address</p>
+              <p className="text-xs font-mono text-gray-700">{log.ip_address || '—'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Waktu</p>
+              <p className="text-xs text-gray-700">{formatDate(log.timestamp)}</p>
+            </div>
+          </div>
+
+          {Object.keys(log.details).length > 0 && (
+            <div>
+              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Detail</p>
+              <pre className="bg-white rounded-lg border border-gray-200 p-3 text-xs text-gray-700 overflow-x-auto">
+                {JSON.stringify(log.details, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
 }
 
 // ── Main Component ─────────────────────────────────────────────────
@@ -95,10 +145,22 @@ export function AuditPage() {
   const [pageSize, setPageSize] = useState(20);
   const [actionFilter, setActionFilter] = useState('all');
   const [resourceFilter, setResourceFilter] = useState('all');
+  const [moduleFilter, setModuleFilter] = useState('all');
 
-  // ── Detail Modal ──────────────────────────────────────────────
-  const [selectedLog, setSelectedLog] = useState<AuditLogDetailResponse | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  // ── Expanded Rows ─────────────────────────────────────────────
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const toggleRow = (logId: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(logId)) {
+        next.delete(logId);
+      } else {
+        next.add(logId);
+      }
+      return next;
+    });
+  };
 
   // ── Fetch Logs ────────────────────────────────────────────────
 
@@ -112,18 +174,21 @@ export function AuditPage() {
       };
       if (actionFilter !== 'all') params.action = actionFilter;
       if (resourceFilter !== 'all') params.resource_type = resourceFilter;
+      if (moduleFilter !== 'all') params.module = moduleFilter;
 
       const res: AuditLogListResponse = await auditApi.listLogs(params as never);
       setLogs(res.items);
       setTotal(res.total);
       setPages(res.pages);
+      // Clear expanded rows on new data
+      setExpandedRows(new Set());
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Gagal memuat audit log';
       setError(typeof msg === 'string' ? msg : 'Gagal memuat audit log');
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, actionFilter, resourceFilter]);
+  }, [page, pageSize, actionFilter, resourceFilter, moduleFilter]);
 
   // ── Fetch Stats ───────────────────────────────────────────────
 
@@ -150,20 +215,6 @@ export function AuditPage() {
     }
   }, []);
 
-  // ── View Detail ───────────────────────────────────────────────
-
-  const viewDetail = async (logId: string) => {
-    setDetailLoading(true);
-    try {
-      const detail = await auditApi.getLog(logId);
-      setSelectedLog(detail);
-    } catch {
-      // Silently fail
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
   // ── Export ────────────────────────────────────────────────────
 
   const handleExport = async (format: 'csv' | 'json') => {
@@ -171,6 +222,7 @@ export function AuditPage() {
       const params: Record<string, string | number> = {};
       if (actionFilter !== 'all') params.action = actionFilter;
       if (resourceFilter !== 'all') params.resource_type = resourceFilter;
+      if (moduleFilter !== 'all') params.module = moduleFilter;
       await auditApi.exportLogs(format, params);
     } catch {
       // Silently fail
@@ -257,6 +309,17 @@ export function AuditPage() {
       {/* Filters */}
       <div className="flex items-end gap-3 flex-wrap">
         <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-500">Modul</label>
+          <Combobox
+            options={AUDIT_MODULES.map(m => ({ value: m.value, label: m.label }))}
+            value={moduleFilter || ''}
+            onChange={(v) => { setModuleFilter(v); setPage(1); }}
+            placeholder="Semua Modul"
+            className="w-44 h-9 text-xs"
+          />
+        </div>
+
+        <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Aksi</label>
           <Combobox
             options={[
@@ -327,12 +390,12 @@ export function AuditPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50/50">
+                <TableHead className="w-10"></TableHead>
                 <TableHead className="w-44">Waktu</TableHead>
                 <TableHead className="w-44">Aktor</TableHead>
-                <TableHead className="w-36 text-center">Aksi</TableHead>
+                <TableHead className="w-40 text-center">Aksi</TableHead>
                 <TableHead className="w-28">Resource</TableHead>
                 <TableHead className="w-24 text-center">IP</TableHead>
-                <TableHead className="w-16 text-center">Detail</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -340,12 +403,12 @@ export function AuditPage() {
                 <>
                   {Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-4" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                       <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                     </TableRow>
                   ))}
                 </>
@@ -359,52 +422,59 @@ export function AuditPage() {
               )}
               {!loading && logs.map((log) => {
                 const style = getActionStyle(log.action);
+                const isExpanded = expandedRows.has(log.id);
                 return (
-                  <TableRow key={log.id} className="hover:bg-gray-50/50">
-                    <TableCell>
-                      <div className="flex items-center gap-1.5 text-xs text-gray-600">
-                        <Clock size={11} className="text-gray-400 flex-shrink-0" />
-                        {formatDate(log.timestamp)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {log.actor ? (
-                        <div className="flex items-center gap-1.5">
-                          <User size={12} className="text-gray-400 flex-shrink-0" />
-                          <span className="text-xs font-medium text-gray-800 truncate max-w-[140px]">
-                            {log.actor.email || log.actor.id?.slice(0, 8) || '—'}
-                          </span>
+                  <Fragment key={log.id}>
+                    <TableRow
+                      className="hover:bg-gray-50/50 cursor-pointer"
+                      onClick={() => toggleRow(log.id)}
+                    >
+                      <TableCell className="py-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleRow(log.id); }}
+                          className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                        >
+                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                          <Clock size={11} className="text-gray-400 flex-shrink-0" />
+                          {formatDate(log.timestamp)}
                         </div>
-                      ) : (
-                        <span className="text-xs text-gray-400 italic">System</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="outline" className={`text-[10px] gap-0.5 ${style.color}`}>
-                        {style.icon} {log.action_label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <code className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">
-                        {log.resource.type}
-                      </code>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {log.ip_address ? (
-                        <span className="text-[10px] text-gray-500 font-mono">{log.ip_address}</span>
-                      ) : (
-                        <span className="text-[10px] text-gray-300">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <button
-                        onClick={() => viewDetail(log.id)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
-                      >
-                        <Eye size={14} />
-                      </button>
-                    </TableCell>
-                  </TableRow>
+                      </TableCell>
+                      <TableCell>
+                        {log.actor ? (
+                          <div className="flex items-center gap-1.5">
+                            <User size={12} className="text-gray-400 flex-shrink-0" />
+                            <span className="text-xs font-medium text-gray-800 truncate max-w-[140px]">
+                              {log.actor.email || log.actor.id?.slice(0, 8) || '—'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">System</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className={`text-[10px] gap-0.5 ${style.color}`}>
+                          {style.icon} {log.action_label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <code className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">
+                          {log.resource.type}
+                        </code>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {log.ip_address ? (
+                          <span className="text-[10px] text-gray-500 font-mono">{log.ip_address}</span>
+                        ) : (
+                          <span className="text-[10px] text-gray-300">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                    {isExpanded && <AuditLogDetailRow log={log} />}
+                  </Fragment>
                 );
               })}
             </TableBody>
@@ -444,76 +514,6 @@ export function AuditPage() {
           </PaginationContent>
         </Pagination>
       </div>
-
-      {/* Detail Modal */}
-      <Dialog open={!!selectedLog} onOpenChange={(v) => !v && setSelectedLog(null)}>
-        <DialogContent className="sm:max-w-[560px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <ScrollText size={16} className="text-teal-600" />
-              Detail Log
-            </DialogTitle>
-          </DialogHeader>
-          {detailLoading ? (
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div><Skeleton className="h-3 w-16 mb-1" /><Skeleton className="h-4 w-24" /></div>
-                <div><Skeleton className="h-3 w-16 mb-1" /><Skeleton className="h-4 w-20" /></div>
-              </div>
-              <div><Skeleton className="h-3 w-16 mb-1" /><Skeleton className="h-4 w-full" /></div>
-              <div><Skeleton className="h-3 w-16 mb-1" /><Skeleton className="h-20 w-full" /></div>
-            </div>
-          ) : selectedLog && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Waktu</p>
-                  <p className="text-sm font-medium text-gray-800">{formatDate(selectedLog.timestamp)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Aksi</p>
-                  <Badge variant="outline" className={`text-[10px] ${getActionStyle(selectedLog.action).color}`}>
-                    {selectedLog.action_label}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Aktor</p>
-                  <p className="text-sm text-gray-700">
-                    {selectedLog.actor?.email || 'System'}
-                  </p>
-                  {selectedLog.actor?.id && (
-                    <p className="text-[10px] font-mono text-gray-400">{selectedLog.actor.id}</p>
-                  )}
-                </div>
-                <div>
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Resource</p>
-                  <p className="text-sm text-gray-700">{selectedLog.resource.type}</p>
-                  <p className="text-[10px] font-mono text-gray-400">{selectedLog.resource.id}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">IP Address</p>
-                  <p className="text-sm font-mono text-gray-700">{selectedLog.ip_address || '—'}</p>
-                </div>
-                {selectedLog.user_agent && (
-                  <div className="col-span-2">
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">User Agent</p>
-                    <p className="text-xs text-gray-600 break-all">{selectedLog.user_agent}</p>
-                  </div>
-                )}
-              </div>
-
-              {Object.keys(selectedLog.details).length > 0 && (
-                <div>
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Detail</p>
-                  <pre className="bg-gray-50 rounded-lg border border-gray-200 p-3 text-xs text-gray-700 overflow-x-auto">
-                    {JSON.stringify(selectedLog.details, null, 2)}
-                  </pre>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

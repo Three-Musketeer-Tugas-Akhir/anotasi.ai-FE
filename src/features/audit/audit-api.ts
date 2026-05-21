@@ -9,6 +9,7 @@ import type {
   UserActivitySummary,
   ResourceActivitySummary,
   AvailableFilters,
+  AuditModule,
 } from './types';
 
 /**

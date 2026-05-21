@@ -44,9 +44,24 @@ export interface AuditLogListParams {
   resource_type?: string;
   resource_id?: string;
   ip_address?: string;
+  module?: string;
   page?: number;
   page_size?: number;
 }
+
+// ── Module Filter Constants ─────────────────────────────────────────
+
+export const AUDIT_MODULES = [
+  { value: 'all', label: 'Semua Modul' },
+  { value: 'pipeline', label: 'Pipeline' },
+  { value: 'classification', label: 'Klasifikasi' },
+  { value: 'voice_annotation', label: 'Anotasi Suara' },
+  { value: 'jbi_annotation', label: 'Anotasi JBI' },
+  { value: 'normalization', label: 'Normalisasi' },
+  { value: 'curation', label: 'Kurasi' },
+] as const;
+
+export type AuditModule = (typeof AUDIT_MODULES)[number]['value'];
 
 // ── Detail Response ─────────────────────────────────────────────────
 
