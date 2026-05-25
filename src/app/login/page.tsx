@@ -45,7 +45,7 @@ export default function LoginPage() {
           {/* Logo */}
           <div className="flex items-center gap-3 mb-12">
             <div className="w-12 h-12 bg-gradient-to-br from-teal-400 to-teal-600 rounded-xl flex items-center justify-center font-bold text-xl text-white shadow-xl shadow-teal-900/40">
-              A
+              🤟
             </div>
             <span className="text-white font-bold text-2xl tracking-tight">Gestura.ai</span>
           </div>
@@ -83,7 +83,7 @@ export default function LoginPage() {
           {/* Mobile Logo */}
           <div className="flex items-center gap-2.5 mb-8 lg:hidden">
             <div className="w-10 h-10 bg-gradient-to-br from-teal-400 to-teal-600 rounded-lg flex items-center justify-center font-bold text-lg text-white shadow-lg">
-              A
+              🤟
             </div>
             <span className="font-bold text-xl tracking-tight text-gray-900">Gestura.ai</span>
           </div>
