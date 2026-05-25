@@ -41,10 +41,10 @@ tokens:
     xl: "2rem"
 ---
 
-# Design System: Anotasi.ai
+# Design System: Gestura.ai
 
 ## Visual Concept
-Anotasi.ai is a professional-grade annotation and curation platform designed for the complex task of processing Sign Language (SIBI) datasets. The visual language strikes a balance between high-density data representation and an approachable, clean aesthetic that reduces cognitive load during long annotation sessions.
+Gestura.ai is a professional-grade annotation and curation platform designed for the complex task of processing Sign Language (SIBI) datasets. The visual language strikes a balance between high-density data representation and an approachable, clean aesthetic that reduces cognitive load during long annotation sessions.
 
 ## Color Strategy
 The platform utilizes a confident **Teal** as its primary brand color. This shade is highly visible but easier on the eyes than aggressive blues or reds, making it ideal for a workspace where users spend hours staring at video frames. 

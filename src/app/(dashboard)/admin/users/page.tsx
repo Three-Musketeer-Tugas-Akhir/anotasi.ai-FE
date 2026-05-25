@@ -117,7 +117,7 @@ export default function AdminUsersPage() {
 
   // Preview generated email and password based on names
   const previewEmail = (createFirstName && createLastName) 
-    ? `${createFirstName.toLowerCase()}.${createLastName.toLowerCase()}@anotasi.ai` 
+    ? `${createFirstName.toLowerCase()}.${createLastName.toLowerCase()}@gestura.ai` 
     : '';
   const previewPassword = createFirstName 
     ? `${createFirstName.charAt(0).toUpperCase() + createFirstName.slice(1).toLowerCase()}123!` 

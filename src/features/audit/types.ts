@@ -124,6 +124,7 @@ export interface ResourceActivitySummary {
 export interface AvailableFilters {
   actions: Array<{ action: string; label: string }>;
   resource_types: string[];
+  actors?: Array<{ id: string; email: string }>;
 }
 
 // ── Action Constants ────────────────────────────────────────────────

@@ -4,15 +4,8 @@ import { useState, useEffect, useCallback, Fragment } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Pagination,
   PaginationContent,
@@ -83,45 +76,45 @@ function formatDate(iso: string): string {
 
 function AuditLogDetailRow({ log }: { log: AuditLogItem }) {
   return (
-    <TableRow className="bg-gray-50/50 border-t-0">
-      <TableCell colSpan={6} className="py-3 px-4">
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <tr className="bg-slate-50/50 border-t-0">
+      <td colSpan={6} className="py-4 px-6 border-t border-slate-100 shadow-inner">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Aktor</p>
-              <p className="text-xs font-medium text-gray-800">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5 font-bold">Aktor</p>
+              <p className="text-xs font-medium text-slate-800">
                 {log.actor?.email || 'System'}
               </p>
               {log.actor?.id && (
-                <p className="text-[10px] font-mono text-gray-400">{log.actor.id}</p>
+                <p className="text-[10px] font-mono text-slate-400 mt-0.5">{log.actor.id}</p>
               )}
             </div>
             <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Resource</p>
-              <p className="text-xs text-gray-700">{log.resource.type}</p>
-              <p className="text-[10px] font-mono text-gray-400">{log.resource.id}</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5 font-bold">Resource</p>
+              <p className="text-xs text-slate-700">{log.resource.type}</p>
+              <p className="text-[10px] font-mono text-slate-400 mt-0.5">{log.resource.id}</p>
             </div>
             <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">IP Address</p>
-              <p className="text-xs font-mono text-gray-700">{log.ip_address || '—'}</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5 font-bold">IP Address</p>
+              <p className="text-xs font-mono text-slate-700">{log.ip_address || '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Waktu</p>
-              <p className="text-xs text-gray-700">{formatDate(log.timestamp)}</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5 font-bold">Waktu</p>
+              <p className="text-xs text-slate-700">{formatDate(log.timestamp)}</p>
             </div>
           </div>
 
           {Object.keys(log.details).length > 0 && (
             <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Detail</p>
-              <pre className="bg-white rounded-lg border border-gray-200 p-3 text-xs text-gray-700 overflow-x-auto">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1.5 font-bold">Detail</p>
+              <pre className="bg-white rounded-lg border border-slate-200 p-3.5 text-[11px] text-slate-700 overflow-x-auto shadow-sm">
                 {JSON.stringify(log.details, null, 2)}
               </pre>
             </div>
           )}
         </div>
-      </TableCell>
-    </TableRow>
+      </td>
+    </tr>
   );
 }
 
@@ -146,6 +139,7 @@ export function AuditPage() {
   const [actionFilter, setActionFilter] = useState('all');
   const [resourceFilter, setResourceFilter] = useState('all');
   const [moduleFilter, setModuleFilter] = useState('all');
+  const [actorFilter, setActorFilter] = useState('all');
 
   // ── Expanded Rows ─────────────────────────────────────────────
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -175,6 +169,7 @@ export function AuditPage() {
       if (actionFilter !== 'all') params.action = actionFilter;
       if (resourceFilter !== 'all') params.resource_type = resourceFilter;
       if (moduleFilter !== 'all') params.module = moduleFilter;
+      if (actorFilter !== 'all') params.actor_id = actorFilter;
 
       const res: AuditLogListResponse = await auditApi.listLogs(params as never);
       setLogs(res.items);
@@ -188,7 +183,7 @@ export function AuditPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, actionFilter, resourceFilter, moduleFilter]);
+  }, [page, pageSize, actionFilter, resourceFilter, moduleFilter, actorFilter]);
 
   // ── Fetch Stats ───────────────────────────────────────────────
 
@@ -223,6 +218,7 @@ export function AuditPage() {
       if (actionFilter !== 'all') params.action = actionFilter;
       if (resourceFilter !== 'all') params.resource_type = resourceFilter;
       if (moduleFilter !== 'all') params.module = moduleFilter;
+      if (actorFilter !== 'all') params.actor_id = actorFilter;
       await auditApi.exportLogs(format, params);
     } catch {
       // Silently fail
@@ -348,6 +344,20 @@ export function AuditPage() {
         </div>
 
         <div className="space-y-1">
+          <label className="text-xs font-medium text-gray-500">User</label>
+          <Combobox
+            options={[
+              { value: "all", label: "Semua User" },
+              ...(availableFilters?.actors?.map(u => ({ value: u.id, label: u.email })) || [])
+            ]}
+            value={actorFilter || ''}
+            onChange={(v) => { setActorFilter(v); setPage(1); }}
+            placeholder="Semua User"
+            className="w-48 h-9 text-xs"
+          />
+        </div>
+
+        <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Per Halaman</label>
           <Combobox
             options={[
@@ -379,108 +389,108 @@ export function AuditPage() {
       )}
 
       {/* Logs Table */}
-      <Card className="border-gray-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold text-gray-800 flex items-center gap-2">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+          <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
             <Clock size={16} className="text-teal-600" />
             Log Aktivitas
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-gray-50/50">
-                <TableHead className="w-10"></TableHead>
-                <TableHead className="w-44">Waktu</TableHead>
-                <TableHead className="w-44">Aktor</TableHead>
-                <TableHead className="w-40 text-center">Aksi</TableHead>
-                <TableHead className="w-28">Resource</TableHead>
-                <TableHead className="w-24 text-center">IP</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          </h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                <th className="px-6 py-3 w-10 text-center"></th>
+                <th className="px-6 py-3 w-44">Waktu</th>
+                <th className="px-6 py-3 w-44">Aktor</th>
+                <th className="px-6 py-3 w-40 text-center">Aksi</th>
+                <th className="px-6 py-3 w-28">Resource</th>
+                <th className="px-6 py-3 w-24 text-center">IP</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm">
               {loading && (
                 <>
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell><Skeleton className="h-4 w-4" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    </TableRow>
+                    <tr key={i} className="hover:bg-slate-50/50">
+                      <td className="px-6 py-4 text-center"><Skeleton className="h-4 w-4 inline-block" /></td>
+                      <td className="px-6 py-4"><Skeleton className="h-4 w-24" /></td>
+                      <td className="px-6 py-4"><Skeleton className="h-4 w-20" /></td>
+                      <td className="px-6 py-4 text-center"><Skeleton className="h-6 w-20 rounded-full inline-block" /></td>
+                      <td className="px-6 py-4"><Skeleton className="h-4 w-16" /></td>
+                      <td className="px-6 py-4 text-center"><Skeleton className="h-4 w-20 inline-block" /></td>
+                    </tr>
                   ))}
                 </>
               )}
               {!loading && logs.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-gray-400">
+                <tr>
+                  <td colSpan={6} className="text-center py-12 text-slate-400">
                     Tidak ada log yang ditemukan.
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               )}
               {!loading && logs.map((log) => {
                 const style = getActionStyle(log.action);
                 const isExpanded = expandedRows.has(log.id);
                 return (
                   <Fragment key={log.id}>
-                    <TableRow
-                      className="hover:bg-gray-50/50 cursor-pointer"
+                    <tr
+                      className={`hover:bg-slate-50/80 cursor-pointer transition-colors group ${isExpanded ? 'bg-slate-50' : ''}`}
                       onClick={() => toggleRow(log.id)}
                     >
-                      <TableCell className="py-2">
+                      <td className="px-6 py-4 text-center">
                         <button
                           onClick={(e) => { e.stopPropagation(); toggleRow(log.id); }}
-                          className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                          className="p-1 rounded text-slate-400 group-hover:text-teal-600 transition-colors"
                         >
                           {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         </button>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-xs text-gray-600">
-                          <Clock size={11} className="text-gray-400 flex-shrink-0" />
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                          <Clock size={11} className="text-slate-400 flex-shrink-0" />
                           {formatDate(log.timestamp)}
                         </div>
-                      </TableCell>
-                      <TableCell>
+                      </td>
+                      <td className="px-6 py-4">
                         {log.actor ? (
                           <div className="flex items-center gap-1.5">
-                            <User size={12} className="text-gray-400 flex-shrink-0" />
-                            <span className="text-xs font-medium text-gray-800 truncate max-w-[140px]">
+                            <User size={12} className="text-slate-400 flex-shrink-0" />
+                            <span className="text-xs font-medium text-slate-800 truncate max-w-[140px]">
                               {log.actor.email || log.actor.id?.slice(0, 8) || '—'}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-xs text-gray-400 italic">System</span>
+                          <span className="text-xs text-slate-400 italic">System</span>
                         )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="outline" className={`text-[10px] gap-0.5 ${style.color}`}>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] uppercase tracking-wider font-bold border shadow-sm ${style.color}`}>
                           {style.icon} {log.action_label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <code className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <code className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono border border-slate-200">
                           {log.resource.type}
                         </code>
-                      </TableCell>
-                      <TableCell className="text-center">
+                      </td>
+                      <td className="px-6 py-4 text-center">
                         {log.ip_address ? (
-                          <span className="text-[10px] text-gray-500 font-mono">{log.ip_address}</span>
+                          <span className="text-[10px] text-slate-500 font-mono">{log.ip_address}</span>
                         ) : (
-                          <span className="text-[10px] text-gray-300">—</span>
+                          <span className="text-[10px] text-slate-300">—</span>
                         )}
-                      </TableCell>
-                    </TableRow>
+                      </td>
+                    </tr>
                     {isExpanded && <AuditLogDetailRow log={log} />}
                   </Fragment>
                 );
               })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* Pagination */}
       <div className="flex items-center justify-between border-t border-gray-100 pt-4 mt-4">

@@ -6,7 +6,7 @@ export const globalSidebarTour: TourConfig = {
     {
       targetId: '#tour-sidebar',
       title: 'Navigasi Utama',
-      content: 'Selamat datang di Anotasi.ai! Ini adalah sidebar navigasi utama. Gunakan menu ini untuk berpindah antar modul: Klasifikasi JBI, Pemrosesan, Deteksi Suara, Anotasi, Standarisasi, dan Unduh Dataset.',
+      content: 'Selamat datang di Gestura.ai! Ini adalah sidebar navigasi utama. Gunakan menu ini untuk berpindah antar modul: Klasifikasi JBI, Pemrosesan, Deteksi Suara, Anotasi, Standarisasi, dan Unduh Dataset.',
     }
   ]
 };

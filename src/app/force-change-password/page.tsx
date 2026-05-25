@@ -67,7 +67,7 @@ export default function ForceChangePasswordPage() {
             <div className="w-12 h-12 bg-gradient-to-br from-teal-400 to-teal-600 rounded-xl flex items-center justify-center font-bold text-xl text-white shadow-xl shadow-teal-900/40">
               A
             </div>
-            <span className="text-white font-bold text-2xl tracking-tight">Anotasi.ai</span>
+            <span className="text-white font-bold text-2xl tracking-tight">Gestura.ai</span>
           </div>
 
           {/* Tagline */}
@@ -91,7 +91,7 @@ export default function ForceChangePasswordPage() {
             <div className="w-10 h-10 bg-gradient-to-br from-teal-400 to-teal-600 rounded-lg flex items-center justify-center font-bold text-lg text-white shadow-lg">
               A
             </div>
-            <span className="font-bold text-xl tracking-tight text-gray-900">Anotasi.ai</span>
+            <span className="font-bold text-xl tracking-tight text-gray-900">Gestura.ai</span>
           </div>
 
           <div className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100 p-8">

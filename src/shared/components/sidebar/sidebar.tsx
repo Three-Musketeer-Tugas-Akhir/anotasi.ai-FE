@@ -107,7 +107,7 @@ export function Sidebar() {
             <div className="w-8 h-8 bg-gradient-to-br from-teal-400 to-teal-600 rounded-lg flex items-center justify-center font-bold text-sm shadow-lg shadow-teal-900/30">
               A
             </div>
-            <span className="font-bold text-base tracking-tight">Anotasi.ai</span>
+            <span className="font-bold text-base tracking-tight">Gestura.ai</span>
           </div>
         ) : (
           <button 
