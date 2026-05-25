@@ -18,8 +18,10 @@ import {
   AlertCircle,
   ChevronRight,
   Send,
+  History,
 } from 'lucide-react';
 import type { TranscriptUtterance, UtteranceCorrection } from '../annotation-types';
+import { EditHistoryDrawer } from './edit-history-drawer';
 
 interface PropertiesPanelProps {
   originalUtterances: TranscriptUtterance[];
@@ -84,6 +86,7 @@ export function PropertiesPanel({
 }: PropertiesPanelProps) {
   const [resetting, setResetting] = useState(false);
   const [reverting, setReverting] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const reviewBadge = getReviewBadge(reviewStatus);
   const isPendingReview = reviewStatus === 'SUBMITTED' || reviewStatus === 'PENDING';
@@ -136,21 +139,34 @@ export function PropertiesPanel({
           )}
         </div>
 
-        {activeEdit ? (
-          activeEdit.status === 'OK' ? (
-            <span className="px-3 py-1 bg-teal-100 text-teal-700 font-bold text-xs rounded border border-teal-200 flex items-center gap-1">
-              <CheckCircle2 size={14} /> SELESAI
-            </span>
-          ) : activeEdit.status === 'DRAFT' ? (
-            <span className="px-3 py-1 bg-amber-100 text-amber-700 font-bold text-xs rounded border border-amber-200">
-              DRAFT
-            </span>
-          ) : (
-            <span className="px-3 py-1 bg-slate-100 text-slate-600 font-bold text-xs rounded border border-slate-200">
-              BELUM DIKERJAKAN
-            </span>
-          )
-        ) : null}
+        <div className="flex flex-col items-end gap-2">
+          {activeEdit ? (
+            activeEdit.status === 'OK' ? (
+              <span className="px-3 py-1 bg-teal-100 text-teal-700 font-bold text-xs rounded border border-teal-200 flex items-center gap-1">
+                <CheckCircle2 size={14} /> SELESAI
+              </span>
+            ) : activeEdit.status === 'DRAFT' ? (
+              <span className="px-3 py-1 bg-amber-100 text-amber-700 font-bold text-xs rounded border border-amber-200">
+                DRAFT
+              </span>
+            ) : (
+              <span className="px-3 py-1 bg-slate-100 text-slate-600 font-bold text-xs rounded border border-slate-200">
+                BELUM DIKERJAKAN
+              </span>
+            )
+          ) : null}
+          {activeEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsHistoryOpen(true)}
+              className="h-7 text-[11px] font-bold text-slate-600 bg-white hover:bg-slate-50 flex items-center gap-1"
+            >
+              <History size={12} />
+              Riwayat Edit
+            </Button>
+          )}
+        </div>
       </div>
 
       {reviewBadge && (
@@ -278,6 +294,14 @@ export function PropertiesPanel({
             </p>
           )}
         </div>
+      )}
+
+      {activeEdit && activeEdit.segment_id && (
+        <EditHistoryDrawer
+          isOpen={isHistoryOpen}
+          onClose={() => setIsHistoryOpen(false)}
+          segmentId={activeEdit.segment_id}
+        />
       )}
     </div>
   );
