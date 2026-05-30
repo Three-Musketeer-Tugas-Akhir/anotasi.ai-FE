@@ -5,7 +5,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Combobox } from '@/components/ui/combobox';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Cog,
@@ -285,22 +284,20 @@ export function PipelinePage() {
                 Daftar Job ({totalJobs})
               </p>
               <div className="flex items-center gap-2">
-                <Combobox
-                  options={[
-                    { value: "ALL", label: "Semua" },
-                    { value: "QUEUED", label: "Antrian" },
-                    { value: "DETECTING", label: "Deteksi" },
-                    { value: "TRANSCRIBING", label: "ASR" },
-                    { value: "CROPPING", label: "Cropping" },
-                    { value: "READY_FOR_ANNOTATION", label: "Selesai" },
-                    { value: "FAILED", label: "Gagal" },
-                    { value: "CANCELLED", label: "Dibatalkan" }
-                  ]}
-                  value={statusFilter || "ALL"}
-                  placeholder="Semua"
-                  onChange={(v) => { setStatusFilter(v === 'ALL' ? '' : v); setPage(1); }}
-                  className="h-8 text-xs w-[120px]"
-                />
+                <select
+                  value={statusFilter || ""}
+                  onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+                  className="h-8 text-xs w-[140px] bg-white border border-slate-200 rounded-md px-2 text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer"
+                >
+                  <option value="">Semua Status</option>
+                  <option value="QUEUED">Antrian</option>
+                  <option value="DETECTING">Deteksi</option>
+                  <option value="TRANSCRIBING">ASR</option>
+                  <option value="CROPPING">Cropping</option>
+                  <option value="READY_FOR_ANNOTATION">Selesai</option>
+                  <option value="FAILED">Gagal</option>
+                  <option value="CANCELLED">Dibatalkan</option>
+                </select>
                 <button
                   onClick={() => fetchJobs()}
                   className="p-1.5 rounded-md text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
