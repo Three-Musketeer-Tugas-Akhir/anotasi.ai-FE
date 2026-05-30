@@ -10,7 +10,6 @@ import {
   PaginationContent,
   PaginationItem,
 } from '@/components/ui/pagination';
-import { Combobox } from '@/components/ui/combobox';
 import {
   ScrollText,
   ChevronLeft,
@@ -305,70 +304,70 @@ export function AuditPage() {
       <div className="flex items-end gap-3 flex-wrap">
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Modul</label>
-          <Combobox
-            options={AUDIT_MODULES.map(m => ({ value: m.value, label: m.label }))}
-            value={moduleFilter || ''}
-            onChange={(v) => { setModuleFilter(v); setPage(1); }}
-            placeholder="Semua Modul"
-            className="w-44 h-9 text-xs"
-          />
+          <select
+            value={moduleFilter}
+            onChange={(e) => { setModuleFilter(e.target.value); setPage(1); }}
+            className="h-9 text-xs w-44 bg-white border border-slate-200 rounded-md px-2 text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer"
+          >
+            {AUDIT_MODULES.map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Aksi</label>
-          <Combobox
-            options={[
-              { value: "all", label: "Semua Aksi" },
-              ...(availableFilters?.actions.map(a => ({ value: a.action, label: a.label })) || [])
-            ]}
-            value={actionFilter || ''}
-            onChange={(v) => { setActionFilter(v); setPage(1); }}
-            placeholder="Semua Aksi"
-            className="w-48 h-9 text-xs"
-          />
+          <select
+            value={actionFilter}
+            onChange={(e) => { setActionFilter(e.target.value); setPage(1); }}
+            className="h-9 text-xs w-48 bg-white border border-slate-200 rounded-md px-2 text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer"
+          >
+            <option value="all">Semua Aksi</option>
+            {availableFilters?.actions.map(a => (
+              <option key={a.action} value={a.action}>{a.label}</option>
+            ))}
+          </select>
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Resource</label>
-          <Combobox
-            options={[
-              { value: "all", label: "Semua" },
-              ...(availableFilters?.resource_types.map(rt => ({ value: rt, label: rt })) || [])
-            ]}
-            value={resourceFilter || ''}
-            onChange={(v) => { setResourceFilter(v); setPage(1); }}
-            placeholder="Semua"
-            className="w-36 h-9 text-xs"
-          />
+          <select
+            value={resourceFilter}
+            onChange={(e) => { setResourceFilter(e.target.value); setPage(1); }}
+            className="h-9 text-xs w-36 bg-white border border-slate-200 rounded-md px-2 text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer"
+          >
+            <option value="all">Semua</option>
+            {availableFilters?.resource_types.map(rt => (
+              <option key={rt} value={rt}>{rt}</option>
+            ))}
+          </select>
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">User</label>
-          <Combobox
-            options={[
-              { value: "all", label: "Semua User" },
-              ...(availableFilters?.actors?.map(u => ({ value: u.id, label: u.email })) || [])
-            ]}
-            value={actorFilter || ''}
-            onChange={(v) => { setActorFilter(v); setPage(1); }}
-            placeholder="Semua User"
-            className="w-48 h-9 text-xs"
-          />
+          <select
+            value={actorFilter}
+            onChange={(e) => { setActorFilter(e.target.value); setPage(1); }}
+            className="h-9 text-xs w-48 bg-white border border-slate-200 rounded-md px-2 text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer"
+          >
+            <option value="all">Semua User</option>
+            {availableFilters?.actors?.map(u => (
+              <option key={u.id} value={u.id}>{u.email}</option>
+            ))}
+          </select>
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-500">Per Halaman</label>
-          <Combobox
-            options={[
-              { value: "10", label: "10" },
-              { value: "20", label: "20" },
-              { value: "50", label: "50" }
-            ]}
-            value={String(pageSize)}
-            onChange={(v) => { setPageSize(Number(v)); setPage(1); }}
-            placeholder="Pilih..."
-            className="w-24 h-9 text-xs"
-          />
+          <select
+            value={pageSize}
+            onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+            className="h-9 text-xs w-24 bg-white border border-slate-200 rounded-md px-2 text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer"
+          >
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+          </select>
         </div>
 
         <Badge variant="outline" className="h-9 px-3 bg-gray-50 text-gray-600 border-gray-200 gap-1">
