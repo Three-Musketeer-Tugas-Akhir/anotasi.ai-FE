@@ -92,6 +92,10 @@ export function CurationPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const [dictOpen, setDictOpen] = useState(true);
   const [normalizing, setNormalizing] = useState(false);
@@ -172,12 +176,16 @@ export function CurationPage() {
   // ── Derived state ──────────────────────────────────────────────────
 
   const activeVideo = videos.find((v) => v.id === activeVideoId) ?? null;
-  const filtered = videos.filter(
-    (v) =>
-      !search ||
-      v.filename.toLowerCase().includes(search.toLowerCase()) ||
-      v.source.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = videos.filter((v) => {
+    const matchSearch = !search || v.filename.toLowerCase().includes(search.toLowerCase()) || v.source.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = !statusFilter || v.status === statusFilter;
+    const matchCategory = !categoryFilter || (categoryFilter === 'NONE' ? !v.category : v.category === categoryFilter);
+    return matchSearch && matchStatus && matchCategory;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const validCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedVideos = filtered.slice((validCurrentPage - 1) * itemsPerPage, validCurrentPage * itemsPerPage);
 
   const counts = {
     needsCuration: videos.filter((v) => v.status === 'ANNOTATED' || v.status === 'NORMALIZING').length,
@@ -332,11 +340,8 @@ export function CurationPage() {
             <div className="bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
               <AlertTriangle size={14} /> {counts.needsCuration} Perlu Kurasi
             </div>
-            <div className="bg-teal-50 text-teal-700 border border-teal-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
-              <Wand2 size={14} /> {counts.normalized} Normalized
-            </div>
             <div className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
-              <CheckCircle2 size={14} /> {counts.approved} Approved
+              <CheckCircle2 size={14} /> {counts.approved} Disetujui
             </div>
             <button
               onClick={fetchVideos}
@@ -348,16 +353,38 @@ export function CurationPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               placeholder="Cari video atau sumber..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
               className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm transition-all"
             />
           </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+            className="h-[42px] text-sm w-[150px] bg-white border border-slate-200 rounded-lg px-3 text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer shadow-sm"
+          >
+            <option value="">Semua Status</option>
+            <option value="ANNOTATED">Perlu Kurasi</option>
+            <option value="READY_TO_BE_NORMALIZED">Siap Normalisasi</option>
+            <option value="NORMALIZING">Memproses</option>
+            <option value="NORMALIZED">Dinormalisasi</option>
+            <option value="READY_TO_EXPORT">Siap Export</option>
+          </select>
+          <select
+            value={categoryFilter}
+            onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
+            className="h-[42px] text-sm w-[150px] bg-white border border-slate-200 rounded-lg px-3 text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer shadow-sm"
+          >
+            <option value="">Semua Kategori</option>
+            <option value="SIBI">SIBI</option>
+            <option value="BISINDO">BISINDO</option>
+            <option value="NONE">Tidak Ada</option>
+          </select>
         </div>
 
         {videos.length === 0 ? (
@@ -385,9 +412,9 @@ export function CurationPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
-                  {filtered.map((v, i) => (
+                  {paginatedVideos.map((v, i) => (
                     <tr key={v.id} className={`hover:bg-slate-50 transition-colors ${v.status === 'READY_TO_EXPORT' ? 'bg-emerald-50/30' : v.status === 'NORMALIZED' ? 'bg-teal-50/20' : ''}`}>
-                      <td className="px-6 py-4 text-center text-slate-400 font-medium">{i + 1}</td>
+                      <td className="px-6 py-4 text-center text-slate-400 font-medium">{((validCurrentPage - 1) * itemsPerPage) + i + 1}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <FileText size={16} className="text-slate-400 flex-shrink-0" />
@@ -429,12 +456,35 @@ export function CurationPage() {
                   ))}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-slate-400 font-medium">Tidak ada video yang cocok dengan pencarian.</td>
+                      <td colSpan={5} className="px-6 py-12 text-center text-slate-400 font-medium">Tidak ada video yang cocok dengan kriteria pencarian/filter.</td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
+            {totalPages > 1 && (
+              <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <span className="text-sm text-slate-500">
+                  Menampilkan {((validCurrentPage - 1) * itemsPerPage) + 1}-{Math.min(validCurrentPage * itemsPerPage, filtered.length)} dari {filtered.length} video
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={validCurrentPage === 1}
+                    className="px-3 py-1.5 text-sm font-medium border border-slate-200 rounded-md bg-white text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+                  >
+                    Sebelumnya
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={validCurrentPage === totalPages}
+                    className="px-3 py-1.5 text-sm font-medium border border-slate-200 rounded-md bg-white text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+                  >
+                    Selanjutnya
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
