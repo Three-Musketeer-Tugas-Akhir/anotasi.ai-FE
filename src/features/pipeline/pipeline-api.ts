@@ -504,14 +504,34 @@ export async function tusUploadFile(
 
     // Wait for at least one to complete before launching more
     if (inFlight.size > 0) {
-      const settled = await Promise.race(
-        [...inFlight.entries()].map(([idx, p]) => p.then(() => idx).catch(() => idx))
+      const [settled, success, error] = await Promise.race(
+        [...inFlight.entries()].map(([idx, p]) =>
+          p.then(() => [idx, true, null] as const)
+           .catch((err) => [idx, false, err] as const)
+        )
       );
       inFlight.delete(settled);
+
+      if (!success) {
+        // Cancel remaining in-flight uploads and abort
+        const remaining = [...inFlight.values()];
+        inFlight.clear();
+        await Promise.allSettled(remaining);
+        throw error;
+      }
     }
   }
 
-  console.log(`[TUS] All chunks uploaded. Polling for assembly...`);
+  // Verify all chunks were actually received by server before polling
+  const finalOffset = await pipelineApi.tusGetOffset(uploadId);
+  if (finalOffset < totalSize) {
+    throw new Error(
+      `Upload incomplete: server reports ${finalOffset}/${totalSize} bytes. ` +
+      `Some chunks may have failed to upload.`
+    );
+  }
+
+  console.log(`[TUS] All chunks uploaded and verified. Polling for assembly...`);
 
   // 5. Poll assembly status until job is created
   if (onProgress) onProgress(99);
