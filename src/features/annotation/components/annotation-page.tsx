@@ -448,8 +448,36 @@ export function AnnotationPage() {
       // 2. Find unique segment IDs
       const uniqueSegmentIds = Array.from(new Set(utteranceEdits.map((u) => u.segment_id).filter(Boolean))) as string[];
       
-      // 3. Submit all segments
-      await Promise.all(uniqueSegmentIds.map(sid => annotationApi.submitForReview(sid)));
+      // 3. Submit all segments sequentially to handle specific API requirements
+      let needsConfirmation = false;
+      let failedSegments: string[] = [];
+
+      for (const sid of uniqueSegmentIds) {
+        try {
+          await annotationApi.submitForReview(sid);
+        } catch (err: any) {
+          const detail = err?.response?.data?.detail || '';
+          if (typeof detail === 'string' && detail.includes('confirm_no_changes=true')) {
+            needsConfirmation = true;
+            failedSegments.push(sid);
+          } else {
+            throw err;
+          }
+        }
+      }
+
+      if (needsConfirmation) {
+        if (confirm('Anda tidak melakukan perubahan apapun pada teks (sama persis dengan ASR). Yakin ingin men-submit ini sebagai hasil akhir?')) {
+          setActionMessage('Men-submit anotasi dengan konfirmasi tanpa perubahan...');
+          for (const sid of failedSegments) {
+            await annotationApi.submitForReview(sid, { confirm_no_changes: true });
+          }
+        } else {
+          setIsSaving(false);
+          setActionMessage('❌ Submit dibatalkan. Silakan edit teks terlebih dahulu.');
+          return;
+        }
+      }
       
       setActionMessage('✅ Anotasi berhasil di-submit');
       await loadJob(selectedJobId);
