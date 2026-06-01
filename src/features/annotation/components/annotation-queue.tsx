@@ -168,11 +168,9 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('ASSIGNED,IN_PROGRESS');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-
 
   // Submissions state
   const [submissions, setSubmissions] = useState<ReviewStatusResponse[]>([]);
@@ -191,8 +189,6 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
     const completedCount = items.filter((i) => i.status === QUEUE_STATUS.COMPLETED).length;
     return { draftCount, newCount, completedCount };
   }, [items]);
-
-
 
   // ── Fetch Queue ───────────────────────────────────────────────
 
@@ -253,8 +249,6 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
   }, [fetchQueue, tab]);
 
   // ── Handlers ──────────────────────────────────────────────────
-
-
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -331,12 +325,13 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
           <div className="px-3 py-2.5 border-b border-gray-100 flex items-center gap-2">
             <Combobox
               options={[
+                { value: "ASSIGNED,IN_PROGRESS", label: "Aktif (Belum Selesai)" },
                 { value: "all", label: "Semua Status" },
                 { value: "ASSIGNED", label: "Menunggu" },
                 { value: "IN_PROGRESS", label: "Dikerjakan" },
                 { value: "COMPLETED", label: "Selesai" }
               ]}
-              value={statusFilter || ''}
+              value={statusFilter}
               onChange={(v) => { setStatusFilter(v); setPage(1); }}
               placeholder="Filter status..."
               className="flex-1 h-8 text-xs bg-white text-slate-700"
@@ -467,19 +462,20 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
               return (
                 <button
                   key={sub.review_id}
-                  onClick={() => onSelectJob(sub.segment_id)} /* Note: The backend still treats submission by segment_id, but if user clicks submission we might need to route to job or handle it differently. Keep as is for now or find the job_id. */
+                  onClick={() => sub.job_id ? onSelectJob(sub.job_id) : onSelectJob(sub.segment_id)}
                   className="block w-full text-left px-4 py-3.5 border-b border-gray-100 hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-gray-400 font-mono">
-                      #{sub.segment_id.slice(0, 8)}
+                    <span className="text-[12px] font-semibold text-gray-800 line-clamp-1 flex-1 mr-2" title={sub.original_filename || 'Unknown'}>
+                      {sub.original_filename ? formatFilename(sub.original_filename, 25) : `#${sub.segment_id.slice(0, 8)}`}
                     </span>
-                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${statusColor}`}>
+                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${statusColor} shrink-0`}>
                       {sub.status}
                     </Badge>
                   </div>
-                  <p className="text-[10px] text-gray-500">
-                    Submitted: {new Date(sub.submitted_at).toLocaleString('id-ID')}
+                  <p className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
+                    <Clock size={10} />
+                    {new Date(sub.submitted_at).toLocaleString('id-ID')}
                   </p>
                   {sub.feedback && (
                     <p className="text-[10px] text-red-500 mt-1 line-clamp-1">

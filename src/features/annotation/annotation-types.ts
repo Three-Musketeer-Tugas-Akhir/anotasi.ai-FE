@@ -208,6 +208,8 @@ export interface SubmissionStatusResponse {
 
 export interface ReviewStatusResponse {
   segment_id: string;
+  job_id?: string;
+  original_filename?: string;
   review_id: string;
   status: string;
   submitted_at: string;
