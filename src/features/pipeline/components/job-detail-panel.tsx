@@ -91,28 +91,63 @@ interface JobDetailPanelProps {
 function mapJobToStages(job: JobStatusDetailResponse): StageInfo[] {
   const s = job.status;
   const stage = job.current_stage;
+  const hasSegments = (job.total_segments ?? 0) > 0;
 
   const getStageStatus = (stageOrder: number): StageStatus => {
     if (s === JOB_STATUS.CANCELLED) return 'cancelled';
 
-    const currentOrder =
-      (s === JOB_STATUS.QUEUED || s === JOB_STATUS.DETECTING) ? 1
-      : (s === JOB_STATUS.TRANSCRIBING) ? 2
-      : (s === JOB_STATUS.ASR_COMPLETED || s === JOB_STATUS.CROPPING || s === JOB_STATUS.CROPPING_IN_PROGRESS) ? 3
-      : (s === JOB_STATUS.READY_FOR_ANNOTATION || s === JOB_STATUS.NEEDS_VOICE_ANNOTATION || s === JOB_STATUS.VOICE_ANNOTATION_IN_PROGRESS) ? 4
-      : 0;
+    // ── Determine actual pipeline order based on BOTH status and current_stage ──
+    // This fixes the desync where backend status doesn't always reflect the true stage
+    let currentOrder = 0;
+    if (s === JOB_STATUS.UPLOADED) {
+      currentOrder = 0;
+    } else if (s === JOB_STATUS.QUEUED) {
+      currentOrder = 1; // Waiting for detection
+    } else if (s === JOB_STATUS.DETECTING) {
+      // CRITICAL FIX: If detection already produced segments, detection is DONE
+      // even if backend status is still DETECTING (detection worker doesn't update status after completion)
+      currentOrder = hasSegments ? 2 : 1;
+    } else if (s === JOB_STATUS.TRANSCRIBING) {
+      currentOrder = 2;
+    } else if (s === JOB_STATUS.ASR_COMPLETED) {
+      // ASR is done, but cropping hasn't started yet — show ASR as done, cropping as pending
+      currentOrder = 2;
+    } else if (s === JOB_STATUS.CROPPING || s === JOB_STATUS.CROPPING_IN_PROGRESS) {
+      currentOrder = 3;
+    } else if (
+      s === JOB_STATUS.READY_FOR_ANNOTATION ||
+      s === JOB_STATUS.NEEDS_VOICE_ANNOTATION ||
+      s === JOB_STATUS.VOICE_ANNOTATION_IN_PROGRESS
+    ) {
+      currentOrder = 4;
+    }
+
+    // ── Override using current_stage for extra accuracy ──
+    // current_stage is the "source of truth" from backend about where the job actually is
+    const stageToOrder: Record<string, number> = {
+      upload: 0,
+      detection: 1,
+      asr: 2,
+      cropping: 3,
+    };
+    if (stage && stageToOrder[stage] !== undefined) {
+      const backendOrder = stageToOrder[stage];
+      // Use the MORE ADVANCED of the two determinations
+      // (e.g. if status says DETECTING but current_stage says asr, trust current_stage)
+      if (backendOrder > currentOrder) {
+        currentOrder = backendOrder;
+      }
+    }
 
     if (s === JOB_STATUS.FAILED || s === JOB_STATUS.CROPPING_FAILED) {
       if (stage === 'detection' && stageOrder === 1) return 'failed';
       if (stage === 'asr' && stageOrder === 2) return 'failed';
-      // If s === CROPPING_FAILED or stage === cropping, mark stage 3 as failed
       if ((stage === 'cropping' || s === JOB_STATUS.CROPPING_FAILED) && stageOrder === 3) return 'failed';
-      
-      // If the stage that failed is later than this stageOrder, mark this stage as done
+
       if (s === JOB_STATUS.CROPPING_FAILED && stageOrder < 3) return 'done';
       if (stage === 'asr' && stageOrder < 2) return 'done';
       if (stage === 'cropping' && stageOrder < 3) return 'done';
-      
+
       return 'pending';
     }
 

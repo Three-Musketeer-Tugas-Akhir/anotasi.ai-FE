@@ -41,6 +41,8 @@ function getStatusDisplay(status: string): { label: string; dotColor: string; te
       return { label: 'Deteksi CV', dotColor: 'bg-amber-500', textColor: 'text-amber-600' };
     case JOB_STATUS.TRANSCRIBING:
       return { label: 'ASR Processing', dotColor: 'bg-blue-500', textColor: 'text-blue-600' };
+    case JOB_STATUS.ASR_COMPLETED:
+      return { label: 'ASR Selesai', dotColor: 'bg-sky-500', textColor: 'text-sky-600' };
     case JOB_STATUS.CROPPING:
     case JOB_STATUS.CROPPING_IN_PROGRESS:
       return { label: 'Video Cropping', dotColor: 'bg-indigo-500', textColor: 'text-indigo-600' };
@@ -342,6 +344,7 @@ export function PipelinePage() {
                   <option value="QUEUED">Antrian</option>
                   <option value="DETECTING">Deteksi</option>
                   <option value="TRANSCRIBING">ASR</option>
+                  <option value="ASR_COMPLETED">ASR Selesai</option>
                   <option value="CROPPING">Cropping</option>
                   <option value="READY_FOR_ANNOTATION">Selesai</option>
                   <option value="FAILED">Gagal</option>
