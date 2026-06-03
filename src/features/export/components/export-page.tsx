@@ -11,8 +11,6 @@ import {
   Package,
   Download,
   Loader2,
-  Calendar,
-  Filter,
   FileArchive,
   AlertTriangle,
   CheckCircle2,
@@ -94,19 +92,15 @@ export function ExportPage() {
   const [exploreJobId, setExploreJobId] = useState<string | null>(null);
   const [zipModalJob, setZipModalJob] = useState<{ id: string; filename: string } | null>(null);
   const [search, setSearch] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['export-jobs', dateFrom, dateTo],
+    queryKey: ['export-jobs'],
     queryFn: async () => {
       const response = await apiClient.get<JobListResponse>('/pipeline/jobs', {
         params: {
           page: 1,
           page_size: 100,
           status: 'READY_FOR_ANNOTATION',
-          from_date: dateFrom || undefined,
-          to_date: dateTo || undefined,
         },
       });
       return response.data;
@@ -170,41 +164,16 @@ export function ExportPage() {
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
 
         {/* ── Unified Filter Toolbar ── */}
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row gap-3 items-center justify-between">
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <div className="relative w-full sm:w-64">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Cari nama file..."
-                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-600 w-full sm:w-auto">
-              <Calendar size={14} className="text-slate-400 flex-shrink-0" />
-              <Input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="border-none shadow-none p-0 h-auto text-xs focus-visible:ring-0 w-32"
-                placeholder="Dari"
-              />
-              <span className="text-slate-300">–</span>
-              <Input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="border-none shadow-none p-0 h-auto text-xs focus-visible:ring-0 w-32"
-                placeholder="Sampai"
-              />
-            </div>
-            <button className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 transition-colors flex-shrink-0">
-              <Filter size={15} />
-            </button>
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex gap-3 items-center">
+          <div className="relative w-full sm:w-64">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Cari nama file..."
+              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
         </div>
 
