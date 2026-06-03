@@ -869,9 +869,32 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
         )}
 
         {isCancelled && (
-          <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-500 flex items-center gap-2">
-            <Ban size={16} className="flex-shrink-0" />
-            <span>Job ini telah dibatalkan.</span>
+          <div className="mt-3 p-4 bg-gray-50 border border-gray-200 rounded-lg flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Ban size={16} className="flex-shrink-0" />
+              <span>Job ini telah dibatalkan pada tahap: <strong>{getFailedStageName()}</strong>.</span>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-1">
+              <Button 
+                size="sm" 
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => handleRetry('from_failed_stage')}
+                disabled={retrying || (!job.current_stage || job.current_stage === 'upload')}
+              >
+                {retrying ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <RotateCcw size={14} className="mr-1.5" />}
+                Lanjutkan dari {getFailedStageName()}
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="border-gray-300 text-gray-600 hover:bg-gray-100"
+                onClick={() => setRetryDialogMode('full')}
+                disabled={retrying}
+              >
+                <RotateCcw size={14} className="mr-1.5" />
+                Ulangi Seluruhnya
+              </Button>
+            </div>
           </div>
         )}
 
@@ -1052,7 +1075,7 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                 Batal
               </Button>
               <Button 
-                variant="destructive" 
+                className="bg-red-600 hover:bg-red-700 text-white border-0"
                 onClick={() => handleRetry('full')}
                 disabled={retrying}
               >
