@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Volume2,
@@ -655,9 +654,9 @@ export function AsrReviewPage() {
             Validasi transkripsi ASR untuk menghasilkan Ground Truth sebelum Anotasi JBI
           </p>
         </header>
-        <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-y-auto min-h-0">
           <JobPicker onSelectJob={setSelectedJobId} />
-        </ScrollArea>
+        </div>
       </div>
     );
   }
@@ -712,7 +711,7 @@ export function AsrReviewPage() {
 
       {/* Loading */}
       {loading && (
-        <ScrollArea className="flex-1 min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0">
           <div className="p-6 space-y-4 max-w-5xl mx-auto">
             {/* Progress bar skeleton */}
             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-2">
@@ -761,7 +760,7 @@ export function AsrReviewPage() {
               </div>
             ))}
           </div>
-        </ScrollArea>
+        </div>
       )}
 
       {/* Error */}
@@ -777,7 +776,7 @@ export function AsrReviewPage() {
 
       {/* Content */}
       {!loading && !error && jobSummary && (
-        <ScrollArea className="flex-1 min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0">
           <div className="p-6 space-y-4 max-w-5xl mx-auto">
             {/* Progress Bar */}
             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
@@ -856,7 +855,7 @@ export function AsrReviewPage() {
               )}
             </div>
           </div>
-        </ScrollArea>
+        </div>
       )}
     </div>
   );
