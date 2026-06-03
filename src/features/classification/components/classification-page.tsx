@@ -33,14 +33,15 @@ export function ClassificationPage() {
   const [page, setPage] = useState(0); // offset-based pagination
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, targetCategory: 'SIBI' | 'BISINDO' | null}>({ isOpen: false, targetCategory: null });
   const PAGE_SIZE = 20;
+  const isSearching = searchQuery.trim().length > 0;
 
   // ── Dataset context ──────────────────────────────────────────────────
   const { selectedDataset } = useSelectedDataset();
 
   // ── Build query params ───────────────────────────────────────────────
   const params: JobListParams = {
-    limit: PAGE_SIZE,
-    offset: page * PAGE_SIZE,
+    limit: isSearching ? 9999 : PAGE_SIZE,
+    offset: isSearching ? 0 : page * PAGE_SIZE,
   };
   if (selectedDataset?.id) {
     params.dataset_id = selectedDataset.id;
@@ -85,12 +86,8 @@ export function ClassificationPage() {
     }
   }, [isLoading, jobs.length, activeTour, hasCompletedTour, startTour]);
 
-  // Derive effective selected job — falls back to first job when nothing is selected
-  const effectiveSelectedJobId = selectedJobId ?? (jobs.length > 0 ? jobs[0].job_id : null);
-  const selectedJob = jobs.find((j) => j.job_id === effectiveSelectedJobId) ?? null;
-
   // Filtered + searched list (client-side search; API handles category filter)
-  const filteredJobs = jobs.filter((j) => {
+  const allFilteredJobs = jobs.filter((j) => {
     // For 'uncategorized' filter, do client-side filtering since API doesn't support null category filter
     const matchesFilter =
       filter === 'all' || filter === 'SIBI' || filter === 'BISINDO'
@@ -100,6 +97,18 @@ export function ClassificationPage() {
       !searchQuery || (j.video_title || '').toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
   });
+
+  let displayJobs = allFilteredJobs;
+  let displayTotalPages = totalPages;
+
+  if (isSearching) {
+    displayTotalPages = Math.max(1, Math.ceil(allFilteredJobs.length / PAGE_SIZE));
+    displayJobs = allFilteredJobs.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  }
+
+  // Derive effective selected job — falls back to first job when nothing is selected
+  const effectiveSelectedJobId = selectedJobId ?? (displayJobs.length > 0 ? displayJobs[0].job_id : null);
+  const selectedJob = jobs.find((j) => j.job_id === effectiveSelectedJobId) ?? null;
 
   // Handle keyboard shortcuts (1 = SIBI, 2 = BISINDO)
   useEffect(() => {
@@ -291,18 +300,18 @@ export function ClassificationPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel — Video List */}
         <VideoList
-          jobs={filteredJobs}
+          jobs={displayJobs}
           selectedJobId={effectiveSelectedJobId}
           highlightedJobId={highlightedJobId}
           filter={filter}
           searchQuery={searchQuery}
           onSelectJob={setSelectedJobId}
           onFilterChange={(f) => { setFilter(f); setPage(0); }}
-          onSearchChange={setSearchQuery}
+          onSearchChange={(q) => { setSearchQuery(q); setPage(0); }}
           categorisedCount={categorisedCount}
           totalAll={totalAll}
           page={page}
-          totalPages={totalPages}
+          totalPages={displayTotalPages}
           onPageChange={setPage}
         />
 
