@@ -40,7 +40,7 @@ export function ClassificationPage() {
 
   // ── Build query params ───────────────────────────────────────────────
   const params: JobListParams = {
-    limit: isSearching ? 9999 : PAGE_SIZE,
+    limit: isSearching ? 100 : PAGE_SIZE,
     offset: isSearching ? 0 : page * PAGE_SIZE,
   };
   if (selectedDataset?.id) {
