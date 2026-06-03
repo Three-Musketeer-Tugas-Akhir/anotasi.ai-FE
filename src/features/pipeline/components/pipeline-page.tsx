@@ -95,6 +95,10 @@ export function PipelinePage() {
   const [listRefreshTrigger, setListRefreshTrigger] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState('');
   
+  const [allSearchJobs, setAllSearchJobs] = useState<JobListItemResponse[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchAborter = useRef<AbortController | null>(null);
+  
   const [listWidth, setListWidth] = useState(360);
   const [isResizing, setIsResizing] = useState(false);
 
@@ -162,6 +166,49 @@ export function PipelinePage() {
     fetchClassifiedReady();
   }, [fetchJobs, fetchClassifiedReady]);
 
+  // Global Search Effect
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setAllSearchJobs([]);
+      setIsSearching(false);
+      return;
+    }
+
+    if (searchAborter.current) {
+      searchAborter.current.abort();
+    }
+    const aborter = new AbortController();
+    searchAborter.current = aborter;
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        let all: JobListItemResponse[] = [];
+        let p = 1;
+        let t = 1;
+        do {
+          const params: JobListParams = { page: p, page_size: 100 };
+          if (statusFilter) params.status = statusFilter;
+          const data = await pipelineApi.listJobs(params);
+          if (aborter.signal.aborted) return;
+          all = [...all, ...data.items];
+          t = data.total_pages;
+          p++;
+        } while (p <= t);
+        setAllSearchJobs(all);
+      } catch (err) {
+        if (!aborter.signal.aborted) console.error("Search fetch error", err);
+      } finally {
+        if (!aborter.signal.aborted) setIsSearching(false);
+      }
+    }, 400);
+
+    return () => {
+      clearTimeout(timer);
+      if (searchAborter.current) searchAborter.current.abort();
+    };
+  }, [searchQuery, statusFilter]);
+
   // Poll list for updates (every 5 seconds if any job is processing)
   useEffect(() => {
     if (listPollRef.current) {
@@ -213,7 +260,9 @@ export function PipelinePage() {
 
   const processingCount = jobs.filter((j) => PROCESSING_STATUSES.has(j.status)).length;
   const completedCount = jobs.filter((j) => j.status === JOB_STATUS.READY_FOR_ANNOTATION).length;
-  const filteredJobs = jobs.filter((j) => (j.original_filename || '').toLowerCase().includes(searchQuery.toLowerCase()));
+  const displayedJobs = searchQuery.trim()
+    ? allSearchJobs.filter((j) => (j.original_filename || '').toLowerCase().includes(searchQuery.toLowerCase()))
+    : jobs;
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -321,7 +370,7 @@ export function PipelinePage() {
 
           {/* Job List */}
           <div className="flex-1 overflow-auto custom-scrollbar">
-            {loading ? (
+            {loading || isSearching ? (
               <div className="p-4 space-y-3">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="p-4 border-b border-slate-100">
@@ -350,7 +399,7 @@ export function PipelinePage() {
                   Coba Lagi
                 </Button>
               </div>
-            ) : jobs.length === 0 ? (
+            ) : displayedJobs.length === 0 ? (
               <div className="p-8 text-center">
                 <Video size={32} className="text-slate-300 mx-auto mb-3" />
                 <p className="text-sm font-medium text-slate-500">Belum ada video</p>
@@ -358,7 +407,7 @@ export function PipelinePage() {
               </div>
             ) : (
               <div className="w-full flex flex-col">
-                {filteredJobs.map((job) => {
+                {displayedJobs.map((job) => {
                   const sd = getStatusDisplay(job.status);
                   const isSelected = job.id === selectedJobId;
                   const isProcessing = PROCESSING_STATUSES.has(job.status);
@@ -416,7 +465,7 @@ export function PipelinePage() {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {!searchQuery.trim() && totalPages > 1 && (
             <div className="px-4 py-2 border-t border-gray-100 flex items-center justify-between">
               <Button
                 variant="ghost"
