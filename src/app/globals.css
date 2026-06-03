@@ -34,6 +34,8 @@
   --color-card-foreground: var(--card-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--color-danger);
+  --color-destructive-foreground: #ffffff;
   --font-sans: var(--font-inter);
 
   /* Brand teal palette for Tailwind usage */

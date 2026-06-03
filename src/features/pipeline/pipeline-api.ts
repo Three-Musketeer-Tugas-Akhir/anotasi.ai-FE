@@ -1,5 +1,6 @@
 import { apiClient } from '@/core/api/axios-client';
 import { env } from '@/core/config/env';
+import { interceptListJobs, interceptGetJob, interceptStage1, interceptStage2, interceptStage3 } from './mock-data';
 import type {
   JobListDetailedResponse,
   JobListParams,
@@ -34,13 +35,15 @@ export const pipelineApi = {
   listJobs: (params?: JobListParams) =>
     apiClient
       .get<JobListDetailedResponse>('/pipeline/jobs', { params })
-      .then((r) => r.data),
+      .then((r) => interceptListJobs(r.data)),
 
-  /** GET /pipeline/jobs/:id — get job detail with progress */
   getJob: (jobId: string) =>
-    apiClient
-      .get<JobStatusDetailResponse>(`/pipeline/jobs/${jobId}`)
-      .then((r) => r.data),
+    interceptGetJob(
+      jobId,
+      apiClient
+        .get<JobStatusDetailResponse>(`/pipeline/jobs/${jobId}`)
+        .then((r) => r.data)
+    ),
 
   /** POST /pipeline/jobs — upload video (simple multipart) */
   uploadVideo: (
@@ -103,21 +106,30 @@ export const pipelineApi = {
 
   /** GET /pipeline/jobs/:id/stage1/results — detection results */
   getStage1Results: (jobId: string) =>
-    apiClient
-      .get<Stage1ResultsResponse>(`/pipeline/jobs/${jobId}/stage1/results`)
-      .then((r) => r.data),
+    interceptStage1(
+      jobId,
+      apiClient
+        .get<Stage1ResultsResponse>(`/pipeline/jobs/${jobId}/stage1/results`)
+        .then((r) => r.data)
+    ),
 
   /** GET /pipeline/jobs/:id/stage2/results — ASR results */
   getStage2Results: (jobId: string) =>
-    apiClient
-      .get<Stage2ResultsResponse>(`/pipeline/jobs/${jobId}/stage2/results`)
-      .then((r) => r.data),
+    interceptStage2(
+      jobId,
+      apiClient
+        .get<Stage2ResultsResponse>(`/pipeline/jobs/${jobId}/stage2/results`)
+        .then((r) => r.data)
+    ),
 
   /** GET /pipeline/jobs/:id/stage3/results — cropping results */
   getStage3Results: (jobId: string) =>
-    apiClient
-      .get<Stage3ResultsResponse>(`/pipeline/jobs/${jobId}/stage3/results`)
-      .then((r) => r.data),
+    interceptStage3(
+      jobId,
+      apiClient
+        .get<Stage3ResultsResponse>(`/pipeline/jobs/${jobId}/stage3/results`)
+        .then((r) => r.data)
+    ),
 
   /** GET /pipeline/jobs/:id/dataset/download — download dataset ZIP */
   getDatasetDownloadUrl: (jobId: string) =>

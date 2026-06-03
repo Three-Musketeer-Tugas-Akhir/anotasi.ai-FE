@@ -70,7 +70,7 @@ export function EditHistoryDrawer({ isOpen, onClose, segmentId }: EditHistoryDra
           </SheetDescription>
         </SheetHeader>
 
-        <ScrollArea className="flex-1 p-6">
+        <div className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12">
               <Loader2 className="w-8 h-8 animate-spin mb-4" />
@@ -125,7 +125,7 @@ export function EditHistoryDrawer({ isOpen, onClose, segmentId }: EditHistoryDra
               ))}
             </div>
           )}
-        </ScrollArea>
+        </div>
       </SheetContent>
     </Sheet>
   );
