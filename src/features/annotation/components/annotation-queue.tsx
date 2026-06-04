@@ -1,18 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-
-import { Combobox } from '@/components/ui/combobox';
 import {
   AlertTriangle,
   CheckCircle2,
-  Clock,
-  Loader2,
-  RefreshCw,
-  Shield,
   ChevronLeft,
   ChevronRight,
   Inbox,
@@ -20,16 +13,12 @@ import {
   Send,
   PenLine,
   Sparkles,
-  Timer,
-  ChevronDown,
-  Video,
-  Layers,
   Newspaper,
   List,
 } from 'lucide-react';
 import { annotationApi } from '../annotation-api';
 import { useSelectedDataset } from '@/features/dataset/context/dataset-context';
-import type { QueueItemResponse, ReviewStatusResponse } from '../annotation-types';
+import type { QueueItemResponse } from '../annotation-types';
 import { QUEUE_STATUS } from '../annotation-types';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -47,61 +36,6 @@ interface JobGroup {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
-
-function getStatusBadge(status: string): { label: string; color: string } {
-  switch (status) {
-    case QUEUE_STATUS.ASSIGNED:
-      return { label: 'Menunggu', color: 'bg-gray-100 text-gray-600 border-gray-200' };
-    case QUEUE_STATUS.IN_PROGRESS:
-      return { label: 'Dikerjakan', color: 'bg-blue-50 text-blue-600 border-blue-200' };
-    case QUEUE_STATUS.COMPLETED:
-      return { label: 'Selesai', color: 'bg-emerald-50 text-emerald-600 border-emerald-200' };
-    default:
-      return { label: status, color: 'bg-gray-100 text-gray-600 border-gray-200' };
-  }
-}
-
-function getEditStatusBadge(item: QueueItemResponse): { label: string; color: string; icon: React.ReactNode } | null {
-  if (!item.has_active_work) {
-    return { label: 'Baru', color: 'bg-emerald-50 text-emerald-600 border-emerald-200', icon: <Sparkles size={8} /> };
-  }
-
-  switch (item.edit_status) {
-    case 'DRAFT':
-      return { label: 'Draft', color: 'bg-amber-50 text-amber-600 border-amber-200', icon: <PenLine size={8} /> };
-    case 'PENDING':
-      return { label: 'Pending', color: 'bg-orange-50 text-orange-600 border-orange-200', icon: <Timer size={8} /> };
-    case 'SUBMITTED':
-      return { label: 'Submitted', color: 'bg-blue-50 text-blue-600 border-blue-200', icon: <Send size={8} /> };
-    default:
-      return null;
-  }
-}
-
-function getConfidenceColor(score: number | null): string {
-  if (score === null) return 'bg-gray-400';
-  if (score >= 0.9) return 'bg-emerald-500';
-  if (score >= 0.5) return 'bg-amber-500';
-  return 'bg-red-500';
-}
-
-function formatTimeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Baru saja';
-  if (mins < 60) return `${mins}m lalu`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}j lalu`;
-  const days = Math.floor(hrs / 24);
-  return `${days}h lalu`;
-}
-
-/** Strip file extension and truncate long filenames for display. */
-function formatFilename(name: string, maxLen = 40): string {
-  const base = name.replace(/\.[^/.]+$/, '');
-  if (base.length <= maxLen) return base;
-  return base.slice(0, maxLen - 3) + '…';
-}
 
 /** Group flat queue items into job-based groups with segment deduplication. */
 function groupByJob(items: QueueItemResponse[]): JobGroup[] {
@@ -163,17 +97,19 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
   const { selectedDataset } = useSelectedDataset();
   const [tab, setTab] = useState<TabView>('queue');
 
-  // Queue state
+  // Queue state (active = unfinished). Status filter is fixed now that the
+  // dropdown was removed; completed work lives in the Submission tab.
   const [items, setItems] = useState<QueueItemResponse[]>([]);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<string>('ASSIGNED,IN_PROGRESS');
+  const statusFilter = 'ASSIGNED,IN_PROGRESS';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Submissions state
-  const [submissions, setSubmissions] = useState<ReviewStatusResponse[]>([]);
+  // Submissions state — reuses queue items (status COMPLETED) so the cards are
+  // identical to the queue cards and clicking always passes a correct job_id.
+  const [submissionItems, setSubmissionItems] = useState<QueueItemResponse[]>([]);
   const [subsTotal, setSubsTotal] = useState(0);
   const [subsLoading, setSubsLoading] = useState(false);
 
@@ -182,6 +118,7 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
   // ── Derived Data ──────────────────────────────────────────────
 
   const jobGroups = useMemo(() => groupByJob(items), [items]);
+  const submissionGroups = useMemo(() => groupByJob(submissionItems), [submissionItems]);
 
   const totalStats = useMemo(() => {
     const draftCount = items.filter((i) => i.edit_status === 'DRAFT').length;
@@ -199,7 +136,7 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
         const data = await annotationApi.getQueue({
           page,
           page_size: 50, // Fetch more to build proper groups
-          status: statusFilter === 'all' ? undefined : statusFilter,
+          status: statusFilter,
           dataset_id: selectedDataset?.id,
         });
         setItems(data.items);
@@ -221,21 +158,29 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
   const fetchSubmissions = useCallback(async () => {
     setSubsLoading(true);
     try {
-      const data = await annotationApi.getMySubmissions({ page: 1, page_size: 50 });
-      setSubmissions(data.items);
+      // Submissions = COMPLETED queue items. Admins get all annotators' (the
+      // backend applies is_admin); annotators get only their own.
+      const data = await annotationApi.getQueue({
+        page: 1,
+        page_size: 100,
+        status: 'COMPLETED',
+        dataset_id: selectedDataset?.id,
+      });
+      setSubmissionItems(data.items);
       setSubsTotal(data.total);
     } catch {
       // Silently fail for submissions tab
     } finally {
       setSubsLoading(false);
     }
-  }, []);
+  }, [selectedDataset?.id]);
 
-  // Load on mount + filter change
+  // Load BOTH on mount (and on dataset change) so the Submission count badge is
+  // correct immediately without having to open the tab first.
   useEffect(() => {
-    if (tab === 'queue') fetchQueue();
-    else fetchSubmissions();
-  }, [fetchQueue, fetchSubmissions, tab]);
+    fetchQueue();
+    fetchSubmissions();
+  }, [fetchQueue, fetchSubmissions]);
 
   // Polling every 10s (queue only)
   useEffect(() => {
@@ -321,30 +266,6 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
       {/* Queue Tab */}
       {tab === 'queue' && (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Filter Bar */}
-          <div className="px-3 py-2.5 border-b border-gray-100 flex items-center gap-2">
-            <Combobox
-              options={[
-                { value: "ASSIGNED,IN_PROGRESS", label: "Aktif (Belum Selesai)" },
-                { value: "all", label: "Semua Status" },
-                { value: "ASSIGNED", label: "Menunggu" },
-                { value: "IN_PROGRESS", label: "Dikerjakan" },
-                { value: "COMPLETED", label: "Selesai" }
-              ]}
-              value={statusFilter}
-              onChange={(v) => { setStatusFilter(v); setPage(1); }}
-              placeholder="Filter status..."
-              className="flex-1 h-8 text-xs bg-white text-slate-700"
-            />
-            <button
-              onClick={() => fetchQueue()}
-              className="p-1.5 rounded text-gray-400 hover:text-teal-600 hover:bg-gray-100 transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw size={13} />
-            </button>
-          </div>
-
           {/* Quick Stats */}
           {!loading && !error && items.length > 0 && (totalStats.draftCount > 0 || totalStats.newCount > 0 || totalStats.completedCount > 0) && (
             <div className="px-3 py-1.5 border-b border-gray-100 flex items-center gap-3 text-[10px]">
@@ -430,61 +351,41 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
         </div>
       )}
 
-      {/* Submissions Tab */}
+      {/* Submissions Tab — same card layout as the queue */}
       {tab === 'submissions' && (
         <div className="flex-1 min-h-0 overflow-y-auto">
           {subsLoading ? (
-            <div className="divide-y divide-gray-100">
+            <div className="p-2 space-y-2">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="px-4 py-3.5">
-                  <div className="flex items-center justify-between mb-2">
-                    <Skeleton className="h-3 w-20" />
-                    <Skeleton className="h-4 w-14 rounded-md" />
+                <div key={i} className="rounded-xl border border-gray-100 overflow-hidden p-3.5 bg-white">
+                  <div className="flex items-start gap-3">
+                    <Skeleton className="w-9 h-9 rounded-lg shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-3 w-1/3" />
+                      <Skeleton className="h-1.5 w-full rounded-full" />
+                    </div>
                   </div>
-                  <Skeleton className="h-3 w-1/2" />
                 </div>
               ))}
             </div>
-          ) : submissions.length === 0 ? (
+          ) : submissionGroups.length === 0 ? (
             <div className="p-8 text-center">
               <Send size={32} className="text-gray-300 mx-auto mb-3" />
               <p className="text-sm font-medium text-gray-500">Belum ada submission</p>
-              <p className="text-xs text-gray-400 mt-1">Submit anotasi untuk melihat status review</p>
+              <p className="text-xs text-gray-400 mt-1">Submit anotasi untuk melihat di sini</p>
             </div>
           ) : (
-            submissions.map((sub) => {
-              const statusColor =
-                sub.status === 'APPROVED'
-                  ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
-                  : sub.status === 'REJECTED'
-                    ? 'bg-red-50 text-red-600 border-red-200'
-                    : 'bg-amber-50 text-amber-600 border-amber-200';
-              return (
-                <button
-                  key={sub.review_id}
-                  onClick={() => sub.job_id ? onSelectJob(sub.job_id) : onSelectJob(sub.segment_id)}
-                  className="block w-full text-left px-4 py-3.5 border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[12px] font-semibold text-gray-800 line-clamp-1 flex-1 mr-2" title={sub.original_filename || 'Unknown'}>
-                      {sub.original_filename ? formatFilename(sub.original_filename, 25) : `#${sub.segment_id.slice(0, 8)}`}
-                    </span>
-                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${statusColor} shrink-0`}>
-                      {sub.status}
-                    </Badge>
-                  </div>
-                  <p className="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
-                    <Clock size={10} />
-                    {new Date(sub.submitted_at).toLocaleString('id-ID')}
-                  </p>
-                  {sub.feedback && (
-                    <p className="text-[10px] text-red-500 mt-1 line-clamp-1">
-                      Feedback: {sub.feedback}
-                    </p>
-                  )}
-                </button>
-              );
-            })
+            <div className="p-2 space-y-2">
+              {submissionGroups.map((group) => (
+                <JobCard
+                  key={group.jobId}
+                  group={group}
+                  isSelected={group.jobId === selectedJobId}
+                  onSelectJob={onSelectJob}
+                />
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -505,7 +406,15 @@ function JobCard({
   isSelected: boolean;
   onSelectJob: (jobId: string) => void;
 }) {
-  const progressPct = group.totalSegments > 0 ? (group.completedSegments / group.totalSegments) * 100 : 0;
+  // Progress is counted in "kalimat" (utterances), not segments. A COMPLETED
+  // (submitted) segment contributes all of its utterances as done — so a fully
+  // submitted job reads e.g. "20/20 kalimat".
+  const totalKalimat = group.segments.reduce((sum, seg) => sum + (seg.utterance_count || 0), 0);
+  const doneKalimat = group.segments.reduce(
+    (sum, seg) => sum + (seg.status === QUEUE_STATUS.COMPLETED ? (seg.utterance_count || 0) : 0),
+    0,
+  );
+  const progressPct = totalKalimat > 0 ? (doneKalimat / totalKalimat) * 100 : 0;
 
   return (
     <div
@@ -534,43 +443,31 @@ function JobCard({
         </div>
 
         <div className="flex-1 min-w-0">
+          {/* Full title — no truncation */}
           <p
-            className={`text-[13px] font-semibold leading-snug ${
+            className={`text-[13px] font-semibold leading-snug break-words ${
               isSelected ? 'text-teal-800' : 'text-gray-800'
             }`}
             title={group.originalFilename}
           >
-            {formatFilename(group.originalFilename)}
+            {group.originalFilename}
           </p>
 
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-            <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-gray-50 text-gray-500 border-gray-200">
-              <Layers size={8} className="mr-0.5" />
-              {group.totalSegments} kalimat
-            </Badge>
-            {group.newSegments > 0 && (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-emerald-50 text-emerald-600 border-emerald-200">
-                <Sparkles size={8} className="mr-0.5" />
-                {group.newSegments} baru
-              </Badge>
-            )}
-            {group.draftSegments > 0 && (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-amber-50 text-amber-600 border-amber-200">
-                <PenLine size={8} className="mr-0.5" />
-                {group.draftSegments} draft
-              </Badge>
-            )}
-          </div>
+          {/* Job ID — to distinguish jobs that share the same filename */}
+          <p className="text-[10px] font-mono text-gray-400 mt-1 break-all">
+            Job: {group.jobId}
+          </p>
 
+          {/* Progress bar in kalimat (X/Y) */}
           <div className="mt-2 flex items-center gap-2">
             <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${getJobProgressColor(group.completedSegments, group.totalSegments)}`}
+                className={`h-full rounded-full transition-all duration-500 ${getJobProgressColor(doneKalimat, totalKalimat)}`}
                 style={{ width: `${progressPct}%` }}
               />
             </div>
-            <span className="text-[9px] text-gray-400 font-mono w-12 text-right flex-shrink-0">
-              {group.completedSegments}/{group.totalSegments}
+            <span className="text-[10px] text-gray-500 font-mono whitespace-nowrap shrink-0">
+              {doneKalimat}/{totalKalimat} kalimat
             </span>
           </div>
         </div>
