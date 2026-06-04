@@ -128,12 +128,6 @@ export default function LoginPage() {
                   <label htmlFor="password" className="text-sm font-semibold text-slate-700">
                     Kata Sandi
                   </label>
-                  <Link
-                    href="/forgot-password"
-                    className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 transition-colors"
-                  >
-                    Lupa Sandi?
-                  </Link>
                 </div>
                 <div className="relative">
                   <input
