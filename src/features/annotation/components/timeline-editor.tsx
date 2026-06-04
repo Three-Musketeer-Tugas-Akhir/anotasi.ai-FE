@@ -384,9 +384,9 @@ export function TimelineEditor({
         <div className="flex items-center gap-3">
           {/* Timestamps */}
           <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-gray-500">
-            <span className="text-teal-600 font-medium">{formatTimestamp(trimStart)}</span>
+            <span className="text-teal-600 font-medium">{formatTimestamp(Math.max(0, trimStart - windowStart))}</span>
             <span className="text-gray-400">→</span>
-            <span className="text-teal-600 font-medium">{formatTimestamp(trimEnd > 0 ? trimEnd : windowEnd)}</span>
+            <span className="text-teal-600 font-medium">{formatTimestamp(Math.max(0, (trimEnd > 0 ? trimEnd : windowEnd) - windowStart))}</span>
             <span className="text-gray-400">({((trimEnd > 0 ? trimEnd : windowEnd) - trimStart).toFixed(1)}s)</span>
           </div>
 
@@ -530,9 +530,9 @@ export function TimelineEditor({
 
       {/* Timestamp ruler */}
       <div className="flex items-center justify-between text-xs font-mono text-gray-400 mt-0.5 px-1">
-        <span>{formatTimestamp(windowStart)}</span>
-        {windowDuration > 0 && <span>{formatTimestamp(windowStart + windowDuration / 2)}</span>}
-        <span>{formatTimestamp(windowEnd)}</span>
+        <span>{formatTimestamp(0)}</span>
+        {windowDuration > 0 && <span>{formatTimestamp(windowDuration / 2)}</span>}
+        <span>{formatTimestamp(windowDuration)}</span>
       </div>
     </Card>
   );

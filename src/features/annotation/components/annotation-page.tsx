@@ -159,8 +159,6 @@ export function AnnotationPage() {
       const allOriginal: TranscriptUtterance[] = [];
       const allEdits: UtteranceCorrection[] = [];
 
-      let currentGlobalTime = 0;
-
       segmentsData.forEach((data) => {
         // Collect original ASR transcripts
         if (data.transcripts && data.transcripts.length > 0) {
@@ -172,27 +170,23 @@ export function AnnotationPage() {
           allOriginal.push(...mappedOriginal);
         }
 
-        // Collect current edits or fall back to ASR
         let segmentEdits: UtteranceCorrection[] = [];
         // Always prefer the full segment video (data.video_url) so the player
         // can seek across utterance N and N+1 seamlessly within the same video.
         const segVideo = data.video_url ?? '';
         // Use full segment video so player spans N and N+1 seamlessly
         if (data.current_utterances && data.current_utterances.length > 0) {
-          // Sort by start BEFORE computing global timeline
+          // Sort by start
           const sortedUtts = [...data.current_utterances].sort((a, b) => a.start - b.start);
           segmentEdits = sortedUtts.map((u) => {
             const transcript = data.transcripts.find((t) => t.utterance_index === u.utterance_index);
             const duration = u.end - u.start;
-            const gStart = currentGlobalTime;
-            const gEnd = currentGlobalTime + duration;
-            currentGlobalTime = gEnd;
             return {
               ...u,
               segment_id: data.segment_id,
               confidence: transcript?.confidence,
-              global_start: gStart,
-              global_end: gEnd,
+              global_start: u.start,
+              global_end: u.end,
               // Use full segment video so player spans N and N+1
               segment_video_url: segVideo || u.cropped_video_path || transcript?.video_path,
             };
@@ -200,10 +194,6 @@ export function AnnotationPage() {
         } else if (data.transcripts && data.transcripts.length > 0) {
           const sortedTranscripts = [...data.transcripts].sort((a, b) => a.start - b.start);
           segmentEdits = sortedTranscripts.map((t) => {
-            const duration = t.end - t.start;
-            const gStart = currentGlobalTime;
-            const gEnd = currentGlobalTime + duration;
-            currentGlobalTime = gEnd;
             return {
               utterance_index: t.utterance_index,
               text: t.text,
@@ -212,8 +202,8 @@ export function AnnotationPage() {
               segment_id: data.segment_id,
               confidence: t.confidence,
               cropped_video_path: t.video_path,
-              global_start: gStart,
-              global_end: gEnd,
+              global_start: t.start,
+              global_end: t.end,
               segment_video_url: segVideo || t.video_path,
             };
           });
