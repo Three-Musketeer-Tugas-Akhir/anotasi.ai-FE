@@ -310,12 +310,18 @@ export function TimelineEditor({
       const origStart = dragStartValues.current.start;
       const origEnd = dragStartValues.current.end;
 
+      const TRIM_THRESHOLD = 0.001;
+
       if (dragging === 'start') {
         const newStart = Math.max(windowStart, Math.min(origEnd - 0.05, origStart + deltaTime));
-        onTrimChange(newStart, origEnd);
+        if (Math.abs(newStart - origStart) > TRIM_THRESHOLD) {
+          onTrimChange(newStart, origEnd);
+        }
       } else if (dragging === 'end') {
         const newEnd = Math.max(origStart + 0.05, Math.min(windowEnd, origEnd + deltaTime));
-        onTrimChange(origStart, newEnd);
+        if (Math.abs(newEnd - origEnd) > TRIM_THRESHOLD) {
+          onTrimChange(origStart, newEnd);
+        }
       } else {
         // Region drag disabled in SIBI style
         if (disableTrimIn) return;
@@ -324,7 +330,9 @@ export function TimelineEditor({
         let newEnd = origEnd + deltaTime;
         if (newStart < windowStart) { newStart = windowStart; newEnd = windowStart + regionDur; }
         if (newEnd > windowEnd) { newEnd = windowEnd; newStart = windowEnd - regionDur; }
-        onTrimChange(newStart, newEnd);
+        if (Math.abs(newStart - origStart) > TRIM_THRESHOLD || Math.abs(newEnd - origEnd) > TRIM_THRESHOLD) {
+          onTrimChange(newStart, newEnd);
+        }
       }
     };
 

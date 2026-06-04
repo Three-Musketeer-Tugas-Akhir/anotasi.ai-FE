@@ -18,7 +18,7 @@ export function AnnotationPage() {
   const [jobMetadata, setJobMetadata] = useState<{ original_filename: string; job_id: string } | null>(null);
   const [jobLoading, setJobLoading] = useState(false);
   const [jobError, setJobError] = useState<string | null>(null);
-  
+
   // Need to hold the video URL (which is the same across all segments of a job)
   const [jobVideoUrl, setJobVideoUrl] = useState<string | null>(null);
 
@@ -96,7 +96,7 @@ export function AnnotationPage() {
       const queueData = await annotationApi.getQueue({ page: 1, page_size: 100 });
       const jobItems = queueData.items.filter((i) => i.job_id === jobId);
       if (jobItems.length === 0) throw new Error('Job tidak ditemukan di antrian');
-      
+
       setJobMetadata({
         original_filename: jobItems[0].original_filename,
         job_id: jobId
@@ -188,7 +188,7 @@ export function AnnotationPage() {
         // Already sorted before global_start computation — no re-sort needed
         allEdits.push(...segmentEdits);
       });
-      
+
       setOriginalUtterances(allOriginal);
       setUtteranceEdits(allEdits);
       setActiveUtteranceIndex(allEdits.length > 0 ? 0 : null);
@@ -219,7 +219,7 @@ export function AnnotationPage() {
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('toggle-top-bar', { detail: { hidden: isFocusMode } }));
-    
+
     return () => {
       window.dispatchEvent(new CustomEvent('toggle-top-bar', { detail: { hidden: false } }));
     };
@@ -332,7 +332,7 @@ export function AnnotationPage() {
       setCurrentTime(utt.global_start ?? utt.start);
       setIsPlaying(false);
     }
-    
+
     // Reset merged video + show loading overlay
     setMergedVideoUrl(null);
     setVideoNDuration(0);
@@ -340,7 +340,7 @@ export function AnnotationPage() {
     setVideoReady(false);
     setFilmstripReady(false);
     setIsMergeLoading(true);
-    
+
     // VIDEO-EDITOR-SIBI STYLE: Load merged video for this utterance
     if (utt && utt.segment_id) {
       const requestId = index;
@@ -431,7 +431,7 @@ export function AnnotationPage() {
 
   const handleSubmitReview = async () => {
     if (!selectedJobId || utteranceEdits.length === 0) return;
-    
+
     const unfinished = utteranceEdits.filter(u => u.status !== 'OK').length;
     if (unfinished > 0) {
       if (!confirm(`Ada ${unfinished} kalimat yang belum ditandai selesai (OK). Lanjutkan submit?`)) return;
@@ -444,10 +444,10 @@ export function AnnotationPage() {
     try {
       // 1. Save all drafts first to ensure nothing is lost
       await saveDraftForAllSegments(utteranceEdits);
-      
+
       // 2. Find unique segment IDs
       const uniqueSegmentIds = Array.from(new Set(utteranceEdits.map((u) => u.segment_id).filter(Boolean))) as string[];
-      
+
       // 3. Submit all segments sequentially to handle specific API requirements
       let needsConfirmation = false;
       let failedSegments: string[] = [];
@@ -478,7 +478,7 @@ export function AnnotationPage() {
           return;
         }
       }
-      
+
       setActionMessage('✅ Anotasi berhasil di-submit');
       await loadJob(selectedJobId);
     } catch (err: unknown) {
@@ -499,15 +499,15 @@ export function AnnotationPage() {
     try {
       // 1. Save all drafts first
       await saveDraftForAllSegments(utteranceEdits);
-      
+
       // 2. Trigger physical crop
       setActionMessage('✂️ Memotong video fisik...');
       const cropResult = await annotationApi.cropUtterance(targetUtt.segment_id, targetUtt.utterance_index);
       setActionMessage(`✅ ${cropResult.message || 'Video berhasil dipotong'}`);
-      
+
       // 3. Reload job
       await loadJob(selectedJobId);
-      
+
       // 4. Auto-advance if not at the end
       if (index < utteranceEdits.length - 1) {
         setTimeout(() => {
@@ -530,7 +530,7 @@ export function AnnotationPage() {
     try {
       const segmentIds = Array.from(new Set(utteranceEdits.map((u) => u.segment_id).filter(Boolean))) as string[];
       await Promise.all(segmentIds.map((sid) => annotationApi.resetToOriginal(sid)));
-      
+
       setActionMessage('✅ Anotasi direset');
       await loadJob(selectedJobId);
     } catch (err: unknown) {
@@ -730,7 +730,7 @@ export function AnnotationPage() {
               className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-xl font-bold transition-all shadow-sm hidden md:flex"
               title={isFocusMode ? "Kembali ke mode biasa" : "Fokus pada video dan timeline"}
             >
-              {isFocusMode ? <Minimize2 size={18} /> : <Maximize2 size={18} />} 
+              {isFocusMode ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
               {isFocusMode ? 'Mode Normal' : 'Mode Fokus'}
             </button>
 
@@ -855,7 +855,7 @@ export function AnnotationPage() {
             {/* 2. LEFT PANEL: VIDEO & TIMELINE */}
             <div className={`flex flex-col bg-slate-900 relative overflow-hidden transition-all duration-300 ${isFocusMode ? 'flex-1' : 'flex-[0_0_60%]'}`}>
               {isFocusMode && (
-                <button 
+                <button
                   onClick={() => setIsFocusMode(false)}
                   className="absolute top-4 right-4 z-40 bg-black/60 hover:bg-black/80 text-white px-4 py-2 rounded-full backdrop-blur-sm font-medium flex items-center gap-2 border border-white/20 shadow-lg transition-all hover:scale-105"
                 >
@@ -966,5 +966,14 @@ export function AnnotationPage() {
         ) : null}
       </div>
     </div>
+  );
+}
+                </div >
+              </div >
+            )}
+          </div >
+        ) : null}
+      </div >
+    </div >
   );
 }
