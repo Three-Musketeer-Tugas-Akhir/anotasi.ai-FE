@@ -58,8 +58,6 @@ export default function AdminUsersPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createResult, setCreateResult] = useState<string | null>(null);
 
-  // Role change
-  const [changingRole, setChangingRole] = useState<string | null>(null);
 
   // Deactivate
   const [confirmDeactivate, setConfirmDeactivate] = useState<string | null>(null);
@@ -124,19 +122,6 @@ export default function AdminUsersPage() {
     ? `${createFirstName.charAt(0).toUpperCase() + createFirstName.slice(1).toLowerCase()}123!` 
     : '';
 
-  const handleRoleChange = async (userId: string, newRole: string) => {
-    setChangingRole(userId);
-    try {
-      await adminApi.updateUserRole(userId, { role: newRole });
-      toast.success('Role berhasil diperbarui');
-      fetchUsers();
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Gagal mengubah role';
-      toast.error(msg as string);
-    } finally {
-      setChangingRole(null);
-    }
-  };
 
   const handleDeactivate = async (userId: string) => {
     try {
@@ -272,20 +257,9 @@ export default function AdminUsersPage() {
                         <p className="text-xs text-gray-400 font-mono">{u.id.slice(0, 8)}...</p>
                       </TableCell>
                       <TableCell className="py-4">
-                        {changingRole === u.id ? (
-                          <Loader2 size={14} className="animate-spin text-teal-600" />
-                        ) : (
-                          <select
-                            value={u.role}
-                            onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                            disabled={u.id === user?.id}
-                            className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${getRoleBadge(u.role)} cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
-                          >
-                            {ROLES.map((r) => (
-                              <option key={r.value} value={r.value}>{r.label}</option>
-                            ))}
-                          </select>
-                        )}
+                        <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold border ${getRoleBadge(u.role)}`}>
+                          {ROLES.find(r => r.value === u.role)?.label || u.role}
+                        </span>
                       </TableCell>
                       <TableCell className="py-4">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>

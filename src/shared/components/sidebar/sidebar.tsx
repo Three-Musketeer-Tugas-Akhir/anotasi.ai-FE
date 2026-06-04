@@ -21,6 +21,8 @@ import { cn } from '@/shared/utils/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/features/auth';
+import Image from 'next/image';
+import brandLogo from '@/app/icon.png';
 
 /** Navigation item config */
 export interface NavItemConfig {
@@ -103,11 +105,13 @@ export function Sidebar() {
       {/* Header / Brand */}
       <div className="p-4 flex items-center justify-between border-b border-slate-700/50">
         {isOpen ? (
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-gradient-to-br from-teal-400 to-teal-600 rounded-lg flex items-center justify-center font-bold text-sm shadow-lg shadow-teal-900/30">
-              🤟
-            </div>
-            <span className="font-bold text-base tracking-tight">Gestura.ai</span>
+          <div className="flex items-center">
+            <Image 
+              src={brandLogo} 
+              alt="Gestura.ai" 
+              className="h-8 w-auto object-contain" 
+              priority
+            />
           </div>
         ) : (
           <button 
