@@ -8,6 +8,7 @@ import {
   Users, Plus, ChevronLeft, ChevronRight, Shield, Loader2, UserX, AlertTriangle,
   Search, Filter,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   Table,
   TableBody,
@@ -127,9 +128,11 @@ export default function AdminUsersPage() {
     setChangingRole(userId);
     try {
       await adminApi.updateUserRole(userId, { role: newRole });
+      toast.success('Role berhasil diperbarui');
       fetchUsers();
-    } catch {
-      // silently fail — user will see unchanged role
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Gagal mengubah role';
+      toast.error(msg as string);
     } finally {
       setChangingRole(null);
     }
@@ -138,10 +141,13 @@ export default function AdminUsersPage() {
   const handleDeactivate = async (userId: string) => {
     try {
       await adminApi.deactivateUser(userId);
+      toast.success('User berhasil dinonaktifkan');
       setConfirmDeactivate(null);
       fetchUsers();
-    } catch {
-      // silently fail
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Gagal menonaktifkan user';
+      toast.error(msg as string);
+      setConfirmDeactivate(null);
     }
   };
 
