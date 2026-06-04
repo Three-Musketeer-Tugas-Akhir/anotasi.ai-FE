@@ -151,6 +151,18 @@ export function PipelinePage() {
         setJobs(combined);
         setTotalJobs(combined.length);
         setTotalPages(1);
+      } else if (statusFilter === '__ANTREAN__') {
+        const antreanStatuses = [JOB_STATUS.UPLOADED, JOB_STATUS.QUEUED];
+        const results = await Promise.all(
+          antreanStatuses.map((s) => pipelineApi.listJobs({ page: 1, page_size: 100, status: s }))
+        );
+        const combined = results.flatMap((r) => r.items);
+        combined.sort(
+          (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        );
+        setJobs(combined);
+        setTotalJobs(combined.length);
+        setTotalPages(1);
       } else {
         const params: JobListParams = { page, page_size: pageSize };
         if (statusFilter) params.status = statusFilter;
@@ -206,17 +218,43 @@ export function PipelinePage() {
       setIsSearching(true);
       try {
         let all: JobListItemResponse[] = [];
-        let p = 1;
-        let t = 1;
-        do {
-          const params: JobListParams = { page: p, page_size: 100 };
-          if (statusFilter) params.status = statusFilter;
-          const data = await pipelineApi.listJobs(params);
-          if (aborter.signal.aborted) return;
-          all = [...all, ...data.items];
-          t = data.total_pages;
-          p++;
-        } while (p <= t);
+
+        const fetchAllPages = async (filterStatus?: string) => {
+          let items: JobListItemResponse[] = [];
+          let p = 1;
+          let t = 1;
+          do {
+            const params: JobListParams = { page: p, page_size: 100 };
+            if (filterStatus) params.status = filterStatus;
+            const data = await pipelineApi.listJobs(params);
+            if (aborter.signal.aborted) return [];
+            items = [...items, ...data.items];
+            t = data.total_pages;
+            p++;
+          } while (p <= t);
+          return items;
+        };
+
+        if (statusFilter === '__PROCESSING__') {
+          const processingStatuses = [
+            JOB_STATUS.DETECTING,
+            JOB_STATUS.TRANSCRIBING,
+            JOB_STATUS.ASR_COMPLETED,
+            JOB_STATUS.CROPPING,
+            JOB_STATUS.CROPPING_IN_PROGRESS,
+            JOB_STATUS.VOICE_ANNOTATION_IN_PROGRESS,
+          ];
+          const results = await Promise.all(processingStatuses.map((s) => fetchAllPages(s)));
+          all = results.flatMap((r) => r);
+        } else if (statusFilter === '__ANTREAN__') {
+          const antreanStatuses = [JOB_STATUS.UPLOADED, JOB_STATUS.QUEUED];
+          const results = await Promise.all(antreanStatuses.map((s) => fetchAllPages(s)));
+          all = results.flatMap((r) => r);
+        } else {
+          all = await fetchAllPages(statusFilter || undefined);
+        }
+
+        if (aborter.signal.aborted) return;
         setAllSearchJobs(all);
       } catch (err) {
         if (!aborter.signal.aborted) console.error("Search fetch error", err);
@@ -361,7 +399,7 @@ export function PipelinePage() {
                   className="h-8 text-xs w-40 bg-white border border-slate-200 rounded-md px-2 text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer"
                 >
                   <option value="">Semua Status</option>
-                  <option value="QUEUED">Antrian</option>
+                  <option value="__ANTREAN__">Antrian</option>
                   <option value="__PROCESSING__">Sedang Diproses</option>
                   <option value="READY_FOR_ANNOTATION">Selesai</option>
                   <option value="NEEDS_VOICE_ANNOTATION">Perlu Anotasi Suara</option>
