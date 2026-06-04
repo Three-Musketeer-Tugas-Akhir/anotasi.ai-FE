@@ -138,8 +138,16 @@ export function TimelineEditor({
     const next = allUtterances[idx + 1];
     
     // Window starts at the active utterance, extends to end of next utterance
-    const wStart = activeUtterance.start;
-    const wEnd = next ? (next.global_end ?? next.end) : activeUtterance.end;
+    const wStart = activeUtterance.global_start ?? activeUtterance.start;
+    let wEnd = next ? (next.global_end ?? next.end) : (activeUtterance.global_end ?? activeUtterance.end);
+    
+    // FIX: If there is no next utterance in the current segment, BUT the provided physical video duration
+    // (from a cross-segment merge) is longer than this utterance's duration, extend wEnd.
+    const activeDur = (activeUtterance.global_end ?? activeUtterance.end) - wStart;
+    if (!next && duration > activeDur + 0.1) {
+      wEnd = wStart + duration;
+    }
+    
     const wDur = Math.max(0.1, wEnd - wStart);
     
     return { windowStart: wStart, windowEnd: wEnd, windowDuration: wDur };

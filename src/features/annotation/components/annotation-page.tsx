@@ -589,9 +589,15 @@ export function AnnotationPage() {
     setCurrentTime(globalTime);
 
     // Determine end of playback window: end of N+1 (or N if no N+1)
-    const windowEnd = nextUtterance
+    let windowEnd = nextUtterance
       ? (nextUtterance.global_end ?? nextUtterance.end)
       : (activeUtterance.global_end ?? activeUtterance.end);
+
+    // FIX: If we have a cross-segment merged video, the physical video includes N+1 from the next segment.
+    // The frontend utterance array doesn't have it, but we know the total physical duration.
+    if (!nextUtterance && mergedVideoUrl && mergedTotalDuration > 0) {
+      windowEnd = (activeUtterance.global_start ?? activeUtterance.start) + mergedTotalDuration;
+    }
 
     // Stop at end of the N+1 window — workspace stays on N.
     if (globalTime >= windowEnd) {
