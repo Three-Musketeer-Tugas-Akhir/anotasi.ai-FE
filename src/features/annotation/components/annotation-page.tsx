@@ -87,6 +87,39 @@ export function AnnotationPage() {
 
   // ── Load Job ───────────────────────────────────────
 
+  const fetchMergedVideoForUtterance = useCallback(async (utt: UtteranceCorrection, requestId: number) => {
+    setMergedVideoUrl(null);
+    setVideoNDuration(0);
+    setMergedTotalDuration(0);
+    setVideoReady(false);
+    setFilmstripReady(false);
+    setIsMergeLoading(true);
+
+    if (utt && utt.segment_id) {
+      try {
+        const merged = await annotationApi.getMergedVideo(utt.segment_id, utt.utterance_index);
+        if (activeUttRequestRef.current === requestId) {
+          setMergedVideoUrl(merged.merged_video_url);
+          setVideoNDuration(merged.video_n_duration);
+          setMergedTotalDuration(merged.total_duration);
+        }
+      } catch (err) {
+        console.warn('Failed to load merged video:', err);
+        if (activeUttRequestRef.current === requestId) {
+          setMergedVideoUrl(null);
+          setVideoNDuration(0);
+          setMergedTotalDuration(0);
+        }
+      } finally {
+        if (activeUttRequestRef.current === requestId) {
+          setIsMergeLoading(false);
+        }
+      }
+    } else {
+      setIsMergeLoading(false);
+    }
+  }, []);
+
   const loadJob = useCallback(async (jobId: string) => {
     setJobLoading(true);
     setJobError(null);
@@ -191,7 +224,16 @@ export function AnnotationPage() {
 
       setOriginalUtterances(allOriginal);
       setUtteranceEdits(allEdits);
-      setActiveUtteranceIndex(allEdits.length > 0 ? 0 : null);
+      
+      if (allEdits.length > 0) {
+        setActiveUtteranceIndex(0);
+        const firstUtt = allEdits[0];
+        // Manually trigger the fetch for the first utterance
+        activeUttRequestRef.current = 0;
+        fetchMergedVideoForUtterance(firstUtt, 0);
+      } else {
+        setActiveUtteranceIndex(null);
+      }
 
       // Review status
       try {
@@ -209,7 +251,7 @@ export function AnnotationPage() {
     } finally {
       setJobLoading(false);
     }
-  }, []);
+  }, [fetchMergedVideoForUtterance]);
 
   useEffect(() => {
     if (selectedJobId) {
@@ -331,44 +373,8 @@ export function AnnotationPage() {
     if (utt) {
       setCurrentTime(utt.global_start ?? utt.start);
       setIsPlaying(false);
-    }
-
-    // Reset merged video + show loading overlay
-    setMergedVideoUrl(null);
-    setVideoNDuration(0);
-    setMergedTotalDuration(0);
-    setVideoReady(false);
-    setFilmstripReady(false);
-    setIsMergeLoading(true);
-
-    // VIDEO-EDITOR-SIBI STYLE: Load merged video for this utterance
-    if (utt && utt.segment_id) {
-      const requestId = index;
-      activeUttRequestRef.current = requestId;
-      try {
-        const merged = await annotationApi.getMergedVideo(
-          utt.segment_id,
-          utt.utterance_index
-        );
-        if (activeUttRequestRef.current === requestId) {
-          setMergedVideoUrl(merged.merged_video_url);
-          setVideoNDuration(merged.video_n_duration);
-          setMergedTotalDuration(merged.total_duration);
-        }
-      } catch (err) {
-        console.warn('Failed to load merged video:', err);
-        if (activeUttRequestRef.current === requestId) {
-          setMergedVideoUrl(null);
-          setVideoNDuration(0);
-          setMergedTotalDuration(0);
-        }
-      } finally {
-        if (activeUttRequestRef.current === requestId) {
-          setIsMergeLoading(false);
-        }
-      }
-    } else {
-      setIsMergeLoading(false);
+      activeUttRequestRef.current = index;
+      fetchMergedVideoForUtterance(utt, index);
     }
   };
 
