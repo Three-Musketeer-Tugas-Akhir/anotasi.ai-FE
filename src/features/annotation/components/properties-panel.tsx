@@ -10,9 +10,7 @@ import {
   Clock,
   FileText,
   CheckCircle2,
-  Save,
   RotateCcw,
-  Undo2,
   Loader2,
   AlertTriangle,
   AlertCircle,
@@ -29,9 +27,7 @@ interface PropertiesPanelProps {
   onUtteranceChange: (index: number, updates: Partial<UtteranceCorrection>) => void;
   activeUtteranceIndex: number | null;
   onSelectUtterance: (index: number) => void;
-  onSaveDraft: () => Promise<void>;
   onMarkOk: (index: number) => Promise<void>;
-  onRevert: (index: number) => Promise<void>;
   onReset: () => Promise<void>;
   onSubmit: () => Promise<void>;
   isSaving: boolean;
@@ -75,9 +71,7 @@ export function PropertiesPanel({
   onUtteranceChange,
   activeUtteranceIndex,
   onSelectUtterance,
-  onSaveDraft,
   onMarkOk,
-  onRevert,
   onReset,
   onSubmit,
   isSaving,
@@ -85,7 +79,6 @@ export function PropertiesPanel({
   reviewFeedback,
 }: PropertiesPanelProps) {
   const [resetting, setResetting] = useState(false);
-  const [reverting, setReverting] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const reviewBadge = getReviewBadge(reviewStatus);
@@ -248,53 +241,20 @@ export function PropertiesPanel({
       {/* Action Buttons (Footer) */}
       {activeEdit && (
         <div className="p-5 bg-white border-t border-slate-200 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] flex-shrink-0">
-          {/* IMPROVEMENT 1: Show revert button for OK utterances */}
-          {activeEdit.status === 'OK' && !actionsDisabled && (
-            <div className="mb-3">
-              <button
-                onClick={async () => {
-                  if (!confirm('Kembalikan kalimat ini ke kondisi sebelum di-trim?')) return;
-                  setReverting(true);
-                  try { await onRevert(activeUtteranceIndex!); } finally { setReverting(false); }
-                }}
-                disabled={reverting || isSaving}
-                className="w-full py-3 rounded-xl font-bold text-amber-700 bg-amber-50 border-2 border-amber-200 hover:bg-amber-100 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {reverting ? <Loader2 size={18} className="animate-spin" /> : <Undo2 size={18} />}
-                Ubah Kembali (Undo Trim)
-              </button>
-              <p className="text-center text-xs text-slate-400 mt-1.5">
-                Mengembalikan batas waktu ke kondisi sebelum kalimat ini di-trim.
-              </p>
+          <button
+            onClick={isEndGame ? onSubmit : () => onMarkOk(activeUtteranceIndex!)}
+            disabled={actionsDisabled || isSaving}
+            className={`w-full py-4 rounded-xl font-bold text-white transition-all shadow-[0_4px_14px_0_rgba(13,148,136,0.39)] flex flex-col items-center justify-center disabled:opacity-50 ${
+              isEndGame
+                ? 'bg-blue-600 hover:bg-blue-500 active:bg-blue-700 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] hover:shadow-[0_6px_20px_rgba(37,99,235,0.23)]'
+                : 'bg-teal-600 hover:bg-teal-500 active:bg-teal-700 hover:shadow-[0_6px_20px_rgba(13,148,136,0.23)]'
+            }`}
+          >
+            <div className="flex items-center gap-2 text-lg">
+              {isSaving ? <Loader2 size={24} className="animate-spin" /> : (isEndGame ? <Send size={24} /> : <CheckCircle2 size={24} />)}
+              {isEndGame ? 'SUBMIT REVIEW' : 'SIMPAN & LANJUT'}
             </div>
-          )}
-          {/* Tugas tambahan: Annotator bisa revisi meskipun sudah OK (human error) */}
-          <div className="flex gap-3">
-            <button
-              onClick={onSaveDraft}
-              disabled={actionsDisabled || isSaving}
-              className="px-6 py-4 rounded-xl font-bold text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors flex flex-col items-center justify-center gap-1 disabled:opacity-50"
-              title="Simpan sementara jika belum yakin"
-            >
-              {isSaving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
-              <span className="text-[10px] uppercase">Draft</span>
-            </button>
-            
-            <button
-              onClick={isEndGame ? onSubmit : () => onMarkOk(activeUtteranceIndex!)}
-              disabled={actionsDisabled || isSaving}
-              className={`flex-1 py-4 rounded-xl font-bold text-white transition-all shadow-[0_4px_14px_0_rgba(13,148,136,0.39)] flex flex-col items-center justify-center disabled:opacity-50 ${
-                isEndGame 
-                  ? 'bg-blue-600 hover:bg-blue-500 active:bg-blue-700 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] hover:shadow-[0_6px_20px_rgba(37,99,235,0.23)]'
-                  : 'bg-teal-600 hover:bg-teal-500 active:bg-teal-700 hover:shadow-[0_6px_20px_rgba(13,148,136,0.23)]'
-              }`}
-            >
-              <div className="flex items-center gap-2 text-lg">
-                {isSaving ? <Loader2 size={24} className="animate-spin" /> : (isEndGame ? <Send size={24} /> : <CheckCircle2 size={24} />)} 
-                {isEndGame ? 'SUBMIT REVIEW' : 'SIMPAN & LANJUT'}
-              </div>
-            </button>
-          </div>
+          </button>
           {activeEdit.status !== 'OK' && !actionsDisabled && (
             <p className="text-center text-xs text-slate-400 mt-3 font-medium">
               Tombol "Simpan & Lanjut" akan otomatis membawa Anda ke kalimat berikutnya.

@@ -417,22 +417,6 @@ export function AnnotationPage() {
     );
   };
 
-  const handleSaveDraft = async () => {
-    if (!selectedJobId || utteranceEdits.length === 0) return;
-    setIsSaving(true);
-    setActionMessage('Menyimpan draft...');
-    try {
-      await saveDraftForAllSegments(utteranceEdits);
-      setActionMessage('✅ Draft tersimpan');
-      await loadJob(selectedJobId);
-    } catch (err: unknown) {
-      const msg = (err as any)?.response?.data?.detail || 'Gagal menyimpan draft';
-      setActionMessage(typeof msg === 'string' ? `❌ ${msg}` : '❌ Gagal menyimpan draft');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleSubmitReview = async () => {
     if (!selectedJobId || utteranceEdits.length === 0) return;
 
@@ -547,30 +531,6 @@ export function AnnotationPage() {
       setIsSaving(false);
     }
   };
-
-  // IMPROVEMENT 1: Revert a single utterance to pre-trim state
-  const handleRevertUtterance = async (index: number) => {
-    if (!selectedJobId || utteranceEdits.length === 0) return;
-    const targetUtt = utteranceEdits[index];
-    if (!targetUtt || !targetUtt.segment_id) return;
-
-    setIsSaving(true);
-    setActionMessage('↩️ Mengembalikan ke kondisi sebelum trim...');
-    try {
-      const result = await annotationApi.revertUtterance(targetUtt.segment_id, targetUtt.utterance_index);
-      setActionMessage(`✅ ${result.message}`);
-      await loadJob(selectedJobId);
-      // Stay on the same utterance
-      setTimeout(() => handleSelectUtterance(index), 400);
-    } catch (err: unknown) {
-      const msg = (err as any)?.response?.data?.detail || 'Gagal mengembalikan kalimat';
-      setActionMessage(typeof msg === 'string' ? `❌ ${msg}` : '❌ Gagal mengembalikan kalimat');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-
 
   // ── Hybrid Player Computed Properties (Seamless Segment Router) ──
 
@@ -926,7 +886,16 @@ export function AnnotationPage() {
               <div className="flex-shrink-0 bg-slate-950 p-1 border-t border-slate-800">
                 <TimelineEditor
                   videoUrl={mergedVideoUrl ?? activeUtterance?.segment_video_url ?? jobVideoUrl ?? ''}
-                  videoOffset={0}
+                  // Filmstrip seeks the underlying video as: videoTime = globalTime + videoOffset.
+                  // The timeline window uses the GLOBAL virtual timeline, but the merged video
+                  // (N + N+1) is 0-based, so map global -> merged-local by subtracting the active
+                  // utterance's global_start. For the segment-video fallback, map global -> segment
+                  // -local using (local start - global_start), matching the player's own conversion.
+                  videoOffset={
+                    mergedVideoUrl
+                      ? -((activeUtterance?.global_start) ?? 0)
+                      : ((activeUtterance?.start ?? 0) - (activeUtterance?.global_start ?? 0))
+                  }
                   duration={mergedVideoUrl ? mergedTotalDuration : segmentEnd}
                   currentTime={currentTime}
                   isPlaying={isPlaying}
@@ -957,9 +926,7 @@ export function AnnotationPage() {
                     onUtteranceChange={handleUtteranceChange}
                     activeUtteranceIndex={activeUtteranceIndex}
                     onSelectUtterance={handleSelectUtterance}
-                    onSaveDraft={handleSaveDraft}
                     onMarkOk={handleMarkOk}
-                    onRevert={handleRevertUtterance}
                     onReset={handleReset}
                     onSubmit={handleSubmitReview}
                     isSaving={isSaving}
