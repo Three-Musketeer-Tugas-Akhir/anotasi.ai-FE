@@ -120,7 +120,7 @@ export function PropertiesPanel({
             <div className="flex items-center gap-2 text-sm mt-1">
               <Clock size={14} className="text-slate-400" />
               <span className="font-mono text-slate-600 font-semibold">
-                {activeEdit.start.toFixed(1)}s - {activeEdit.end.toFixed(1)}s
+                0.0s - {(activeEdit.end - activeEdit.start).toFixed(1)}s
               </span>
             </div>
           )}

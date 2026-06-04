@@ -161,7 +161,7 @@ export function UtteranceSheet({
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start mb-1">
                     <span className="text-xs font-mono text-slate-400 font-semibold">
-                      {(u.global_start ?? u.start).toFixed(1)}s - {(u.global_end ?? u.end).toFixed(1)}s
+                      0.0s - {((u.global_end ?? u.end) - (u.global_start ?? u.start)).toFixed(1)}s
                     </span>
                     {u.status === 'DRAFT' && (
                       <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-100 text-amber-700 rounded">
