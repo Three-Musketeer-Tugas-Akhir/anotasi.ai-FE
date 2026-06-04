@@ -331,6 +331,15 @@ export function AnnotationPage() {
 
       const nextUtterance = next[activeUtteranceIndex + 1];
 
+      let absoluteMaxGlobalEnd = Infinity;
+      if (mergedVideoUrl && mergedTotalDuration > 0) {
+        absoluteMaxGlobalEnd = (current.global_start ?? current.start) + mergedTotalDuration;
+      }
+
+      if (newGlobalEnd > absoluteMaxGlobalEnd) {
+        newGlobalEnd = absoluteMaxGlobalEnd;
+      }
+
       // Right Spillover (using global timestamps)
       if (nextUtterance) {
         const nextGlobalStart = nextUtterance.global_start ?? nextUtterance.start;
@@ -344,10 +353,23 @@ export function AnnotationPage() {
               start: nextUtterance.start + shift,
               global_start: newGlobalEnd,
             };
-            if (next[activeUtteranceIndex + 1].start >= next[activeUtteranceIndex + 1].end) {
-              next[activeUtteranceIndex + 1].start = next[activeUtteranceIndex + 1].end - 0.1;
-              next[activeUtteranceIndex + 1].global_start = (next[activeUtteranceIndex + 1].global_end ?? 0) - 0.1;
-              newGlobalEnd = next[activeUtteranceIndex + 1].global_start!;
+            
+            // If N+1 is crushed to < 0.1s, PUSH its end to the right!
+            const minAllowedEnd = next[activeUtteranceIndex + 1].start + 0.1;
+            if (next[activeUtteranceIndex + 1].end < minAllowedEnd) {
+              const diff = minAllowedEnd - next[activeUtteranceIndex + 1].end;
+              next[activeUtteranceIndex + 1].end += diff;
+              next[activeUtteranceIndex + 1].global_end = (next[activeUtteranceIndex + 1].global_end ?? next[activeUtteranceIndex + 1].end) + diff;
+              
+              // If pushing N+1's end exceeded the physical limit, clamp everything back
+              if (next[activeUtteranceIndex + 1].global_end! > absoluteMaxGlobalEnd) {
+                 const overflow = next[activeUtteranceIndex + 1].global_end! - absoluteMaxGlobalEnd;
+                 next[activeUtteranceIndex + 1].global_end! -= overflow;
+                 next[activeUtteranceIndex + 1].end -= overflow;
+                 next[activeUtteranceIndex + 1].global_start! -= overflow;
+                 next[activeUtteranceIndex + 1].start -= overflow;
+                 newGlobalEnd -= overflow;
+              }
             }
           }
         }
