@@ -41,6 +41,7 @@ export interface QueueItemResponse {
   video_preview_url: string;
   transcript_text: string | null;
   utterance_count: number;
+  completed_utterance_count?: number;
   asr_confidence: number | null;
   status: string;
   priority: number;

@@ -406,12 +406,17 @@ function JobCard({
   isSelected: boolean;
   onSelectJob: (jobId: string) => void;
 }) {
-  // Progress is counted in "kalimat" (utterances), not segments. A COMPLETED
-  // (submitted) segment contributes all of its utterances as done — so a fully
-  // submitted job reads e.g. "20/20 kalimat".
+  // Progress is counted in "kalimat" (utterances). A COMPLETED (submitted)
+  // segment contributes all of its utterances as done (so a fully submitted job
+  // reads "20/20 kalimat"); an in-progress segment contributes the number of
+  // utterances already marked OK/FAILED (completed_utterance_count from the API).
   const totalKalimat = group.segments.reduce((sum, seg) => sum + (seg.utterance_count || 0), 0);
   const doneKalimat = group.segments.reduce(
-    (sum, seg) => sum + (seg.status === QUEUE_STATUS.COMPLETED ? (seg.utterance_count || 0) : 0),
+    (sum, seg) =>
+      sum +
+      (seg.status === QUEUE_STATUS.COMPLETED
+        ? (seg.utterance_count || 0)
+        : (seg.completed_utterance_count || 0)),
     0,
   );
   const progressPct = totalKalimat > 0 ? (doneKalimat / totalKalimat) * 100 : 0;
