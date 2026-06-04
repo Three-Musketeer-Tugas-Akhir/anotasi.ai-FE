@@ -48,6 +48,7 @@ interface TimelineEditorProps {
   activeUtterancePosition?: number;
   // VIDEO-EDITOR-SIBI STYLE props
   disableTrimIn?: boolean;  // If true, only end marker is draggable (no trim-in)
+  isMergedVideo?: boolean;  // If true, the video represents a physical merge (N + N+1)
   videoNDuration?: number;  // Duration of video N (for marker boundary line)
   /** Fires when filmstrip frame extraction completes (true) or starts (false) */
   onReady?: (ready: boolean) => void;
@@ -83,6 +84,7 @@ export function TimelineEditor({
   utteranceCount,
   activeUtterancePosition,
   disableTrimIn = false,
+  isMergedVideo = false,
   videoNDuration = 0,
   onReady,
 }: TimelineEditorProps) {
@@ -141,17 +143,16 @@ export function TimelineEditor({
     const wStart = activeUtterance.global_start ?? activeUtterance.start;
     let wEnd = next ? (next.global_end ?? next.end) : (activeUtterance.global_end ?? activeUtterance.end);
     
-    // FIX: If there is no next utterance in the current segment, BUT the provided physical video duration
-    // (from a cross-segment merge) is longer than this utterance's duration, extend wEnd.
-    const activeDur = (activeUtterance.global_end ?? activeUtterance.end) - wStart;
-    if (!next && duration > activeDur + 0.1) {
+    // FIX: If we are using a physical merged video, its exact duration dictates the end of the playable
+    // window. This overrides the ASR-based global_end timestamps which may be shorter than the physical video.
+    if (isMergedVideo && duration > 0) {
       wEnd = wStart + duration;
     }
     
     const wDur = Math.max(0.1, wEnd - wStart);
     
     return { windowStart: wStart, windowEnd: wEnd, windowDuration: wDur };
-  }, [allUtterances, activeUtterance, duration]);
+  }, [allUtterances, activeUtterance, duration, isMergedVideo]);
 
   // ── Frame extraction ──────────────────────────────────────────
 

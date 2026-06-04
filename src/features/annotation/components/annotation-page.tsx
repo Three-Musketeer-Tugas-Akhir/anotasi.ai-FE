@@ -593,9 +593,9 @@ export function AnnotationPage() {
       ? (nextUtterance.global_end ?? nextUtterance.end)
       : (activeUtterance.global_end ?? activeUtterance.end);
 
-    // FIX: If we have a cross-segment merged video, the physical video includes N+1 from the next segment.
-    // The frontend utterance array doesn't have it, but we know the total physical duration.
-    if (!nextUtterance && mergedVideoUrl && mergedTotalDuration > 0) {
+    // FIX: If we have a physical merged video, its exact physical duration determines the end 
+    // of the playable window, overriding any ASR-based global_end assumptions.
+    if (mergedVideoUrl && mergedTotalDuration > 0) {
       windowEnd = (activeUtterance.global_start ?? activeUtterance.start) + mergedTotalDuration;
     }
 
@@ -910,6 +910,7 @@ export function AnnotationPage() {
                   trimEnd={activeUtterance?.global_end ?? segmentEnd}
                   onTrimChange={handleTrimChange}
                   disableTrimIn={false}
+                  isMergedVideo={!!mergedVideoUrl}
                   videoNDuration={videoNDuration}
                   activeUtterance={activeUtterance && activeUtteranceIndex !== null ? { index: activeUtteranceIndex, start: activeUtterance.global_start ?? activeUtterance.start, end: activeUtterance.global_end ?? activeUtterance.end, status: activeUtterance.status, global_start: activeUtterance.global_start ?? activeUtterance.start, global_end: activeUtterance.global_end ?? activeUtterance.end } : null}
                   allUtterances={utteranceEdits}
