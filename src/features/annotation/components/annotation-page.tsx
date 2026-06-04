@@ -968,12 +968,3 @@ export function AnnotationPage() {
     </div>
   );
 }
-                </div >
-              </div >
-            )}
-          </div >
-        ) : null}
-      </div >
-    </div >
-  );
-}
