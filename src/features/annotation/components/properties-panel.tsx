@@ -55,7 +55,7 @@ function getReviewBadge(status: string | null): { label: string; className: stri
   switch (status) {
     case 'SUBMITTED':
     case 'PENDING':
-      return { label: 'Menunggu Review', className: 'bg-amber-50 text-amber-700 border-amber-200' };
+      return { label: 'SUBMITTED', className: 'bg-blue-50 text-blue-700 border-blue-200' };
     case 'APPROVED':
       return { label: 'Disetujui ✓', className: 'bg-teal-50 text-teal-700 border-teal-200' };
     case 'REJECTED':
