@@ -113,8 +113,11 @@ export function PropertiesPanel({
 
   const confBadge = activeEdit ? getConfidenceBadge(activeEdit.confidence) : null;
   const totalUtterances = utteranceEdits.length;
-  const totalCompleted = utteranceEdits.filter(u => u.status === 'OK').length;
-  const isEndGame = totalCompleted === totalUtterances && activeEdit?.status === 'OK';
+  // FAILED utterances (ASR hallucinations that cannot be cropped) count as
+  // "resolved" so the workflow can reach the SUBMIT REVIEW end-state.
+  const totalResolved = utteranceEdits.filter(u => u.status === 'OK' || u.status === 'FAILED').length;
+  const isActiveResolved = activeEdit?.status === 'OK' || activeEdit?.status === 'FAILED';
+  const isEndGame = totalResolved === totalUtterances && isActiveResolved;
 
   return (
     <div className="w-full h-full bg-white flex flex-col z-20">
@@ -148,6 +151,10 @@ export function PropertiesPanel({
             ) : activeEdit.status === 'DRAFT' ? (
               <span className="px-3 py-1 bg-amber-100 text-amber-700 font-bold text-xs rounded border border-amber-200">
                 DRAFT
+              </span>
+            ) : activeEdit.status === 'FAILED' ? (
+              <span className="px-3 py-1 bg-red-100 text-red-700 font-bold text-xs rounded border border-red-200 flex items-center gap-1">
+                <AlertTriangle size={14} /> GAGAL CROP (DILEWATI)
               </span>
             ) : (
               <span className="px-3 py-1 bg-slate-100 text-slate-600 font-bold text-xs rounded border border-slate-200">

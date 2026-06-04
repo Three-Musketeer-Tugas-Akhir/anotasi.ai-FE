@@ -386,9 +386,13 @@ export function AnnotationPage() {
 
   // ── API Actions ───────────────────────────────────────────────
 
-  // Strip FE-only virtual fields before sending to backend
+  // Strip FE-only virtual fields before sending to backend.
+  // IMPORTANT: cropped_video_path is intentionally KEPT. The physical crop
+  // reference lives in the latest draft; if we drop it here, every save
+  // overwrites the latest edit with a null path and orphans the cropped
+  // video in MinIO (status stays OK but the video link is lost).
   const stripGlobalFields = (utt: UtteranceCorrection): UtteranceCorrection => {
-    const { global_start, global_end, segment_offset, segment_video_url, confidence, cropped_video_path, ...clean } = utt;
+    const { global_start, global_end, segment_offset, segment_video_url, confidence, ...clean } = utt;
     // Clamp start to >= 0
     if (clean.start < 0) {
       clean.start = 0;
@@ -432,7 +436,10 @@ export function AnnotationPage() {
   const handleSubmitReview = async () => {
     if (!selectedJobId || utteranceEdits.length === 0) return;
 
-    const unfinished = utteranceEdits.filter(u => u.status !== 'OK').length;
+    // FAILED utterances are ASR hallucinations (e.g. ~0.03s junk) that can
+    // never be cropped — treat them as resolved/skipped so they don't block
+    // submission. Only genuinely unworked utterances count as "unfinished".
+    const unfinished = utteranceEdits.filter(u => u.status !== 'OK' && u.status !== 'FAILED').length;
     if (unfinished > 0) {
       if (!confirm(`Ada ${unfinished} kalimat yang belum ditandai selesai (OK). Lanjutkan submit?`)) return;
     } else {

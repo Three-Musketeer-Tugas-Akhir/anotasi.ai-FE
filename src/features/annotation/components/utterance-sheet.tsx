@@ -39,12 +39,13 @@ export function UtteranceSheet({
     };
   }, [isOpen]);
 
-  const totalCompleted = utterances.filter((u) => u.status === 'OK').length;
+  // FAILED = ASR hallucination that cannot be cropped; treated as resolved/skipped.
+  const totalResolved = utterances.filter((u) => u.status === 'OK' || u.status === 'FAILED').length;
   const totalUtterances = utterances.length;
 
   const filteredUtterances = utterances.filter((u) => {
     if (filter === 'ALL') return true;
-    if (filter === 'UNFINISHED') return u.status !== 'OK';
+    if (filter === 'UNFINISHED') return u.status !== 'OK' && u.status !== 'FAILED';
     if (filter === 'DRAFT') return u.status === 'DRAFT';
     return true;
   });
@@ -100,7 +101,7 @@ export function UtteranceSheet({
                 : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
             }`}
           >
-            Belum Selesai ({totalUtterances - totalCompleted})
+            Belum Selesai ({totalUtterances - totalResolved})
           </button>
           <button
             onClick={() => onFilterChange('DRAFT')}
@@ -147,6 +148,8 @@ export function UtteranceSheet({
                         ? 'bg-teal-100 text-teal-700'
                         : u.status === 'DRAFT'
                         ? 'bg-amber-100 text-amber-700'
+                        : u.status === 'FAILED'
+                        ? 'bg-red-100 text-red-700'
                         : 'bg-slate-100 text-slate-500'
                     }`}
                   >
@@ -163,6 +166,11 @@ export function UtteranceSheet({
                     {u.status === 'DRAFT' && (
                       <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-100 text-amber-700 rounded">
                         DRAFT
+                      </span>
+                    )}
+                    {u.status === 'FAILED' && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-red-100 text-red-700 rounded">
+                        DILEWATI
                       </span>
                     )}
                     {activeIndex === globalIndex && (
