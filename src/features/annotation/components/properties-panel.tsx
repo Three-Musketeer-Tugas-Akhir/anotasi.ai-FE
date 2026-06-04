@@ -6,7 +6,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
-  Shield,
   Clock,
   FileText,
   CheckCircle2,
@@ -41,13 +40,6 @@ function formatTs(s: number | null): string {
   const sec = Math.floor(s % 60);
   const ms = Math.round((s % 1) * 100);
   return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
-}
-
-function getConfidenceBadge(score: number | null | undefined): { label: string; className: string } {
-  if (score === null || score === undefined) return { label: 'N/A', className: 'bg-slate-100 text-slate-500 border-slate-200' };
-  if (score >= 0.9) return { label: `${Math.round(score * 100)}%`, className: 'bg-teal-50 text-teal-700 border-teal-200' };
-  if (score >= 0.5) return { label: `${Math.round(score * 100)}%`, className: 'bg-amber-50 text-amber-700 border-amber-200' };
-  return { label: `${Math.round(score * 100)}%`, className: 'bg-red-50 text-red-700 border-red-200' };
 }
 
 function getReviewBadge(status: string | null): { label: string; className: string } | null {
@@ -104,7 +96,6 @@ export function PropertiesPanel({
     try { await onReset(); } finally { setResetting(false); }
   };
 
-  const confBadge = activeEdit ? getConfidenceBadge(activeEdit.confidence) : null;
   const totalUtterances = utteranceEdits.length;
   // FAILED utterances (ASR hallucinations that cannot be cropped) count as
   // "resolved" so the workflow can reach the SUBMIT REVIEW end-state.
@@ -149,11 +140,7 @@ export function PropertiesPanel({
               <span className="px-3 py-1 bg-red-100 text-red-700 font-bold text-xs rounded border border-red-200 flex items-center gap-1">
                 <AlertTriangle size={14} /> GAGAL CROP (DILEWATI)
               </span>
-            ) : (
-              <span className="px-3 py-1 bg-slate-100 text-slate-600 font-bold text-xs rounded border border-slate-200">
-                BELUM DIKERJAKAN
-              </span>
-            )
+            ) : null
           ) : null}
           {activeEdit && (
             <Button
@@ -191,12 +178,6 @@ export function PropertiesPanel({
                 <label className="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                   <FileText size={16} /> 1. Baca Teks Ini (GT)
                 </label>
-                {confBadge && (
-                  <Badge variant="outline" className={`text-[11px] px-1.5 py-0.5 ${confBadge.className}`}>
-                    <Shield size={10} className="mr-1" />
-                    ASR: {confBadge.label}
-                  </Badge>
-                )}
               </div>
               <div className="bg-slate-100 rounded-xl p-4 border border-slate-200 relative mt-2">
                 <div className="absolute -top-3 -left-2 text-4xl text-slate-300 font-serif leading-none">"</div>
