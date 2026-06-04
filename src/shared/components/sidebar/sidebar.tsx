@@ -46,7 +46,7 @@ const ALL_NAV_ITEMS: NavItemConfig[] = [
 function getNavItems(role?: string): NavItemConfig[] {
   if (role === 'annotator') {
     return ALL_NAV_ITEMS.filter((item) =>
-      ['/', '/asr-review', '/annotation'].includes(item.href)
+      ['/', '/asr-review', '/annotation', '/classification'].includes(item.href)
     );
   }
   if (role === 'curator') {
