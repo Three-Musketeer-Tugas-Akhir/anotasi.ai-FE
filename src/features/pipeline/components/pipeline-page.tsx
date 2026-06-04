@@ -132,13 +132,33 @@ export function PipelinePage() {
   const fetchJobs = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const params: JobListParams = { page, page_size: pageSize };
-      if (statusFilter) params.status = statusFilter;
-
-      const data = await pipelineApi.listJobs(params);
-      setJobs(data.items);
-      setTotalJobs(data.total);
-      setTotalPages(data.total_pages);
+      if (statusFilter === '__PROCESSING__') {
+        const processingStatuses = [
+          JOB_STATUS.DETECTING,
+          JOB_STATUS.TRANSCRIBING,
+          JOB_STATUS.ASR_COMPLETED,
+          JOB_STATUS.CROPPING,
+          JOB_STATUS.CROPPING_IN_PROGRESS,
+          JOB_STATUS.VOICE_ANNOTATION_IN_PROGRESS,
+        ];
+        const results = await Promise.all(
+          processingStatuses.map((s) => pipelineApi.listJobs({ page: 1, page_size: 100, status: s }))
+        );
+        const combined = results.flatMap((r) => r.items);
+        combined.sort(
+          (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        );
+        setJobs(combined);
+        setTotalJobs(combined.length);
+        setTotalPages(1);
+      } else {
+        const params: JobListParams = { page, page_size: pageSize };
+        if (statusFilter) params.status = statusFilter;
+        const data = await pipelineApi.listJobs(params);
+        setJobs(data.items);
+        setTotalJobs(data.total);
+        setTotalPages(data.total_pages);
+      }
       setError(null);
       setListRefreshTrigger(Date.now());
     } catch (err: unknown) {
@@ -338,15 +358,13 @@ export function PipelinePage() {
                 <select
                   value={statusFilter || ""}
                   onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-                  className="h-8 text-xs w-[140px] bg-white border border-slate-200 rounded-md px-2 text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer"
+                  className="h-8 text-xs w-40 bg-white border border-slate-200 rounded-md px-2 text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer"
                 >
                   <option value="">Semua Status</option>
                   <option value="QUEUED">Antrian</option>
-                  <option value="DETECTING">Deteksi</option>
-                  <option value="TRANSCRIBING">ASR</option>
-                  <option value="ASR_COMPLETED">ASR Selesai</option>
-                  <option value="CROPPING">Cropping</option>
+                  <option value="__PROCESSING__">Sedang Diproses</option>
                   <option value="READY_FOR_ANNOTATION">Selesai</option>
+                  <option value="NEEDS_VOICE_ANNOTATION">Perlu Anotasi Suara</option>
                   <option value="FAILED">Gagal</option>
                   <option value="CANCELLED">Dibatalkan</option>
                 </select>
