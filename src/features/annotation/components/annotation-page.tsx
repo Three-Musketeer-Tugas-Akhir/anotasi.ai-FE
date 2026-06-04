@@ -911,7 +911,7 @@ export function AnnotationPage() {
                   onTrimChange={handleTrimChange}
                   disableTrimIn={false}
                   videoNDuration={videoNDuration}
-                  activeUtterance={activeUtterance && activeUtteranceIndex !== null ? { index: activeUtteranceIndex, start: activeUtterance.global_start ?? activeUtterance.start, end: activeUtterance.global_end ?? activeUtterance.end, status: activeUtterance.status, global_start: activeUtterance.global_start ?? activeUtterance.start } : null}
+                  activeUtterance={activeUtterance && activeUtteranceIndex !== null ? { index: activeUtteranceIndex, start: activeUtterance.global_start ?? activeUtterance.start, end: activeUtterance.global_end ?? activeUtterance.end, status: activeUtterance.status, global_start: activeUtterance.global_start ?? activeUtterance.start, global_end: activeUtterance.global_end ?? activeUtterance.end } : null}
                   allUtterances={utteranceEdits}
                   onPrevUtterance={handlePrevUtterance}
                   onNextUtterance={handleNextUtterance}

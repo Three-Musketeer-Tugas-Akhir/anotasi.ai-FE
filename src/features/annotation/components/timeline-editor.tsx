@@ -40,7 +40,7 @@ interface TimelineEditorProps {
   trimStart: number;
   trimEnd: number;
   onTrimChange: (start: number, end: number) => void;
-  activeUtterance?: { index: number; start: number; end: number; status?: string; global_start?: number } | null;
+  activeUtterance?: { index: number; start: number; end: number; status?: string; global_start?: number; global_end?: number } | null;
   allUtterances?: UtteranceCorrection[];
   onPrevUtterance?: () => void;
   onNextUtterance?: () => void;
