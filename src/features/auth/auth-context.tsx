@@ -164,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         router.push('/');
       }
     } catch (err: unknown) {
-      const message = extractErrorMessage(err, 'Login gagal. Periksa email dan password.');
+      const message = extractErrorMessage(err, 'Email atau password salah.');
       setError(message);
       throw err;
     } finally {
