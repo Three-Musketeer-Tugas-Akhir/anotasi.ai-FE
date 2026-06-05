@@ -44,6 +44,11 @@ export function AnnotationPage() {
   const [mergedVideoUrl, setMergedVideoUrl] = useState<string | null>(null);
   const [videoNDuration, setVideoNDuration] = useState<number>(0);
   const [mergedTotalDuration, setMergedTotalDuration] = useState<number>(0);
+  // Global time of the merged tape's LEFT edge (= the cascade floor).
+  // mergedBase = active.global_start - head_offset. When the annotator trimmed in
+  // their own head, head_offset > 0 so the tape starts before global_start and the
+  // region [mergedBase, global_start] is the recoverable gray head.
+  const [mergedBase, setMergedBase] = useState<number>(0);
   // Loading state saat merge video sedang diproses on-demand
   const [isMergeLoading, setIsMergeLoading] = useState<boolean>(false);
   // Ref untuk menghindari race condition saat load merged video
@@ -91,6 +96,8 @@ export function AnnotationPage() {
     setMergedVideoUrl(null);
     setVideoNDuration(0);
     setMergedTotalDuration(0);
+    // Default base = global_start (no gray head); overwritten once head_offset arrives.
+    setMergedBase(utt?.global_start ?? utt?.start ?? 0);
     setVideoReady(false);
     setFilmstripReady(false);
     setIsMergeLoading(true);
@@ -102,6 +109,8 @@ export function AnnotationPage() {
           setMergedVideoUrl(merged.merged_video_url);
           setVideoNDuration(merged.video_n_duration);
           setMergedTotalDuration(merged.total_duration);
+          // Tape begins at the floor; the handle (global_start) sits head_offset in.
+          setMergedBase((utt.global_start ?? utt.start ?? 0) - (merged.head_offset ?? 0));
         }
       } catch (err) {
         console.warn('Failed to load merged video:', err);
@@ -109,6 +118,7 @@ export function AnnotationPage() {
           setMergedVideoUrl(null);
           setVideoNDuration(0);
           setMergedTotalDuration(0);
+          setMergedBase(utt?.global_start ?? utt?.start ?? 0);
         }
       } finally {
         if (activeUttRequestRef.current === requestId) {
@@ -304,15 +314,21 @@ export function AnnotationPage() {
       let newGlobalStart = globalStart;
       let newGlobalEnd = globalEnd;
 
-      // Clamp start: cannot go before the previous utterance's end
-      const prevUtterance = activeUtteranceIndex > 0 ? next[activeUtteranceIndex - 1] : null;
-      if (prevUtterance) {
-        const prevGlobalEnd = prevUtterance.global_end ?? prevUtterance.end;
-        newGlobalStart = Math.max(newGlobalStart, prevGlobalEnd);
+      // Lower bound for the start handle:
+      //  - merged tape: the physical floor (mergedBase). This lets the annotator
+      //    drag back into their OWN recoverable gray head, but not past the floor
+      //    (the region already consumed by the previous sentence).
+      //  - otherwise: the previous utterance's end (or 0 for the first).
+      let startFloor: number;
+      if (mergedVideoUrl) {
+        startFloor = mergedBase;
+      } else if (activeUtteranceIndex > 0) {
+        const prevUtterance = next[activeUtteranceIndex - 1];
+        startFloor = prevUtterance.global_end ?? prevUtterance.end;
       } else {
-        // First utterance: start cannot go below 0
-        newGlobalStart = Math.max(newGlobalStart, 0);
+        startFloor = 0;
       }
+      newGlobalStart = Math.max(newGlobalStart, startFloor);
 
       // Ensure start < end
       if (newGlobalStart >= newGlobalEnd) {
@@ -323,7 +339,9 @@ export function AnnotationPage() {
 
       let absoluteMaxGlobalEnd = Infinity;
       if (mergedVideoUrl && mergedTotalDuration > 0) {
-        absoluteMaxGlobalEnd = (current.global_start ?? current.start) + mergedTotalDuration;
+        // Tape spans [mergedBase, mergedBase + total]; the furthest the end handle
+        // can reach is the physical end of the tape.
+        absoluteMaxGlobalEnd = mergedBase + mergedTotalDuration;
       }
 
       if (newGlobalEnd > absoluteMaxGlobalEnd) {
@@ -581,14 +599,15 @@ export function AnnotationPage() {
     const elapsed = currentTime - globalStart;
 
     if (isMergedVideo) {
-      // Merged video timeline starts at 0
-      return Math.max(0, elapsed);
+      // Merged tape starts at the floor (mergedBase), not at global_start, so the
+      // recoverable gray head [mergedBase, global_start] is on the canvas.
+      return Math.max(0, currentTime - mergedBase);
     } else {
       // Segment video: offset to segment-local time
       const segLocalStart = playingUtterance.start ?? 0;
       return Math.max(0, segLocalStart + elapsed);
     }
-  }, [playingUtterance, currentTime, isMergedVideo]);
+  }, [playingUtterance, currentTime, isMergedVideo, mergedBase]);
 
   const handlePlayerTimeUpdate = (t: number) => {
     if (!activeUtterance || !playingUtterance) return;
@@ -596,8 +615,8 @@ export function AnnotationPage() {
 
     let globalTime: number;
     if (isMergedVideo) {
-      // Merged video: t is relative to 0, so globalTime = global_start + t
-      globalTime = globalStart + t;
+      // Merged tape: t is relative to the floor (mergedBase), so globalTime = mergedBase + t
+      globalTime = mergedBase + t;
     } else {
       // Segment video: t is segment-local time
       const segLocalStart = playingUtterance.start ?? 0;
@@ -611,10 +630,11 @@ export function AnnotationPage() {
       ? (nextUtterance.global_end ?? nextUtterance.end)
       : (activeUtterance.global_end ?? activeUtterance.end);
 
-    // FIX: If we have a physical merged video, its exact physical duration determines the end 
+    // FIX: If we have a physical merged video, its exact physical duration determines the end
     // of the playable window, overriding any ASR-based global_end assumptions.
+    // The tape spans [mergedBase, mergedBase + total].
     if (mergedVideoUrl && mergedTotalDuration > 0) {
-      windowEnd = (activeUtterance.global_start ?? activeUtterance.start) + mergedTotalDuration;
+      windowEnd = mergedBase + mergedTotalDuration;
     }
 
     // Stop at end of the N+1 window — workspace stays on N.
@@ -917,9 +937,10 @@ export function AnnotationPage() {
                   // -local using (local start - global_start), matching the player's own conversion.
                   videoOffset={
                     mergedVideoUrl
-                      ? -((activeUtterance?.global_start) ?? 0)
+                      ? -mergedBase
                       : ((activeUtterance?.start ?? 0) - (activeUtterance?.global_start ?? 0))
                   }
+                  mergedBaseGlobal={mergedVideoUrl ? mergedBase : undefined}
                   duration={mergedVideoUrl ? mergedTotalDuration : segmentEnd}
                   currentTime={currentTime}
                   isPlaying={isPlaying}

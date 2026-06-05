@@ -91,6 +91,10 @@ export const annotationApi = {
         video_n_duration: number;
         total_duration: number;
         is_single_video?: boolean;
+        /** Seconds of the annotator's OWN head trim-in kept in the tape as a
+         *  recoverable gray region (start - floor). The merged video physically
+         *  begins at `floor`, so mergedBase = global_start - head_offset. */
+        head_offset?: number;
       }>(`/annotations/segments/${segmentId}/utterances/${utteranceIndex}/merged-video`)
       .then((r) => r.data),
 

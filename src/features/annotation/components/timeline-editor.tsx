@@ -49,6 +49,10 @@ interface TimelineEditorProps {
   // VIDEO-EDITOR-SIBI STYLE props
   disableTrimIn?: boolean;  // If true, only end marker is draggable (no trim-in)
   isMergedVideo?: boolean;  // If true, the video represents a physical merge (N + N+1)
+  /** Global time of the merged tape's LEFT edge (the cascade floor). When the
+   *  annotator trimmed in their own head this is BEFORE the start handle, so the
+   *  region [mergedBaseGlobal, trimStart] renders as the recoverable gray head. */
+  mergedBaseGlobal?: number;
   videoNDuration?: number;  // Duration of video N (for marker boundary line)
   /** Fires when filmstrip frame extraction completes (true) or starts (false) */
   onReady?: (ready: boolean) => void;
@@ -85,6 +89,7 @@ export function TimelineEditor({
   activeUtterancePosition,
   disableTrimIn = false,
   isMergedVideo = false,
+  mergedBaseGlobal,
   videoNDuration = 0,
   onReady,
 }: TimelineEditorProps) {
@@ -138,9 +143,12 @@ export function TimelineEditor({
     }
     const idx = activeUtterance.index;
     const next = allUtterances[idx + 1];
-    
-    // Window starts at the active utterance, extends to end of next utterance
-    const wStart = activeUtterance.global_start ?? activeUtterance.start;
+
+    // Window starts at the merged tape's floor (so the recoverable gray head
+    // [floor, start] is on the canvas); falls back to the utterance start.
+    const wStart = (isMergedVideo && mergedBaseGlobal !== undefined)
+      ? mergedBaseGlobal
+      : (activeUtterance.global_start ?? activeUtterance.start);
     let wEnd = next ? (next.global_end ?? next.end) : (activeUtterance.global_end ?? activeUtterance.end);
     
     // FIX: If we are using a physical merged video, its exact duration dictates the end of the playable
@@ -152,7 +160,7 @@ export function TimelineEditor({
     const wDur = Math.max(0.1, wEnd - wStart);
     
     return { windowStart: wStart, windowEnd: wEnd, windowDuration: wDur };
-  }, [allUtterances, activeUtterance, duration, isMergedVideo]);
+  }, [allUtterances, activeUtterance, duration, isMergedVideo, mergedBaseGlobal]);
 
   // ── Frame extraction ──────────────────────────────────────────
 
@@ -478,10 +486,22 @@ export function TimelineEditor({
           <div className="absolute top-0 bottom-0 border-2 pointer-events-none rounded-sm border-teal-400"
             style={{ left: `${regionLeftPx}px`, width: `${regionRightPx - regionLeftPx}px` }} />
 
-          {/* Marker boundary line showing where two video clips are joined */}
+          {/* Recoverable gray head — the annotator's OWN left trim-in [floor, start].
+              Still in the tape, so the start handle can be dragged back over it. */}
+          {isMergedVideo && mergedBaseGlobal !== undefined && regionLeftPx > 4 && (
+            <div className="absolute top-0 bottom-0 left-0 z-10 pointer-events-none bg-amber-400/15 border-r border-dashed border-amber-300/70 flex items-center justify-center overflow-hidden"
+              style={{ width: `${regionLeftPx}px` }}>
+              <span className="text-[9px] text-amber-100 bg-black/55 px-1 py-0.5 rounded whitespace-nowrap select-none">
+                ↤ bisa ditarik kembali
+              </span>
+            </div>
+          )}
+
+          {/* Marker boundary line where the two clips join — sits videoNDuration
+              after the tape's left edge (windowStart = floor), not after the handle. */}
           {videoNDuration > 0 && activeUtterance && (
             <div className="absolute top-0 bottom-0 w-0.5 bg-yellow-400/70 z-25 pointer-events-none"
-              style={{ left: `${timeToInnerPx((activeUtterance.global_start ?? activeUtterance.start ?? 0) + videoNDuration)}px` }}
+              style={{ left: `${timeToInnerPx(windowStart + videoNDuration)}px` }}
               title="Batas sambungan video pertama dan kedua">
               <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-yellow-400 rounded-full" />
               <div className="absolute top-1 left-2 text-[9px] text-yellow-300 font-semibold whitespace-nowrap bg-black/60 px-1 rounded pointer-events-none select-none">
