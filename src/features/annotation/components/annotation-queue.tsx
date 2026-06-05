@@ -87,13 +87,16 @@ interface AnnotationQueueProps {
   selectedJobId: string | null;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  /** Live utterance progress from the open workspace — overrides the stale API
+   *  count on the selected job's card so the bar updates in real-time. */
+  liveProgress?: { done: number; total: number };
 }
 
 type TabView = 'queue' | 'submissions';
 
 // ── Component ──────────────────────────────────────────────────────
 
-export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onToggleCollapse }: AnnotationQueueProps) {
+export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onToggleCollapse, liveProgress }: AnnotationQueueProps) {
   const { selectedDataset } = useSelectedDataset();
   const [tab, setTab] = useState<TabView>('queue');
 
@@ -330,6 +333,7 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
                     group={group}
                     isSelected={group.jobId === selectedJobId}
                     onSelectJob={onSelectJob}
+                    liveProgress={group.jobId === selectedJobId ? liveProgress : undefined}
                   />
                 ))}
               </div>
@@ -383,6 +387,7 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
                   group={group}
                   isSelected={group.jobId === selectedJobId}
                   onSelectJob={onSelectJob}
+                  liveProgress={group.jobId === selectedJobId ? liveProgress : undefined}
                 />
               ))}
             </div>
@@ -401,24 +406,28 @@ function JobCard({
   group,
   isSelected,
   onSelectJob,
+  liveProgress,
 }: {
   group: JobGroup;
   isSelected: boolean;
   onSelectJob: (jobId: string) => void;
+  liveProgress?: { done: number; total: number };
 }) {
   // Progress is counted in "kalimat" (utterances). A COMPLETED (submitted)
-  // segment contributes all of its utterances as done (so a fully submitted job
-  // reads "20/20 kalimat"); an in-progress segment contributes the number of
-  // utterances already marked OK/FAILED (completed_utterance_count from the API).
-  const totalKalimat = group.segments.reduce((sum, seg) => sum + (seg.utterance_count || 0), 0);
-  const doneKalimat = group.segments.reduce(
-    (sum, seg) =>
-      sum +
-      (seg.status === QUEUE_STATUS.COMPLETED
-        ? (seg.utterance_count || 0)
-        : (seg.completed_utterance_count || 0)),
-    0,
-  );
+  // segment contributes all of its utterances as done; an in-progress segment
+  // contributes completed_utterance_count from the API. When the workspace is
+  // open we override with live counts so the bar updates instantly on Save.
+  const totalKalimat = liveProgress?.total
+    ?? group.segments.reduce((sum, seg) => sum + (seg.utterance_count || 0), 0);
+  const doneKalimat = liveProgress?.done
+    ?? group.segments.reduce(
+        (sum, seg) =>
+          sum +
+          (seg.status === QUEUE_STATUS.COMPLETED
+            ? (seg.utterance_count || 0)
+            : (seg.completed_utterance_count || 0)),
+        0,
+      );
   const progressPct = totalKalimat > 0 ? (doneKalimat / totalKalimat) * 100 : 0;
 
   return (

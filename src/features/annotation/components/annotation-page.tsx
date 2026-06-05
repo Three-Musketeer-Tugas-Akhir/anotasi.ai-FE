@@ -730,8 +730,15 @@ export function AnnotationPage() {
             <Button
               variant="outline"
               onClick={handleReset}
-              disabled={isSaving}
-              className="gap-2 px-4 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 rounded-xl font-bold transition-all shadow-sm hidden lg:flex"
+              disabled={isSaving || reviewStatus === 'SUBMITTED' || reviewStatus === 'PENDING' || reviewStatus === 'APPROVED'}
+              title={
+                reviewStatus === 'SUBMITTED' || reviewStatus === 'PENDING'
+                  ? 'Tidak bisa reset — anotasi sedang dalam review'
+                  : reviewStatus === 'APPROVED'
+                  ? 'Tidak bisa reset — anotasi sudah disetujui'
+                  : undefined
+              }
+              className="gap-2 px-4 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 rounded-xl font-bold transition-all shadow-sm hidden lg:flex disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <RotateCcw size={18} /> Reset
             </Button>
@@ -761,6 +768,9 @@ export function AnnotationPage() {
           selectedJobId={selectedJobId}
           isCollapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          liveProgress={selectedJobId && totalUtterances > 0
+            ? { done: totalCompleted, total: totalUtterances }
+            : undefined}
         />
 
         {!selectedJobId ? (

@@ -220,29 +220,42 @@ export function PropertiesPanel({
       </div>
 
       {/* Action Buttons (Footer) */}
-      {activeEdit && (
-        <div className="p-5 bg-white border-t border-slate-200 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] flex-shrink-0">
-          <button
-            onClick={isEndGame ? onSubmit : () => onMarkOk(activeUtteranceIndex!)}
-            disabled={actionsDisabled || isSaving}
-            className={`w-full py-4 rounded-xl font-bold text-white transition-all shadow-[0_4px_14px_0_rgba(13,148,136,0.39)] flex flex-col items-center justify-center disabled:opacity-50 ${
-              isEndGame
-                ? 'bg-blue-600 hover:bg-blue-500 active:bg-blue-700 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] hover:shadow-[0_6px_20px_rgba(37,99,235,0.23)]'
-                : 'bg-teal-600 hover:bg-teal-500 active:bg-teal-700 hover:shadow-[0_6px_20px_rgba(13,148,136,0.23)]'
-            }`}
-          >
-            <div className="flex items-center gap-2 text-lg">
-              {isSaving ? <Loader2 size={24} className="animate-spin" /> : (isEndGame ? <Send size={24} /> : <CheckCircle2 size={24} />)}
-              {isEndGame ? 'SUBMIT REVIEW' : 'SIMPAN & LANJUT'}
-            </div>
-          </button>
-          {activeEdit.status !== 'OK' && !actionsDisabled && (
-            <p className="text-center text-xs text-slate-400 mt-3 font-medium">
-              Tombol "Simpan & Lanjut" akan otomatis membawa Anda ke kalimat berikutnya.
-            </p>
-          )}
-        </div>
-      )}
+      {activeEdit && (() => {
+        // Save is disabled when this utterance is already OK and untouched —
+        // any trim or glosa change flips status back to DRAFT which re-enables it.
+        const alreadySaved = !isEndGame && activeEdit.status === 'OK';
+        const buttonDisabled = actionsDisabled || isSaving || alreadySaved;
+
+        return (
+          <div className="p-5 bg-white border-t border-slate-200 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] flex-shrink-0">
+            <button
+              onClick={isEndGame ? onSubmit : () => onMarkOk(activeUtteranceIndex!)}
+              disabled={buttonDisabled}
+              className={`w-full py-4 rounded-xl font-bold text-white transition-all shadow-[0_4px_14px_0_rgba(13,148,136,0.39)] flex flex-col items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed ${
+                isEndGame
+                  ? 'bg-blue-600 hover:bg-blue-500 active:bg-blue-700 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] hover:shadow-[0_6px_20px_rgba(37,99,235,0.23)]'
+                  : 'bg-teal-600 hover:bg-teal-500 active:bg-teal-700 hover:shadow-[0_6px_20px_rgba(13,148,136,0.23)]'
+              }`}
+            >
+              <div className="flex items-center gap-2 text-lg">
+                {isSaving ? <Loader2 size={24} className="animate-spin" /> : (isEndGame ? <Send size={24} /> : <CheckCircle2 size={24} />)}
+                {isEndGame ? 'SUBMIT REVIEW' : 'SIMPAN & LANJUT'}
+              </div>
+            </button>
+
+            {/* Context-aware hint below the button */}
+            {alreadySaved ? (
+              <p className="text-center text-xs text-slate-400 mt-3 font-medium">
+                Sudah tersimpan. Geser batas area hijau atau ubah glosa untuk mengaktifkan kembali.
+              </p>
+            ) : activeEdit.status !== 'OK' && !actionsDisabled ? (
+              <p className="text-center text-xs text-slate-400 mt-3 font-medium">
+                Tombol "Simpan & Lanjut" akan otomatis membawa Anda ke kalimat berikutnya.
+              </p>
+            ) : null}
+          </div>
+        );
+      })()}
 
       {activeEdit && activeEdit.segment_id && (
         <EditHistoryDrawer
