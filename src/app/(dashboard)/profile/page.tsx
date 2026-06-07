@@ -274,9 +274,11 @@ export default function ProfilePage() {
                     <span className={`w-1.5 h-1.5 rounded-full ${profile?.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
                     {profile?.is_active ? 'Aktif' : 'Non-aktif'}
                   </span>
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${profile?.email_verified ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                    {profile?.email_verified ? '✓ Email Terverifikasi' : '○ Email Belum Verifikasi'}
-                  </span>
+                  {profile?.email_verified && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                      ✓ Email Terverifikasi
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
