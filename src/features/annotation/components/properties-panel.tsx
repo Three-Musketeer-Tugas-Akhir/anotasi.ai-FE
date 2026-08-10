@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Send,
   History,
+  Lock,
 } from 'lucide-react';
 import type { TranscriptUtterance, UtteranceCorrection } from '../annotation-types';
 import { EditHistoryDrawer } from './edit-history-drawer';
@@ -32,6 +33,8 @@ interface PropertiesPanelProps {
   isSaving: boolean;
   reviewStatus: string | null;
   reviewFeedback: string | null;
+  /** Kunci field glosa — dataset aktif sudah melewati pengolahan end-to-end. */
+  glosaLocked?: boolean;
 }
 
 function formatTs(s: number | null): string {
@@ -69,6 +72,7 @@ export function PropertiesPanel({
   isSaving,
   reviewStatus,
   reviewFeedback,
+  glosaLocked = false,
 }: PropertiesPanelProps) {
   const [resetting, setResetting] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -77,6 +81,7 @@ export function PropertiesPanel({
   const isPendingReview = reviewStatus === 'SUBMITTED' || reviewStatus === 'PENDING';
   const isReviewed = reviewStatus === 'APPROVED' || reviewStatus === 'REJECTED';
   const actionsDisabled = isPendingReview || isReviewed;
+  const glosaDisabled = actionsDisabled || glosaLocked;
 
   const activeEdit: UtteranceCorrection | null =
     activeUtteranceIndex !== null && activeUtteranceIndex < utteranceEdits.length
@@ -193,20 +198,33 @@ export function PropertiesPanel({
             <div className="w-full h-px bg-slate-100" />
 
             <div className="flex flex-col gap-2 flex-1 min-h-[200px]">
-              <label className="text-sm font-bold text-teal-700 uppercase tracking-wider flex items-center gap-2">
-                <FileText size={16} /> 2. Ketik Notasi Glosa
+              <label className={`text-sm font-bold uppercase tracking-wider flex items-center gap-2 ${glosaLocked ? 'text-slate-500' : 'text-teal-700'}`}>
+                <FileText size={16} /> 2. Notasi Glosa
+                {glosaLocked && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-semibold border border-slate-200 normal-case tracking-normal">
+                    <Lock size={10} /> Terkunci
+                  </span>
+                )}
               </label>
               <Textarea
                 value={activeEdit.text}
                 onChange={(e) => onUtteranceChange(activeUtteranceIndex!, { text: e.target.value })}
                 placeholder="Ketik hasil terjemahan bahasa isyarat di sini..."
-                disabled={actionsDisabled}
+                disabled={glosaDisabled}
+                title={glosaLocked ? 'Dataset sudah melewati tahap pengolahan — glosa tidak dapat diubah' : undefined}
                 className={`flex-1 w-full p-4 text-lg border-2 rounded-xl resize-none outline-none transition-shadow ${
-                  actionsDisabled
+                  glosaDisabled
                     ? 'bg-slate-50 border-slate-200 text-slate-500 cursor-not-allowed'
                     : 'bg-white border-teal-200 focus:border-teal-500 focus:ring-4 focus:ring-teal-500/20 shadow-inner'
                 }`}
               />
+              {glosaLocked && (
+                <p className="text-xs text-slate-500 flex items-start gap-1.5 mt-1">
+                  <Lock size={12} className="mt-0.5 flex-shrink-0" />
+                  Glosa pada dataset ini sudah final. Yang masih bisa diperbaiki hanya batas
+                  filmstrip untuk kalimat yang statusnya belum OK.
+                </p>
+              )}
             </div>
           </>
         ) : (
@@ -246,7 +264,9 @@ export function PropertiesPanel({
             {/* Context-aware hint below the button */}
             {alreadySaved ? (
               <p className="text-center text-xs text-slate-400 mt-3 font-medium">
-                Sudah tersimpan. Geser batas area hijau atau ubah glosa untuk mengaktifkan kembali.
+                {glosaLocked
+                  ? 'Kalimat ini sudah berstatus OK, jadi filmstrip dan glosanya terkunci.'
+                  : 'Sudah tersimpan. Geser batas area hijau atau ubah glosa untuk mengaktifkan kembali.'}
               </p>
             ) : activeEdit.status !== 'OK' && !actionsDisabled ? (
               <p className="text-center text-xs text-slate-400 mt-3 font-medium">

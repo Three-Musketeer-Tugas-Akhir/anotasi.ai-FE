@@ -14,6 +14,7 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Lock,
 } from 'lucide-react';
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -56,6 +57,19 @@ interface TimelineEditorProps {
   videoNDuration?: number;  // Duration of video N (for marker boundary line)
   /** Fires when filmstrip frame extraction completes (true) or starts (false) */
   onReady?: (ready: boolean) => void;
+  /** Kunci seluruh interaksi trim — filmstrip hanya bisa dilihat & di-seek. */
+  readOnly?: boolean;
+  /** Alasan penguncian, dipakai sebagai tooltip & badge. */
+  readOnlyReason?: string;
+  // ── Lookback (sisa potongan kalimat N-1) ──
+  /** Detik sisa potongan kalimat N-1 yang sedang disambung di depan tape. */
+  lookbackSeconds?: number;
+  /** Detik sisa potongan yang tersedia untuk disambung (0 = tombol non-aktif). */
+  lookbackAvailable?: number;
+  /** Apakah lookback sedang menyala. */
+  lookbackOn?: boolean;
+  /** Nyalakan/matikan lookback. Tombol disembunyikan kalau tidak diberikan. */
+  onToggleLookback?: () => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -92,6 +106,12 @@ export function TimelineEditor({
   mergedBaseGlobal,
   videoNDuration = 0,
   onReady,
+  readOnly = false,
+  readOnlyReason,
+  lookbackSeconds = 0,
+  lookbackAvailable = 0,
+  lookbackOn = false,
+  onToggleLookback,
 }: TimelineEditorProps) {
   const outerRef = useRef<HTMLDivElement>(null);   // scrollable outer container
   const innerRef = useRef<HTMLDivElement>(null);    // zoomed inner strip
@@ -303,13 +323,15 @@ export function TimelineEditor({
     (type: 'start' | 'end' | 'region', e: React.MouseEvent) => {
       e.stopPropagation();
       e.preventDefault();
+      // Filmstrip terkunci — tidak ada handle yang bisa digeser sama sekali.
+      if (readOnly) return;
       // VIDEO-EDITOR-SIBI STYLE: disable trim-in (start drag and region drag)
       if (disableTrimIn && (type === 'start' || type === 'region')) return;
       setDragging(type);
       dragStartClientX.current = e.clientX;
       dragStartValues.current = { start: trimStart, end: trimEnd };
     },
-    [trimStart, trimEnd, disableTrimIn]
+    [trimStart, trimEnd, disableTrimIn, readOnly]
   );
 
   useEffect(() => {
@@ -367,6 +389,11 @@ export function TimelineEditor({
   const regionLeftPx = timeToInnerPx(trimStart);
   const regionRightPx = timeToInnerPx(trimEnd > 0 ? trimEnd : windowEnd);
   const playheadPx = timeToInnerPx(currentTime);
+  // Right edge of the prepended lookback zone, clamped to the start handle so the
+  // two bands never overlap when the annotator drags back into it.
+  const lookbackPx = lookbackSeconds > 0
+    ? Math.min(timeToInnerPx(windowStart + lookbackSeconds), regionLeftPx)
+    : 0;
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -386,10 +413,45 @@ export function TimelineEditor({
           <span className="text-sm font-semibold text-gray-700 truncate">
             {activeUtterance ? `Kalimat ke-${activeUtterance.index + 1}` : 'Filmstrip Timeline'}
           </span>
+          {readOnly && (
+            <Badge
+              variant="outline"
+              className="text-xs px-1.5 py-0 bg-slate-100 text-slate-500 border-slate-300 h-5 flex-shrink-0"
+              title={readOnlyReason}
+            >
+              <Lock size={10} className="mr-1" />
+              Terkunci
+            </Badge>
+          )}
         </div>
 
-        {/* Right: Timestamps & Zoom controls */}
+        {/* Right: Lookback toggle, timestamps & zoom controls */}
         <div className="flex items-center gap-3">
+          {/* Lookback — sambung sisa potongan kalimat sebelumnya ke depan tape */}
+          {onToggleLookback && !readOnly && (
+            <button
+              onClick={onToggleLookback}
+              disabled={lookbackAvailable <= 0 && !lookbackOn}
+              title={
+                lookbackAvailable > 0 || lookbackOn
+                  ? 'Sambungkan sisa potongan kalimat sebelumnya agar batas awal bisa ditarik mundur'
+                  : 'Kalimat sebelumnya tidak menyisakan potongan yang bisa disambung'
+              }
+              className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                lookbackOn
+                  ? 'bg-sky-100 border-sky-300 text-sky-700 hover:bg-sky-200'
+                  : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <ChevronLeft size={12} />
+              {lookbackOn
+                ? `Konteks aktif (${lookbackSeconds.toFixed(1)}s)`
+                : lookbackAvailable > 0
+                ? `Konteks sebelumnya (${lookbackAvailable.toFixed(1)}s)`
+                : 'Konteks sebelumnya'}
+            </button>
+          )}
+
           {/* Timestamps */}
           <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-gray-500">
             <span className="text-teal-600 font-medium">{formatTimestamp(Math.max(0, trimStart - windowStart))}</span>
@@ -482,15 +544,26 @@ export function TimelineEditor({
             );
           })}
 
-          {/* Active region border */}
-          <div className="absolute top-0 bottom-0 border-2 pointer-events-none rounded-sm border-teal-400"
+          {/* Active region border — abu-abu saat terkunci, teal saat bisa di-trim */}
+          <div className={`absolute top-0 bottom-0 border-2 pointer-events-none rounded-sm ${readOnly ? 'border-slate-400' : 'border-teal-400'}`}
             style={{ left: `${regionLeftPx}px`, width: `${regionRightPx - regionLeftPx}px` }} />
+
+          {/* Lookback zone — the orphan tail kalimat N-1 released. Sits at the very
+              left of the tape, before this utterance's own recoverable head. */}
+          {lookbackPx > 4 && (
+            <div className="absolute top-0 bottom-0 left-0 z-10 pointer-events-none bg-sky-400/20 border-r border-dashed border-sky-300/70 flex items-center justify-center overflow-hidden"
+              style={{ width: `${lookbackPx}px` }}>
+              <span className="text-[9px] text-sky-100 bg-black/55 px-1 py-0.5 rounded whitespace-nowrap select-none">
+                sisa kalimat sebelumnya
+              </span>
+            </div>
+          )}
 
           {/* Recoverable gray head — the annotator's OWN left trim-in [floor, start].
               Still in the tape, so the start handle can be dragged back over it. */}
-          {isMergedVideo && mergedBaseGlobal !== undefined && regionLeftPx > 4 && (
-            <div className="absolute top-0 bottom-0 left-0 z-10 pointer-events-none bg-amber-400/15 border-r border-dashed border-amber-300/70 flex items-center justify-center overflow-hidden"
-              style={{ width: `${regionLeftPx}px` }}>
+          {isMergedVideo && mergedBaseGlobal !== undefined && regionLeftPx - lookbackPx > 4 && (
+            <div className="absolute top-0 bottom-0 z-10 pointer-events-none bg-amber-400/15 border-r border-dashed border-amber-300/70 flex items-center justify-center overflow-hidden"
+              style={{ left: `${lookbackPx}px`, width: `${regionLeftPx - lookbackPx}px` }}>
               <span className="text-[9px] text-amber-100 bg-black/55 px-1 py-0.5 rounded whitespace-nowrap select-none">
                 ↤ bisa ditarik kembali
               </span>
@@ -498,10 +571,10 @@ export function TimelineEditor({
           )}
 
           {/* Marker boundary line where the two clips join — sits videoNDuration
-              after the tape's left edge (windowStart = floor), not after the handle. */}
+              after utterance N's own head, i.e. past any prepended lookback. */}
           {videoNDuration > 0 && activeUtterance && (
             <div className="absolute top-0 bottom-0 w-0.5 bg-yellow-400/70 z-25 pointer-events-none"
-              style={{ left: `${timeToInnerPx(windowStart + videoNDuration)}px` }}
+              style={{ left: `${timeToInnerPx(windowStart + lookbackSeconds + videoNDuration)}px` }}
               title="Batas sambungan video pertama dan kedua">
               <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-yellow-400 rounded-full" />
               <div className="absolute top-1 left-2 text-[9px] text-yellow-300 font-semibold whitespace-nowrap bg-black/60 px-1 rounded pointer-events-none select-none">
@@ -511,7 +584,7 @@ export function TimelineEditor({
           )}
 
           {/* Drag handle — start (hidden in SIBI style) */}
-          {!disableTrimIn && (
+          {!readOnly && !disableTrimIn && (
             <div className="absolute top-0 bottom-0 w-4 cursor-col-resize z-20 group flex items-center justify-center"
               style={{ left: `${regionLeftPx - 8}px` }}
               onMouseDown={(e) => handleMouseDown('start', e)}
@@ -521,15 +594,17 @@ export function TimelineEditor({
           )}
 
           {/* Drag handle — end */}
-          <div className="absolute top-0 bottom-0 w-4 cursor-col-resize z-20 group flex items-center justify-center"
-            style={{ left: `${regionRightPx - 8}px` }}
-            onMouseDown={(e) => handleMouseDown('end', e)}
-            onClick={(e) => e.stopPropagation()}>
-            <div className="w-1 h-full bg-teal-400 group-hover:bg-teal-300 transition-colors rounded-full" />
-          </div>
+          {!readOnly && (
+            <div className="absolute top-0 bottom-0 w-4 cursor-col-resize z-20 group flex items-center justify-center"
+              style={{ left: `${regionRightPx - 8}px` }}
+              onMouseDown={(e) => handleMouseDown('end', e)}
+              onClick={(e) => e.stopPropagation()}>
+              <div className="w-1 h-full bg-teal-400 group-hover:bg-teal-300 transition-colors rounded-full" />
+            </div>
+          )}
 
           {/* Region drag overlay (hidden in SIBI style) */}
-          {!disableTrimIn && (
+          {!readOnly && !disableTrimIn && (
             <div className="absolute top-0 bottom-0 z-10"
               style={{
                 left: `${regionLeftPx}px`,

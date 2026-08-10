@@ -138,7 +138,11 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
       try {
         const data = await annotationApi.getQueue({
           page,
-          page_size: 50, // Fetch more to build proper groups
+          // Cards are grouped by job, but the API paginates by segment — a job
+          // split across two pages renders as two cards with partial counts.
+          // A dataset like TVRI assigns >100 segments to one annotator, so the
+          // page has to be big enough to hold a whole dataset's worth.
+          page_size: 200,
           status: statusFilter,
           dataset_id: selectedDataset?.id,
         });
@@ -165,7 +169,7 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
       // backend applies is_admin); annotators get only their own.
       const data = await annotationApi.getQueue({
         page: 1,
-        page_size: 100,
+        page_size: 200,
         status: 'COMPLETED',
         dataset_id: selectedDataset?.id,
       });

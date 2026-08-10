@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle, Loader2, Type, HandMetal, X } from 'lucide-react';
+import { CheckCircle, Loader2, Type, HandMetal, X, Lock } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { ClassificationJob, CategoryStatus } from '@/features/classification/types/classification.types';
 import { StatusBadge } from './status-badge';
@@ -12,13 +12,17 @@ interface CategorizationPanelProps {
   isPending: boolean;
   onCategorize: (category: 'SIBI' | 'BISINDO') => void;
   onReset?: () => void;
+  /** Kunci panel saat dataset aktif sudah melewati pengolahan end-to-end. */
+  readOnly?: boolean;
 }
 
 /**
  * Action panel for selecting SIBI or BISINDO classification.
  * Includes keyboard shortcut hints and a reset button.
  */
-export function CategorizationPanel({ job, isPending, onCategorize, onReset }: CategorizationPanelProps) {
+export function CategorizationPanel({ job, isPending, onCategorize, onReset, readOnly = false }: CategorizationPanelProps) {
+  const locked = readOnly || isPending;
+
   return (
     <div id="tour-categorization-panel" className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 lg:p-5 relative overflow-hidden">
       {/* Loading overlay */}
@@ -34,10 +38,23 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
       {/* Header */}
       <div className="flex justify-between items-start mb-3 lg:mb-4">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">Klasifikasi JBI</h2>
+          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            Klasifikasi JBI
+            {readOnly && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-semibold border border-slate-200">
+                <Lock size={10} /> Terkunci
+              </span>
+            )}
+          </h2>
           <p className="text-slate-500 text-sm">
-            Tonton video di atas, lalu klik tombol <strong>SIBI</strong> atau <strong>BISINDO</strong> sesuai
-            tipe bahasa isyarat yang digunakan.
+            {readOnly
+              ? 'Video ini sudah melewati tahap pengolahan dataset, sehingga tipe JBI-nya sudah final dan tidak dapat diubah.'
+              : (
+                <>
+                  Tonton video di atas, lalu klik tombol <strong>SIBI</strong> atau <strong>BISINDO</strong> sesuai
+                  tipe bahasa isyarat yang digunakan.
+                </>
+              )}
           </p>
         </div>
         <div className="text-right">
@@ -55,12 +72,15 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
         {/* SIBI Button */}
         <button
           onClick={() => onCategorize('SIBI')}
-          disabled={isPending}
+          disabled={locked}
+          title={readOnly ? 'Dataset sudah melewati tahap pengolahan — klasifikasi terkunci' : undefined}
           className={cn(
-            'relative group flex items-center p-2 lg:p-3 rounded-xl border-2 transition-all duration-200 text-left hover:shadow-md',
+            'relative group flex items-center p-2 lg:p-3 rounded-xl border-2 transition-all duration-200 text-left',
+            readOnly && 'opacity-60 cursor-not-allowed',
+            !readOnly && 'hover:shadow-md',
             job.category === 'SIBI'
               ? 'border-teal-500 bg-teal-50 ring-1 ring-teal-500'
-              : 'border-gray-200 hover:border-teal-300 hover:bg-teal-50/50',
+              : cn('border-gray-200', !readOnly && 'hover:border-teal-300 hover:bg-teal-50/50'),
           )}
         >
           <div
@@ -76,9 +96,11 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-slate-800">SIBI</h3>
-              <span className="bg-teal-100 text-teal-600 text-[10px] px-1.5 py-0.5 rounded border border-teal-200">
-                Klik untuk pilih
-              </span>
+              {!readOnly && (
+                <span className="bg-teal-100 text-teal-600 text-[10px] px-1.5 py-0.5 rounded border border-teal-200">
+                  Klik untuk pilih
+                </span>
+              )}
             </div>
             <p className="text-[11px] lg:text-xs text-slate-500 mt-0.5 line-clamp-1">
               Tata bahasa baku Indonesia (termasuk imbuhan).
@@ -94,12 +116,15 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
         {/* BISINDO Button */}
         <button
           onClick={() => onCategorize('BISINDO')}
-          disabled={isPending}
+          disabled={locked}
+          title={readOnly ? 'Dataset sudah melewati tahap pengolahan — klasifikasi terkunci' : undefined}
           className={cn(
-            'relative group flex items-center p-2 lg:p-3 rounded-xl border-2 transition-all duration-200 text-left hover:shadow-md',
+            'relative group flex items-center p-2 lg:p-3 rounded-xl border-2 transition-all duration-200 text-left',
+            readOnly && 'opacity-60 cursor-not-allowed',
+            !readOnly && 'hover:shadow-md',
             job.category === 'BISINDO'
               ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500'
-              : 'border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/50',
+              : cn('border-gray-200', !readOnly && 'hover:border-emerald-300 hover:bg-emerald-50/50'),
           )}
         >
           <div
@@ -115,9 +140,11 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-slate-800">BISINDO</h3>
-              <span className="bg-emerald-100 text-emerald-600 text-[10px] px-1.5 py-0.5 rounded border border-emerald-200">
-                Klik untuk pilih
-              </span>
+              {!readOnly && (
+                <span className="bg-emerald-100 text-emerald-600 text-[10px] px-1.5 py-0.5 rounded border border-emerald-200">
+                  Klik untuk pilih
+                </span>
+              )}
             </div>
             <p className="text-[11px] lg:text-xs text-slate-500 mt-0.5 line-clamp-1">
               Gestur natural, ekspresi wajah, & kalimat sederhana.
@@ -133,7 +160,7 @@ export function CategorizationPanel({ job, isPending, onCategorize, onReset }: C
 
       {/* Reset & Info */}
       <div className="mt-3 lg:mt-4 pt-2 lg:pt-3 border-t border-gray-100 flex justify-between items-center">
-        {onReset && (
+        {onReset && !readOnly && (
           <Button
             variant="ghost"
             size="sm"

@@ -37,6 +37,8 @@ export interface QueueItemResponse {
   id: string;
   segment_id: string;
   job_id: string;
+  /** Index of this segment within its job — the canonical ordering key. */
+  segment_index?: number | null;
   original_filename: string;
   video_preview_url: string;
   transcript_text: string | null;
@@ -85,6 +87,8 @@ export interface SegmentEditHistory {
 export interface SegmentDetailResponse {
   segment_id: string;
   job_id: string;
+  /** Index of this segment within its job — the canonical ordering key. */
+  segment_index?: number | null;
   original_filename: string;
   video_url: string;
   video_duration: number | null;

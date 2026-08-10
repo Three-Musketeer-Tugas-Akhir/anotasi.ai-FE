@@ -22,6 +22,7 @@ import {
   Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useDatasetMode, ProcessedDatasetNotice } from '@/features/dataset';
 import { pipelineApi } from '../pipeline-api';
 import type {
   JobListItemResponse,
@@ -81,6 +82,10 @@ function formatRelativeTime(dateStr: string | null): string {
 // ── Main Component ──────────────────────────────────────────────────
 
 export function PipelinePage() {
+  // ── Dataset mode ──────────────────────────────────────────────
+  // Dataset non-iNews sudah selesai diolah, jadi canvas pipeline diganti keterangan.
+  const { selectedDataset, isProcessed } = useDatasetMode();
+
   // ── State ─────────────────────────────────────────────────────
   const [jobs, setJobs] = useState<JobListItemResponse[]>([]);
   const [totalJobs, setTotalJobs] = useState(0);
@@ -356,7 +361,7 @@ export function PipelinePage() {
               )}
             </div>
             
-            {classifiedReady.length > 0 && (
+            {!isProcessed && classifiedReady.length > 0 && (
               <div className="flex items-center gap-3 bg-teal-50 border border-teal-200 rounded-lg px-3 py-1.5 shadow-sm">
                 <span className="text-sm font-medium text-teal-800">
                   {classifiedReady.length} Video Siap Diproses
@@ -561,7 +566,13 @@ export function PipelinePage() {
 
         {/* ──── Right: Job Detail Panel ──── */}
         <div className="flex-1 overflow-hidden">
-          {selectedJobId ? (
+          {isProcessed ? (
+            <ProcessedDatasetNotice
+              datasetName={selectedDataset?.name}
+              title="Video sudah melewati tahap pengolahan dataset"
+              description="Dataset ini bukan iNews, sehingga seluruh videonya sudah selesai diproses end-to-end melalui pipeline. Kanvas pemantauan tahap pemrosesan tidak ditampilkan. Lanjutkan ke halaman Anotasi JBI untuk melihat atau memperbaiki hasilnya."
+            />
+          ) : selectedJobId ? (
             <JobDetailPanel 
                 jobId={selectedJobId} 
                 listRefreshTrigger={listRefreshTrigger}

@@ -1,5 +1,6 @@
 import { apiClient } from '@/core/api/axios-client';
 import type {
+  QueueItemResponse,
   QueueListResponse,
   QueueFilterParams,
   SegmentDetailResponse,
@@ -39,10 +40,31 @@ export const annotationApi = {
   // ═══════════════════════════════════════════════════════════════════
 
   /** GET /annotations/queue — annotator's assigned segments */
-  getQueue: (params?: QueueFilterParams & { dataset_id?: string }) =>
+  getQueue: (params?: QueueFilterParams & { dataset_id?: string; job_id?: string }) =>
     apiClient
       .get<QueueListResponse>('/annotations/queue', { params })
       .then((r) => r.data),
+
+  /** Every queue item of one job, across as many pages as it takes.
+   *
+   *  A dataset like TVRI puts more segments in one annotator's queue than a
+   *  single page holds, and the job's segments are not guaranteed to land on
+   *  page 1 — fetching one page and filtering client-side silently drops
+   *  segments (or the whole job). */
+  getQueueForJob: async (jobId: string): Promise<QueueItemResponse[]> => {
+    const pageSize = 200;
+    const all: QueueItemResponse[] = [];
+    for (let page = 1; ; page++) {
+      const data = await apiClient
+        .get<QueueListResponse>('/annotations/queue', {
+          params: { page, page_size: pageSize, job_id: jobId },
+        })
+        .then((r) => r.data);
+      all.push(...data.items);
+      if (data.items.length < pageSize || page >= data.pages) break;
+    }
+    return all;
+  },
 
   // ═══════════════════════════════════════════════════════════════════
   // Segment Detail
@@ -83,7 +105,7 @@ export const annotationApi = {
       .then((r) => r.data),
 
   /** GET /annotations/segments/:segmentId/utterances/:utteranceIndex/merged-video — get merged video (SIBI style) */
-  getMergedVideo: (segmentId: string, utteranceIndex: number) =>
+  getMergedVideo: (segmentId: string, utteranceIndex: number, includePrev = false) =>
     apiClient
       .get<{
         merged_video_url: string;
@@ -95,7 +117,17 @@ export const annotationApi = {
          *  recoverable gray region (start - floor). The merged video physically
          *  begins at `floor`, so mergedBase = global_start - head_offset. */
         head_offset?: number;
-      }>(`/annotations/segments/${segmentId}/utterances/${utteranceIndex}/merged-video`)
+        /** Seconds of utterance N-1's orphan tail actually prepended to the tape.
+         *  Only non-zero when requested via `includePrev`. Shifts the tape's left
+         *  edge further left: mergedBase = global_start - head_offset - prev_offset. */
+        prev_offset?: number;
+        /** Seconds of orphan tail available to prepend — the stretch utterance N-1
+         *  released by trimming in. Returned on every call so the UI knows whether
+         *  to offer the lookback at all. */
+        prev_available?: number;
+      }>(`/annotations/segments/${segmentId}/utterances/${utteranceIndex}/merged-video`, {
+        params: includePrev ? { include_prev: true } : undefined,
+      })
       .then((r) => r.data),
 
   /** POST /annotations/:segmentId/utterances/:utteranceIndex/revert — revert a trimmed utterance to pre-trim state */

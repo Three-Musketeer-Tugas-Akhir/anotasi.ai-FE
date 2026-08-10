@@ -141,7 +141,7 @@ export function TopBar() {
     return (
       <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0 z-30 relative">
         <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-400 font-medium">Gestura.ai</span>
+          <span className="text-sm text-gray-400 font-medium">Anotasi.ai</span>
           <span className="text-gray-300">/</span>
           <span className="text-sm font-semibold text-gray-700">Pipeline Anotasi SIBI</span>
           <div className="hidden md:block w-px h-5 bg-gray-200 mx-1" />
@@ -176,7 +176,7 @@ export function TopBar() {
     <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0 z-30 relative">
       {/* Left: Breadcrumb / Page context + Dataset Selector */}
       <div className="flex items-center gap-3">
-        <span className="text-sm text-gray-400 font-medium">Gestura.ai</span>
+        <span className="text-sm text-gray-400 font-medium">Anotasi.ai</span>
         <span className="text-gray-300">/</span>
         <span className="text-sm font-semibold text-gray-700">Pipeline Anotasi SIBI</span>
         <div className="hidden md:block w-px h-5 bg-gray-200 mx-1" />

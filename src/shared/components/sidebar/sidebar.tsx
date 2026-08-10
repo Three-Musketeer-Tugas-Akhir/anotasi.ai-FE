@@ -108,7 +108,7 @@ export function Sidebar() {
           <div className="flex items-center">
             <Image 
               src={brandLogo} 
-              alt="Gestura.ai" 
+              alt="Anotasi.ai" 
               className="h-8 w-auto object-contain" 
               priority
             />

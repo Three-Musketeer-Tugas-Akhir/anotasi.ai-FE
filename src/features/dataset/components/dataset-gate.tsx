@@ -67,7 +67,7 @@ export function DatasetGate() {
             <Database className="text-white" size={28} />
           </div>
           <h1 className="text-2xl font-bold text-white mb-2">
-            Selamat Datang di Gestura.ai
+            Selamat Datang di Anotasi.ai
           </h1>
           <p className="text-slate-300 text-sm max-w-md mx-auto transition-all duration-500 h-10">
             {isCreating 

@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { PenTool, ArrowLeft, Loader2, AlertTriangle, RotateCcw, List, Search, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
+import { PenTool, ArrowLeft, Loader2, AlertTriangle, RotateCcw, List, Search, ChevronLeft, ChevronRight, Maximize2, Minimize2, Lock } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { useDatasetMode } from '@/features/dataset';
 import { VideoPlayer } from './video-player';
 import { TimelineEditor } from './timeline-editor';
 import { PropertiesPanel } from './properties-panel';
@@ -13,6 +14,11 @@ import { annotationApi } from '../annotation-api';
 import type { UtteranceCorrection, TranscriptUtterance } from '../annotation-types';
 
 export function AnnotationPage() {
+  // ── Dataset mode ──────────────────────────────────────────
+  // Dataset non-iNews sudah melewati pengolahan end-to-end: glosa terkunci dan
+  // filmstrip hanya boleh diubah untuk kalimat yang statusnya belum OK.
+  const { isProcessed } = useDatasetMode();
+
   // ── Job Selection ─────────────────────────────────────────
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [jobMetadata, setJobMetadata] = useState<{ original_filename: string; job_id: string } | null>(null);
@@ -45,14 +51,23 @@ export function AnnotationPage() {
   const [videoNDuration, setVideoNDuration] = useState<number>(0);
   const [mergedTotalDuration, setMergedTotalDuration] = useState<number>(0);
   // Global time of the merged tape's LEFT edge (= the cascade floor).
-  // mergedBase = active.global_start - head_offset. When the annotator trimmed in
-  // their own head, head_offset > 0 so the tape starts before global_start and the
-  // region [mergedBase, global_start] is the recoverable gray head.
+  // mergedBase = active.global_start - head_offset - prev_offset. When the annotator
+  // trimmed in their own head, head_offset > 0 so the tape starts before global_start
+  // and the region [mergedBase, global_start] is the recoverable gray head. Lookback
+  // pushes the edge further left by prev_offset, the orphan tail of kalimat N-1.
   const [mergedBase, setMergedBase] = useState<number>(0);
   // Loading state saat merge video sedang diproses on-demand
   const [isMergeLoading, setIsMergeLoading] = useState<boolean>(false);
   // Ref untuk menghindari race condition saat load merged video
   const activeUttRequestRef = useRef<number | null>(null);
+
+  // ── Lookback State (sisa potongan kalimat N-1) ────────────────
+  // Kalimat N-1 yang dipendekkan meninggalkan potongan yang tidak dimiliki siapa pun.
+  // Potongan itu duduk persis sebelum klip N, jadi bisa disambung ke depan tape agar
+  // handle start bisa ditarik mundur ke sana.
+  const [lookbackOn, setLookbackOn] = useState(false);
+  const [prevOffset, setPrevOffset] = useState(0);
+  const [prevAvailable, setPrevAvailable] = useState(0);
 
   // ── Action State ──────────────────────────────────────────────
   const [isSaving, setIsSaving] = useState(false);
@@ -86,16 +101,24 @@ export function AnnotationPage() {
     return activeUtteranceIndex + 1;
   }, [activeUtteranceIndex]);
 
+  // Pada dataset terproses, hanya kalimat yang belum OK yang filmstrip-nya bisa digeser.
+  const isTrimLocked = isProcessed && activeUtterance?.status === 'OK';
+
   const totalCompleted = utteranceEdits.filter(u => u.status === 'OK').length;
   const totalUtterances = utteranceEdits.length;
   const progressPercent = totalUtterances > 0 ? (totalCompleted / totalUtterances) * 100 : 0;
 
   // ── Load Job ───────────────────────────────────────
 
-  const fetchMergedVideoForUtterance = useCallback(async (utt: UtteranceCorrection, requestId: number) => {
+  const fetchMergedVideoForUtterance = useCallback(async (
+    utt: UtteranceCorrection,
+    requestId: number,
+    includePrev = false,
+  ) => {
     setMergedVideoUrl(null);
     setVideoNDuration(0);
     setMergedTotalDuration(0);
+    setPrevOffset(0);
     // Default base = global_start (no gray head); overwritten once head_offset arrives.
     setMergedBase(utt?.global_start ?? utt?.start ?? 0);
     setVideoReady(false);
@@ -104,13 +127,17 @@ export function AnnotationPage() {
 
     if (utt && utt.segment_id) {
       try {
-        const merged = await annotationApi.getMergedVideo(utt.segment_id, utt.utterance_index);
+        const merged = await annotationApi.getMergedVideo(utt.segment_id, utt.utterance_index, includePrev);
         if (activeUttRequestRef.current === requestId) {
+          const prepended = merged.prev_offset ?? 0;
           setMergedVideoUrl(merged.merged_video_url);
           setVideoNDuration(merged.video_n_duration);
           setMergedTotalDuration(merged.total_duration);
+          setPrevOffset(prepended);
+          setPrevAvailable(merged.prev_available ?? 0);
           // Tape begins at the floor; the handle (global_start) sits head_offset in.
-          setMergedBase((utt.global_start ?? utt.start ?? 0) - (merged.head_offset ?? 0));
+          // With lookback the tape starts prev_offset earlier still.
+          setMergedBase((utt.global_start ?? utt.start ?? 0) - (merged.head_offset ?? 0) - prepended);
         }
       } catch (err) {
         console.warn('Failed to load merged video:', err);
@@ -118,6 +145,8 @@ export function AnnotationPage() {
           setMergedVideoUrl(null);
           setVideoNDuration(0);
           setMergedTotalDuration(0);
+          setPrevOffset(0);
+          setPrevAvailable(0);
           setMergedBase(utt?.global_start ?? utt?.start ?? 0);
         }
       } finally {
@@ -135,9 +164,8 @@ export function AnnotationPage() {
     setJobError(null);
     setActionMessage(null);
     try {
-      // 1. Get queue to find all segments for this job
-      const queueData = await annotationApi.getQueue({ page: 1, page_size: 100 });
-      const jobItems = queueData.items.filter((i) => i.job_id === jobId);
+      // 1. Get every queue entry for this job (server-side filter, all pages)
+      const jobItems = await annotationApi.getQueueForJob(jobId);
       if (jobItems.length === 0) throw new Error('Job tidak ditemukan di antrian');
 
       setJobMetadata({
@@ -151,13 +179,16 @@ export function AnnotationPage() {
       );
 
       // Sort segments sequentially to ensure segment 1 comes before segment 2, etc.
+      // segment_index is authoritative; the filename fallback only covers older
+      // backends, and it collapses to 0 for datasets whose segments carry no
+      // `segment_NNNN.mp4` video (e.g. TVRI, imported as per-utterance clips).
       segmentsData.sort((a, b) => {
-        const getIndex = (url: string | undefined | null) => {
-          if (!url) return 0;
-          const match = url.match(/segment_(\d+)\.mp4/);
+        const getIndex = (data: (typeof segmentsData)[number]) => {
+          if (typeof data.segment_index === 'number') return data.segment_index;
+          const match = data.video_url?.match(/segment_(\d+)\.mp4/);
           return match ? parseInt(match[1], 10) : 0;
         };
-        return getIndex(a.video_url) - getIndex(b.video_url);
+        return getIndex(a) - getIndex(b);
       });
 
       // Store the first segment's video URL as default
@@ -305,6 +336,8 @@ export function AnnotationPage() {
 
   const handleTrimChange = (globalStart: number, globalEnd: number) => {
     if (activeUtteranceIndex === null) return;
+    // Guard kedua di luar UI: kalimat OK pada dataset terproses tidak boleh di-trim.
+    if (isProcessed && utteranceEdits[activeUtteranceIndex]?.status === 'OK') return;
     setUtteranceEdits((prev) => {
       const next = [...prev];
       const current = next[activeUtteranceIndex];
@@ -403,9 +436,24 @@ export function AnnotationPage() {
     if (utt) {
       setCurrentTime(utt.global_start ?? utt.start);
       setIsPlaying(false);
+      // Lookback is a per-kalimat opt-in — every new kalimat starts on the plain tape.
+      setLookbackOn(false);
+      setPrevAvailable(0);
       activeUttRequestRef.current = index;
-      fetchMergedVideoForUtterance(utt, index);
+      fetchMergedVideoForUtterance(utt, index, false);
     }
+  };
+
+  /** Rebuild the tape with (or without) the orphan tail of kalimat N-1 prepended. */
+  const handleToggleLookback = () => {
+    if (activeUtteranceIndex === null) return;
+    const utt = utteranceEdits[activeUtteranceIndex];
+    if (!utt) return;
+    const next = !lookbackOn;
+    setLookbackOn(next);
+    setIsPlaying(false);
+    activeUttRequestRef.current = activeUtteranceIndex;
+    fetchMergedVideoForUtterance(utt, activeUtteranceIndex, next);
   };
 
   const handlePrevUtterance = () => {
@@ -698,6 +746,15 @@ export function AnnotationPage() {
               {selectedJobId ? 'Workspace Anotasi JBI' : 'Pilih video untuk mulai bekerja'}
             </p>
           </div>
+          {isProcessed && (
+            <div
+              className="bg-amber-50 text-amber-800 border border-amber-200 text-xs px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5"
+              title="Dataset sudah melewati tahap pengolahan end-to-end. Glosa terkunci; filmstrip hanya bisa diubah untuk kalimat yang belum OK."
+            >
+              <Lock size={12} />
+              Glosa terkunci — hanya kalimat belum OK yang bisa di-trim
+            </div>
+          )}
           {actionMessage && (
             <div className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded-lg max-w-xs truncate font-medium">
               {actionMessage}
@@ -968,6 +1025,12 @@ export function AnnotationPage() {
                   utteranceCount={utteranceEdits.length}
                   activeUtterancePosition={activeUtterancePosition}
                   onReady={setFilmstripReady}
+                  readOnly={isTrimLocked}
+                  readOnlyReason="Kalimat ini sudah berstatus OK pada dataset yang telah diolah — filmstrip tidak dapat diubah"
+                  lookbackSeconds={prevOffset}
+                  lookbackAvailable={prevAvailable}
+                  lookbackOn={lookbackOn}
+                  onToggleLookback={handleToggleLookback}
                 />
               </div>
             </div>
@@ -988,6 +1051,7 @@ export function AnnotationPage() {
                     isSaving={isSaving}
                     reviewStatus={reviewStatus}
                     reviewFeedback={reviewFeedback}
+                    glosaLocked={isProcessed}
                   />
                 </div>
               </div>

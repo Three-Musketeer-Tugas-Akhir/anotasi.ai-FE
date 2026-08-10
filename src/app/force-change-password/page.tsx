@@ -87,7 +87,7 @@ export default function ForceChangePasswordPage() {
 
         {/* Footer info on left panel */}
         <div className="relative z-10 text-slate-500 text-sm font-medium">
-          &copy; {new Date().getFullYear()} Gestura.ai. All rights reserved.
+          &copy; {new Date().getFullYear()} Anotasi.ai. All rights reserved.
         </div>
       </div>
 
@@ -100,7 +100,7 @@ export default function ForceChangePasswordPage() {
             <div className="flex justify-center mb-10">
               <Image 
                 src={brandLogo} 
-                alt="Gestura.ai Logo" 
+                alt="Anotasi.ai Logo" 
                 className="h-24 sm:h-28 w-auto object-contain"
                 priority
               />

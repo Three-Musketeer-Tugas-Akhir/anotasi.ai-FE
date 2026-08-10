@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Layout, AlertCircle } from 'lucide-react';
-import { useSelectedDataset } from '@/features/dataset';
+import { Layout, AlertCircle, Lock } from 'lucide-react';
+import { useSelectedDataset, useDatasetMode } from '@/features/dataset';
 import { useJobs, useUpdateCategory } from '@/features/classification/hooks/use-classification';
 import type { CategoryStatus, JobListParams } from '@/features/classification/types/classification.types';
 import { useTour } from '@/shared/components/tour';
@@ -37,6 +37,8 @@ export function ClassificationPage() {
 
   // ── Dataset context ──────────────────────────────────────────────────
   const { selectedDataset } = useSelectedDataset();
+  // Dataset non-iNews sudah melewati pengolahan end-to-end — klasifikasinya final.
+  const { isProcessed } = useDatasetMode();
 
   // ── Build query params ───────────────────────────────────────────────
   const params: JobListParams = {
@@ -113,7 +115,7 @@ export function ClassificationPage() {
   // Handle keyboard shortcuts (1 = SIBI, 2 = BISINDO)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!selectedJob || isPending) return;
+      if (!selectedJob || isPending || isProcessed) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === '1') handleCategorize('SIBI');
       if (e.key === '2') handleCategorize('BISINDO');
@@ -121,7 +123,7 @@ export function ClassificationPage() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedJob, isPending]);
+  }, [selectedJob, isPending, isProcessed]);
 
   // Handle cross-component upload completion
   const [highlightedJobId, setHighlightedJobId] = useState<string | null>(null);
@@ -147,7 +149,7 @@ export function ClassificationPage() {
 
   // ── Handlers ────────────────────────────────────────────────────────
   function handleCategorize(category: 'SIBI' | 'BISINDO') {
-    if (!selectedJob) return;
+    if (!selectedJob || isProcessed) return;
 
     // Show confirmation modal if changing an already categorized job to a different category
     if (
@@ -286,15 +288,33 @@ export function ClassificationPage() {
             )}
           </div>
         </div>
-        <Button
-          onClick={() => setIsUploadModalOpen(true)}
-          size="sm"
-          variant="secondary"
-          className="text-teal-700 bg-teal-100 hover:bg-teal-200"
-        >
-          + Upload Video Baru
-        </Button>
+        {isProcessed ? (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-semibold border border-slate-200">
+            <Lock size={13} />
+            Hanya baca — dataset sudah diolah
+          </span>
+        ) : (
+          <Button
+            onClick={() => setIsUploadModalOpen(true)}
+            size="sm"
+            variant="secondary"
+            className="text-teal-700 bg-teal-100 hover:bg-teal-200"
+          >
+            + Upload Video Baru
+          </Button>
+        )}
       </div>
+
+      {/* Read-only banner — dataset non-iNews sudah selesai diolah end-to-end */}
+      {isProcessed && (
+        <div className="px-6 py-2.5 bg-amber-50 border-b border-amber-200 flex items-start gap-2 flex-shrink-0">
+          <Lock size={14} className="text-amber-600 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-amber-800 leading-relaxed">
+            Klasifikasi tidak bisa diubah. Video pada dataset ini sudah melewati tahap pengolahan
+            dataset secara end-to-end, sehingga tipe JBI-nya sudah final.
+          </p>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
@@ -327,6 +347,7 @@ export function ClassificationPage() {
                   job={selectedJob}
                   isPending={isPending}
                   onCategorize={handleCategorize}
+                  readOnly={isProcessed}
                 />
               </div>
             </>
