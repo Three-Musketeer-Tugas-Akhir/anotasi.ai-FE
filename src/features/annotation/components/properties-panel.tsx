@@ -85,8 +85,12 @@ export function PropertiesPanel({
 
   const reviewBadge = getReviewBadge(reviewStatus);
   const isPendingReview = reviewStatus === 'SUBMITTED' || reviewStatus === 'PENDING';
-  const isReviewed = reviewStatus === 'APPROVED' || reviewStatus === 'REJECTED';
-  const actionsDisabled = isPendingReview || isReviewed;
+  // REJECTED is deliberately NOT a locked state here — it's the one state where the
+  // annotator is expected to act (edit + resubmit). Only APPROVED is truly final;
+  // locking REJECTED too used to hide the SUBMIT REVIEW button behind actionsDisabled,
+  // permanently stranding any rejected submission with no way back into the queue.
+  const isApproved = reviewStatus === 'APPROVED';
+  const actionsDisabled = isPendingReview || isApproved;
   const glosaDisabled = actionsDisabled || glosaLocked;
 
   const activeEdit: UtteranceCorrection | null =
