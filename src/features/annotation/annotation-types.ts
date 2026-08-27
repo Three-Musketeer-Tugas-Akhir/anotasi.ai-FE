@@ -232,6 +232,13 @@ export interface ReviewStatusListResponse {
   total: number;
 }
 
+export interface ReviewActionResponse {
+  review_id: string;
+  status: string;
+  curator_id: string;
+  message: string;
+}
+
 // ── Status Constants ────────────────────────────────────────────────
 
 export const QUEUE_STATUS = {

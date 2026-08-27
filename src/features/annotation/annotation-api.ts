@@ -17,6 +17,7 @@ import type {
   SubmissionStatusResponse,
   ReviewStatusResponse,
   ReviewStatusListResponse,
+  ReviewActionResponse,
   AnnotationSyncResponse,
   AnnotationSyncUpdateRequest,
   AnnotationSyncFineTuneRequest,
@@ -186,10 +187,26 @@ export const annotationApi = {
       .get<ReviewStatusResponse>(`/annotations/${segmentId}/review-status`)
       .then((r) => r.data),
 
-  /** GET /annotations/my-submissions — list all my submissions */
+  /** GET /annotations/my-submissions — list all my submissions.
+   *  For curator/admin, the backend ignores the "own submissions only"
+   *  filter and returns every annotator's PENDING/APPROVED/REJECTED items —
+   *  this doubles as the curator review queue. */
   getMySubmissions: (params?: { status?: string; page?: number; page_size?: number }) =>
     apiClient
       .get<ReviewStatusListResponse>('/annotations/my-submissions', { params })
+      .then((r) => r.data),
+
+  /** POST /annotations/reviews/:reviewId/approve — curator approves a submission */
+  approveReview: (reviewId: string, feedback?: string) =>
+    apiClient
+      .post<ReviewActionResponse>(`/annotations/reviews/${reviewId}/approve`, { feedback })
+      .then((r) => r.data),
+
+  /** POST /annotations/reviews/:reviewId/reject — curator rejects a submission,
+   *  sending it back to the annotator (their draft is left intact for revision). */
+  rejectReview: (reviewId: string, feedback?: string) =>
+    apiClient
+      .post<ReviewActionResponse>(`/annotations/reviews/${reviewId}/reject`, { feedback })
       .then((r) => r.data),
 
   // ═══════════════════════════════════════════════════════════════════

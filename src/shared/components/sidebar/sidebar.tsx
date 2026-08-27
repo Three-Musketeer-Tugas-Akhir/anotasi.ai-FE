@@ -14,6 +14,7 @@ import {
   Users,
   Server,
   Network,
+  CheckCircle2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -39,6 +40,7 @@ const ALL_NAV_ITEMS: NavItemConfig[] = [
   { icon: <Cog size={20} />, label: 'Pemrosesan', href: '/pipeline', badge: '3' },
   { icon: <FileText size={20} />, label: 'Anotasi Suara', href: '/asr-review' },
   { icon: <PenTool size={20} />, label: 'Anotasi JBI', href: '/annotation' },
+  { icon: <CheckCircle2 size={20} />, label: 'Review Anotasi JBI', href: '/review' },
   { icon: <Search size={20} />, label: 'Normalisasi', href: '/curation' },
   { icon: <ScrollText size={20} />, label: 'Audit Trail', href: '/audit' },
   { icon: <Package size={20} />, label: 'Unduh Dataset', href: '/export' },
@@ -53,7 +55,7 @@ function getNavItems(role?: string): NavItemConfig[] {
   }
   if (role === 'curator') {
     return ALL_NAV_ITEMS.filter((item) =>
-      ['/', '/asr-review', '/curation'].includes(item.href)
+      ['/', '/asr-review', '/review', '/curation'].includes(item.href)
     );
   }
   if (role === 'admin') {
