@@ -212,7 +212,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Role-based route protection (only for normal authenticated users)
     if (isAuthenticated && user) {
       const ANNOTATOR_PATHS = ['/', '/asr-review', '/annotation', '/classification', '/profile'];
-      const CURATOR_PATHS = ['/', '/asr-review', '/curation', '/profile'];
+      const CURATOR_PATHS = ['/', '/asr-review', '/review', '/curation', '/profile'];
 
       const role = user.role;
 
