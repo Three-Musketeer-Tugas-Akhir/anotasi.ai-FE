@@ -22,6 +22,10 @@ export interface UtteranceCorrection {
   end: number;             // Local timestamp (relative to segment video)
   cropped_video_path?: string;
   status?: string;
+  /** Server-computed: true when a pending trim exists that /revert can undo.
+   *  Read-only — never send this back on save (stripGlobalFields keeps it out
+   *  regardless, but it isn't meaningful from the client anyway). */
+  can_revert?: boolean;
   segment_id?: string;
   confidence?: number;
   // ── Virtual Continuous Timeline (FE-only, never sent to API) ──

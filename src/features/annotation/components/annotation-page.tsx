@@ -597,6 +597,29 @@ export function AnnotationPage() {
     }
   };
 
+  const handleRevert = async (index: number) => {
+    if (!selectedJobId || utteranceEdits.length === 0) return;
+    const targetUtt = utteranceEdits[index];
+    if (!targetUtt || !targetUtt.segment_id) return;
+
+    setIsSaving(true);
+    setActionMessage('↩️ Membatalkan trim...');
+    try {
+      const result = await annotationApi.revertUtterance(targetUtt.segment_id, targetUtt.utterance_index);
+      setActionMessage(`✅ ${result.message || 'Trim dibatalkan'}`);
+
+      // Reload so the restored start/end, status, and video all come back
+      // from the server — this endpoint also may have restored the NEXT
+      // utterance's floor if this trim had cascaded into it.
+      await loadJob(selectedJobId);
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.detail || 'Gagal membatalkan trim';
+      setActionMessage(typeof msg === 'string' ? `❌ ${msg}` : '❌ Gagal membatalkan trim');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleReset = async () => {
     if (!selectedJobId) return;
     if (!confirm('Reset semua edit? Data akan kembali ke ASR original.')) return;
@@ -1046,6 +1069,7 @@ export function AnnotationPage() {
                     activeUtteranceIndex={activeUtteranceIndex}
                     onSelectUtterance={handleSelectUtterance}
                     onMarkOk={handleMarkOk}
+                    onRevert={handleRevert}
                     onReset={handleReset}
                     onSubmit={handleSubmitReview}
                     isSaving={isSaving}

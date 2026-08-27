@@ -28,6 +28,10 @@ interface PropertiesPanelProps {
   activeUtteranceIndex: number | null;
   onSelectUtterance: (index: number) => void;
   onMarkOk: (index: number) => Promise<void>;
+  /** Undo the most recent trim on ONE utterance — the granular counterpart to
+   *  onReset, which wipes the whole job. Only meaningful when the active
+   *  utterance has can_revert (a pending pre_trim_snapshot server-side). */
+  onRevert: (index: number) => Promise<void>;
   onReset: () => Promise<void>;
   onSubmit: () => Promise<void>;
   isSaving: boolean;
@@ -67,6 +71,7 @@ export function PropertiesPanel({
   activeUtteranceIndex,
   onSelectUtterance,
   onMarkOk,
+  onRevert,
   onReset,
   onSubmit,
   isSaving,
@@ -75,6 +80,7 @@ export function PropertiesPanel({
   glosaLocked = false,
 }: PropertiesPanelProps) {
   const [resetting, setResetting] = useState(false);
+  const [reverting, setReverting] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const reviewBadge = getReviewBadge(reviewStatus);
@@ -99,6 +105,19 @@ export function PropertiesPanel({
     if (!confirm('Reset semua edit? Data akan kembali ke ASR original.')) return;
     setResetting(true);
     try { await onReset(); } finally { setResetting(false); }
+  };
+
+  const handleRevertClick = async () => {
+    if (activeUtteranceIndex === null) return;
+    if (
+      !confirm(
+        'Batalkan trim kalimat ini? Video dan batas waktu akan kembali ke sebelum trim terakhir.'
+      )
+    ) {
+      return;
+    }
+    setReverting(true);
+    try { await onRevert(activeUtteranceIndex); } finally { setReverting(false); }
   };
 
   const totalUtterances = utteranceEdits.length;
@@ -273,6 +292,20 @@ export function PropertiesPanel({
                 Tombol "Simpan & Lanjut" akan otomatis membawa Anda ke kalimat berikutnya.
               </p>
             ) : null}
+
+            {/* Undo ONE trim — separate from the header's "Reset" button,
+                which wipes every kalimat in the whole job. Only offered when
+                the server actually has something to restore to. */}
+            {alreadySaved && activeEdit.can_revert && !actionsDisabled && (
+              <button
+                onClick={handleRevertClick}
+                disabled={reverting || isSaving}
+                className="w-full mt-3 py-2.5 rounded-xl font-bold text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {reverting ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                Batalkan Trim Ini
+              </button>
+            )}
           </div>
         );
       })()}
