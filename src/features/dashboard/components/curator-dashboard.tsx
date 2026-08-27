@@ -38,12 +38,16 @@ function getCurationBadge(status: string) {
 // ── Main Component ─────────────────────────────────────────────────
 
 export function CuratorDashboard() {
-    const { selectedDataset } = useSelectedDataset();
+    const { selectedDataset, isHydrated } = useSelectedDataset();
+    // isHydrated guards the same race as elsewhere: selectedDataset is null on
+    // the very first render, so an ungated query would fire once with
+    // dataset_id=undefined before the correctly-scoped one replaces it.
     const { data, isLoading, isError } = useQuery({
         queryKey: ['my-dashboard', selectedDataset?.id],
         queryFn: () => dashboardApi.getMyDashboard(selectedDataset?.id),
         staleTime: 60_000,
         refetchInterval: 60_000,
+        enabled: isHydrated,
         select: (d) => d as CuratorDashboardResponse,
     });
 

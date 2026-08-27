@@ -132,14 +132,19 @@ function ProgressBar({
 type FilterMode = 'all' | 'flagged' | 'clean' | 'pending';
 
 function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
-  const { selectedDataset } = useSelectedDataset();
+  const { selectedDataset, isHydrated } = useSelectedDataset();
   const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState<VoiceAnnotationJob[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
 
+  // Wait for the dataset context's own localStorage read (isHydrated) before
+  // fetching: selectedDataset is null on the very first render, so firing
+  // immediately sends dataset_id=undefined and briefly lists every dataset's
+  // jobs together before the correctly-scoped list replaces it.
   useEffect(() => {
+    if (!isHydrated) return;
     (async () => {
       try {
         const data = await voiceAnnotationApi.getJobs({
@@ -154,7 +159,7 @@ function JobPicker({ onSelectJob }: { onSelectJob: (jobId: string) => void }) {
         setLoading(false);
       }
     })();
-  }, [selectedDataset?.id]);
+  }, [isHydrated, selectedDataset?.id]);
 
   const filteredJobs = useMemo(() => {
     return jobs.filter((job) => {

@@ -97,7 +97,7 @@ type TabView = 'queue' | 'submissions';
 // ── Component ──────────────────────────────────────────────────────
 
 export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onToggleCollapse, liveProgress }: AnnotationQueueProps) {
-  const { selectedDataset } = useSelectedDataset();
+  const { selectedDataset, isHydrated } = useSelectedDataset();
   const [tab, setTab] = useState<TabView>('queue');
 
   // Queue state (active = unfinished). Status filter is fixed now that the
@@ -184,10 +184,18 @@ export function AnnotationQueue({ onSelectJob, selectedJobId, isCollapsed, onTog
 
   // Load BOTH on mount (and on dataset change) so the Submission count badge is
   // correct immediately without having to open the tab first.
+  //
+  // Gated on isHydrated: selectedDataset starts null on first render (its own
+  // localStorage read happens in an effect too), so firing before it resolves
+  // sends dataset_id=undefined -- an unscoped fetch that briefly renders every
+  // dataset's jobs together before the correctly-scoped one lands a tick
+  // later. Real annotators with jobs split across datasets (the assign flow
+  // does that) would see a flash of a job that then disappears.
   useEffect(() => {
+    if (!isHydrated) return;
     fetchQueue();
     fetchSubmissions();
-  }, [fetchQueue, fetchSubmissions]);
+  }, [isHydrated, fetchQueue, fetchSubmissions]);
 
   // Polling every 10s (queue only)
   useEffect(() => {

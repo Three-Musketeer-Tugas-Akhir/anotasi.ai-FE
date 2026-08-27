@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { classificationRepository } from '@/features/classification/api/classification.repository';
 import type { JobListParams, JobListResponse } from '@/features/classification/types/classification.types';
+import { useSelectedDataset } from '@/features/dataset/context/dataset-context';
 
 // ── Query Keys ───────────────────────────────────────────────────────
 export const classificationKeys = {
@@ -15,9 +16,17 @@ export const classificationKeys = {
  * Supports filter params (status, category, limit, offset).
  */
 export function useJobs(params?: JobListParams) {
+  // The dataset context hydrates its selection from localStorage in its own
+  // effect, so selectedDataset is null on the very first render. Callers
+  // build `params.dataset_id` off that value, meaning a query fired before
+  // isHydrated goes out unscoped -- briefly listing every dataset's jobs
+  // together before the correctly-scoped query replaces it (same race
+  // fixed in AnnotationQueue's fetchQueue).
+  const { isHydrated } = useSelectedDataset();
   return useQuery<JobListResponse>({
     queryKey: classificationKeys.jobs(params),
     queryFn: () => classificationRepository.getJobs(params),
+    enabled: isHydrated,
   });
 }
 

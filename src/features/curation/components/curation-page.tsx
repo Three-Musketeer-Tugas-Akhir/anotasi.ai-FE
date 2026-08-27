@@ -87,7 +87,7 @@ function CategoryBadge({ category }: { category: string | null }) {
 
 export function CurationPage() {
   // ── State ──────────────────────────────────────────────────────────
-  const { selectedDataset } = useSelectedDataset();
+  const { selectedDataset, isHydrated } = useSelectedDataset();
   const [videos, setVideos] = useState<CurationVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -139,9 +139,14 @@ export function CurationPage() {
     }
   }, [selectedDataset?.id]);
 
+  // Wait for the dataset context's own localStorage read (isHydrated) before
+  // fetching: selectedDataset is null on the very first render, so firing
+  // immediately sends dataset_id=undefined and briefly lists every dataset's
+  // jobs together before the correctly-scoped list replaces it.
   useEffect(() => {
+    if (!isHydrated) return;
     fetchVideos();
-  }, [fetchVideos]);
+  }, [isHydrated, fetchVideos]);
 
   // ── Load segments when opening a video ─────────────────────────────
 

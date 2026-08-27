@@ -75,7 +75,7 @@ function formatTimeAgo(iso: string): string {
 
 export function DashboardPage() {
   const { user } = useAuth();
-  const { selectedDataset } = useSelectedDataset();
+  const { selectedDataset, isHydrated } = useSelectedDataset();
   const isAdmin = user?.role === 'admin';
   const isAnnotator = user?.role === 'annotator';
   const isCurator = user?.role === 'curator';
@@ -95,7 +95,11 @@ export function DashboardPage() {
   }, [activeTour, hasCompletedTour, startTour, selectedDataset]);
 
   // Admin dashboard data — hooks MUST be called unconditionally (Rules of Hooks)
-  // enabled:isAdmin prevents actual API fetch for non-admin roles
+  // enabled:isAdmin prevents actual API fetch for non-admin roles. isHydrated
+  // guards a second race: selectedDataset is null on the very first render
+  // (its localStorage read happens in its own effect), so firing before it
+  // resolves sends dataset_id=undefined -- an unscoped fetch whose totals
+  // briefly cover every dataset before the correctly-scoped one replaces it.
   const {
     data: dashboard,
     isLoading,
@@ -105,7 +109,7 @@ export function DashboardPage() {
     queryFn: () => dashboardApi.getDashboard(selectedDataset?.id),
     staleTime: 60_000,
     refetchInterval: 60_000,
-    enabled: isAdmin,
+    enabled: isAdmin && isHydrated,
   });
 
   // Non-admin roles: delegate to role-specific dashboards (after all hooks)
