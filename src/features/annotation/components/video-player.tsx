@@ -272,13 +272,20 @@ export function VideoPlayer({
           </span>
         </div>
 
-        {/* Center: Navigation (Injected) */}
-        <div className="flex-1 flex justify-center items-center min-w-0">
+        {/* Center: Navigation (Injected)
+            relative z-10: the nav buttons use whitespace-nowrap, so when the bar
+            is narrower than their content they overflow this box and slide under
+            the side columns. The right column sits later in DOM order, so it used
+            to paint on top and swallow clicks aimed at "Kalimat Selanjutnya" —
+            129px of its 181px width was dead, including the centered label. The
+            nav is the primary control here, so it must win the stacking order. */}
+        <div className="relative z-10 flex-1 flex justify-center items-center min-w-0">
           {navigationSlot}
         </div>
 
-        {/* Right: Volume and Speed */}
-        <div className="flex items-center justify-end gap-2 w-[150px] shrink-0">
+        {/* Right: Volume and Speed — allowed to shrink so it yields space to the
+            navigation before any overlap occurs. */}
+        <div className="flex items-center justify-end gap-2 w-[150px] min-w-0 shrink">
           <button
             onClick={() => setIsMuted(!isMuted)}
             className="w-8 h-8 rounded hover:bg-gray-700 flex items-center justify-center transition-colors flex-shrink-0 text-gray-300 hover:text-white"
