@@ -60,10 +60,6 @@ export function AnnotationPage() {
   const [isMergeLoading, setIsMergeLoading] = useState<boolean>(false);
   // Ref untuk menghindari race condition saat load merged video
   const activeUttRequestRef = useRef<number | null>(null);
-  // Last payload successfully persisted per segment, used to skip redundant
-  // draft writes. Cleared on every job (re)load so state that changed
-  // server-side (revert, reset, another session) is never wrongly skipped.
-  const lastSavedPayloadRef = useRef<Record<string, string>>({});
 
   // ── Lookback State (sisa potongan kalimat N-1) ────────────────
   // Kalimat N-1 yang dipendekkan meninggalkan potongan yang tidak dimiliki siapa pun.
@@ -167,9 +163,6 @@ export function AnnotationPage() {
     setJobLoading(true);
     setJobError(null);
     setActionMessage(null);
-    // Drop the skip-redundant-write cache: we are about to replace in-memory
-    // state with whatever the server now holds, so nothing may be assumed saved.
-    lastSavedPayloadRef.current = {};
     try {
       // 1. Get every queue entry for this job (server-side filter, all pages)
       const jobItems = await annotationApi.getQueueForJob(jobId);
@@ -508,35 +501,11 @@ export function AnnotationPage() {
       return acc;
     }, {} as Record<string, UtteranceCorrection[]>);
 
-    // Skip segments whose payload is byte-identical to what we last persisted.
-    // Every "Simpan & Lanjut" used to POST all 8 segments of a TVRI job —
-    // measured at 175KB per click, of which ~167KB was the two large untouched
-    // segments (341 and 207 utterances) and only ~4.5KB the edited one. Across a
-    // 583-sentence job that is ~100MB of redundant uploads and thousands of
-    // full-JSON row rewrites.
-    //
-    // We deliberately still send EVERY changed segment rather than just the
-    // active one: a trim at a segment boundary cascades into the neighbouring
-    // segment (the floor), so narrowing this to the active segment alone would
-    // drop that update. Byte-equality is the safe test — if the payload has not
-    // changed, re-sending it is provably a no-op.
-    const entries = Object.entries(grouped).filter(([sid, utts]) => {
-      const payload = JSON.stringify(utts);
-      if (lastSavedPayloadRef.current[sid] === payload) return false;
-      return true;
-    });
-
     await Promise.all(
-      entries.map(([sid, utts]) =>
+      Object.entries(grouped).map(([sid, utts]) =>
         annotationApi.saveDraft(sid, { utterances: utts })
       )
     );
-
-    // Only record payloads after their write actually succeeded, so a failed
-    // request is retried on the next save instead of being cached as persisted.
-    entries.forEach(([sid, utts]) => {
-      lastSavedPayloadRef.current[sid] = JSON.stringify(utts);
-    });
   };
 
   const handleSubmitReview = async () => {
