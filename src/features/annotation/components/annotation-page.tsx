@@ -228,8 +228,15 @@ export function AnnotationPage() {
               confidence: transcript?.confidence,
               global_start: u.start,
               global_end: u.end,
-              // Use full segment video so player spans N and N+1
-              segment_video_url: segVideo || u.cropped_video_path || transcript?.video_path,
+              // Use full segment video so player spans N and N+1.
+              // NOTE: cropped_video_path is deliberately NOT in this chain. It is a
+              // raw MinIO key ("jobs/<id>/utterances_synced/<seg>_utt_N.mp4"), not a
+              // URL — no /api/v1/assets prefix and no streaming token — so as a src
+              // it resolves against the FE origin and always 404s. It used to sit
+              // ahead of transcript.video_path, which IS a signed asset URL, so a
+              // segment with an empty video_url never reached the working fallback
+              // and the player just failed with SRC_NOT_SUPPORTED.
+              segment_video_url: segVideo || transcript?.video_path,
             };
           });
         } else if (data.transcripts && data.transcripts.length > 0) {
