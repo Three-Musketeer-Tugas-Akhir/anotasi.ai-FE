@@ -269,20 +269,7 @@ export function AnnotationPage() {
 
       setOriginalUtterances(allOriginal);
       setUtteranceEdits(allEdits);
-
-      // Seed the skip-redundant-write cache: what we just loaded IS what the
-      // server holds, so every segment counts as already persisted until the
-      // annotator actually changes one. handleMarkOk reloads the job after each
-      // save, so without this the cache would be empty on every subsequent save
-      // and each one would re-upload all 8 segments again.
-      lastSavedPayloadRef.current = Object.fromEntries(
-        Object.entries(buildDraftPayloads(allEdits)).map(([sid, utts]) => [
-          sid,
-          JSON.stringify(utts),
-        ])
-      );
-
-
+      
       if (allEdits.length > 0) {
         setActiveUtteranceIndex(0);
         const firstUtt = allEdits[0];
@@ -511,9 +498,8 @@ export function AnnotationPage() {
     return clean;
   };
 
-  /** Group edits into the exact per-segment payloads saveDraft would send. */
-  const buildDraftPayloads = (edits: UtteranceCorrection[]) =>
-    edits.reduce((acc, utt) => {
+  const saveDraftForAllSegments = async (edits: UtteranceCorrection[]) => {
+    const grouped = edits.reduce((acc, utt) => {
       const sid = utt.segment_id;
       if (sid) {
         if (!acc[sid]) acc[sid] = [];
@@ -521,9 +507,6 @@ export function AnnotationPage() {
       }
       return acc;
     }, {} as Record<string, UtteranceCorrection[]>);
-
-  const saveDraftForAllSegments = async (edits: UtteranceCorrection[]) => {
-    const grouped = buildDraftPayloads(edits);
 
     // Skip segments whose payload is byte-identical to what we last persisted.
     // Every "Simpan & Lanjut" used to POST all 8 segments of a TVRI job —
