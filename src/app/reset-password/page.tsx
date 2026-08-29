@@ -237,7 +237,7 @@ function ResetPasswordForm() {
           </div>
 
           <p className="text-center text-xs text-gray-400 mt-6">
-            &copy; 2026 Anotasi.ai · SIBI Dataset Platform
+            &copy; 2026 Anotasi.ai · Bahasa Isyarat Dataset Platform
           </p>
         </div>
       </div>

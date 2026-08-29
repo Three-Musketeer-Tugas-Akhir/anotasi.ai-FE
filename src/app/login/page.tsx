@@ -54,7 +54,7 @@ export default function LoginPage() {
           <h1 className="text-4xl md:text-5xl font-extrabold text-white leading-[1.15] tracking-tight">
             Orkestrasi Dataset <br/>
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400">
-              SIBI Terpusat
+              Bahasa Isyarat Terpusat
             </span>
           </h1>
           <p className="text-slate-400 text-lg leading-relaxed">

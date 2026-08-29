@@ -80,7 +80,7 @@ export default function ForceChangePasswordPage() {
             </span>
           </h1>
           <p className="text-slate-400 text-lg leading-relaxed">
-            Untuk menjaga keamanan platform dan dataset SIBI, Anda diwajibkan untuk mengganti
+            Untuk menjaga keamanan platform dan dataset Bahasa Isyarat, Anda diwajibkan untuk mengganti
             password sementara yang diberikan oleh administrator.
           </p>
         </div>

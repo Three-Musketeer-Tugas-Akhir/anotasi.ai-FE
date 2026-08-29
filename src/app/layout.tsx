@@ -17,9 +17,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Anotasi.ai — SIBI Dataset Platform',
+  title: 'Anotasi.ai — Bahasa Isyarat Dataset Platform',
   description:
-    'Sistem Informasi terpusat untuk orkestrasi dan kurasi dataset SIBI (Sistem Isyarat Bahasa Indonesia).',
+    'Sistem Informasi terpusat untuk orkestrasi dan kurasi dataset Bahasa Isyarat (Sistem Isyarat Bahasa Indonesia).',
 };
 
 export default function RootLayout({
