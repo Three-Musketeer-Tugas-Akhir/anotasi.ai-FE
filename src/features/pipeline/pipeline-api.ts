@@ -290,11 +290,12 @@ export const pipelineApi = {
 
 // ── Robust Tus Chunked Upload Helper ─────────────────────────────────
 
-// Only used if the server does not send Upload-Chunk-Size. The real value comes
-// from the server on create — 50MB was hardcoded here and every PATCH that size
-// was rejected by the proxy rewrite with a 502 before it ever reached the API,
-// so no local upload could complete.
-const TUS_FALLBACK_CHUNK_SIZE = 4 * 1024 * 1024;
+// Only used if the server does not send Upload-Chunk-Size; the real value comes
+// from the server on create. It has to stay between two hard limits: above
+// 5 MiB (S3 multipart minimum, or assembly fails) and below ~9MB (the proxy
+// rewrite 502s on larger request bodies). 50MB was hardcoded here before,
+// which broke the upper bound and meant no local upload could complete.
+const TUS_FALLBACK_CHUNK_SIZE = 7 * 1024 * 1024;
 const MAX_RETRIES = 5;
 const RETRY_BASE_DELAY_MS = 1000;
 const ASSEMBLY_POLL_INTERVAL_MS = 3000;
