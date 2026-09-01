@@ -198,7 +198,11 @@ export function CurationPage() {
   const paginatedVideos = filtered.slice((validCurrentPage - 1) * itemsPerPage, validCurrentPage * itemsPerPage);
 
   const counts = {
-    needsCuration: videos.filter((v) => v.status === 'ANNOTATED' || v.status === 'NORMALIZING').length,
+    // READY_TO_BE_NORMALIZED counts too: it is work waiting on the curator, so
+    // leaving it out understated the queue and hid freshly-approved jobs.
+    needsCuration: videos.filter(
+      (v) => v.status === 'ANNOTATED' || v.status === 'NORMALIZING' || v.status === 'READY_TO_BE_NORMALIZED',
+    ).length,
     normalized: videos.filter((v) => v.status === 'NORMALIZED').length,
     approved: videos.filter((v) => v.status === 'READY_TO_EXPORT').length,
   };
@@ -435,7 +439,12 @@ export function CurationPage() {
                       <td className="px-6 py-4 text-center"><CurationStatusBadge status={v.status} /></td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          {v.status === 'ANNOTATED' && (
+                          {/* READY_TO_BE_NORMALIZED gets the same actions as ANNOTATED.
+                              It is the state a job lands in right after a curator
+                              approves its JBI annotation, and it had no branch here at
+                              all — the action cell rendered empty, so the curator had
+                              no way to act on work they had just approved. */}
+                          {(v.status === 'ANNOTATED' || v.status === 'READY_TO_BE_NORMALIZED') && (
                             <>
                               <button onClick={() => handleNormalize(v.id)} disabled={normalizing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-teal-700 border border-teal-200 rounded-md hover:bg-teal-50 transition-colors disabled:opacity-50">
                                 <Wand2 size={14} /> Auto-Norm
