@@ -547,34 +547,65 @@ export async function tusUploadFile(
   // tusGetOffset returns the CONTIGUOUS offset, so re-sending from there may
   // repeat chunks the server already holds; that is safe, as it recognises an
   // already-received chunk and just returns the next offset.
+  // Completeness is judged by the server's chunk COUNT, not by the offset from
+  // HEAD. That offset is the CONTIGUOUS one, and chunks are uploaded in
+  // parallel, so it sits at the first gap while later chunks are already
+  // stored — it reads as "incomplete" for an upload that is in fact finished.
+  // Re-sending against it then hit 409s, because once the last missing chunk
+  // lands the server moves to "assembling" and refuses further chunks.
   const RECONCILE_ROUNDS = 5;
-  let finalOffset = await pipelineApi.tusGetOffset(uploadId);
 
-  for (let round = 0; round < RECONCILE_ROUNDS && finalOffset < totalSize; round++) {
+  const serverState = async () => {
+    const s = await pipelineApi.tusGetDetailedStatus(uploadId);
+    return {
+      done:
+        s.status === 'assembling' ||
+        s.status === 'complete' ||
+        s.chunks_received >= s.total_chunks,
+      received: s.chunks_received,
+      total: s.total_chunks,
+      status: s.status,
+    };
+  };
+
+  let state = await serverState();
+
+  for (let round = 0; round < RECONCILE_ROUNDS && !state.done; round++) {
     if (abortSignal?.aborted) {
       throw new DOMException('Upload cancelled', 'AbortError');
     }
+    // The contiguous offset points at the first gap, which is where the
+    // missing chunk is; re-send from there.
+    const gapStart = await pipelineApi.tusGetOffset(uploadId);
     console.warn(
-      `[TUS] Server has ${finalOffset}/${totalSize} bytes — re-sending the gap ` +
-      `(round ${round + 1}/${RECONCILE_ROUNDS})`
+      `[TUS] Server holds ${state.received}/${state.total} chunks — re-sending ` +
+      `from ${gapStart} (round ${round + 1}/${RECONCILE_ROUNDS})`
     );
 
-    for (let offset = finalOffset; offset < totalSize; offset += TUS_CHUNK_SIZE) {
+    for (let offset = gapStart; offset < totalSize; offset += TUS_CHUNK_SIZE) {
       if (abortSignal?.aborted) {
         throw new DOMException('Upload cancelled', 'AbortError');
       }
       const end = Math.min(offset + TUS_CHUNK_SIZE, totalSize);
       const buffer = await file.slice(offset, end).arrayBuffer();
-      await uploadChunkWithRetry(uploadId, buffer, offset, abortSignal);
+      try {
+        await uploadChunkWithRetry(uploadId, buffer, offset, abortSignal);
+      } catch (err) {
+        // A 409 here means the server has moved on (it already has this chunk,
+        // or the upload completed while we were still re-sending). Stop and
+        // re-read the real state rather than fighting it.
+        if (err instanceof Error && /HTTP 409/.test(err.message)) break;
+        throw err;
+      }
     }
 
-    finalOffset = await pipelineApi.tusGetOffset(uploadId);
+    state = await serverState();
   }
 
-  if (finalOffset < totalSize) {
+  if (!state.done) {
     throw new Error(
-      `Upload incomplete: server reports ${finalOffset}/${totalSize} bytes ` +
-      `after ${RECONCILE_ROUNDS} attempts to re-send the missing chunks.`
+      `Upload incomplete: server holds ${state.received}/${state.total} chunks ` +
+      `after ${RECONCILE_ROUNDS} attempts to re-send the missing ones.`
     );
   }
 
