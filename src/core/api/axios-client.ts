@@ -145,16 +145,20 @@ function clearAuthStorage() {
 }
 
 /**
- * Download a large file as a Blob.
+ * Download a large file as a Blob, reading the body as a stream.
  *
- * Deliberately uses fetch instead of the axios client. The dataset ZIP is
- * generated on demand and streams back chunked with no Content-Length; axios
- * (XHR) buffering a response of that shape fails outright with a bare
- * "Network Error" once it gets large. A 253-sentence TVRI job (~70MB) failed
- * every time through axios, while fetch reads the identical response fine —
- * measured at 69,600,706 bytes over 4072 chunks in ~49s through the same
- * proxy. fetch also has no timeout of its own, so a big export is not cut off
- * partway.
+ * The dataset ZIP is generated on demand and streams back chunked with no
+ * Content-Length, and anything that buffers a response of that shape for us
+ * breaks on a real dataset. Measured against a 253-sentence TVRI job
+ * (69,600,706 bytes) served from the same proxy:
+ *
+ *   axios responseType:'blob'  -> "Network Error"
+ *   fetch + await res.blob()   -> "Failed to fetch" after ~19s
+ *   fetch + manual reader loop -> all 69,600,706 bytes in ~56s
+ *
+ * So we pull the chunks ourselves and assemble the Blob at the end. Small
+ * jobs were never affected — a 4-sentence job (890KB) worked with any of
+ * these — which is why it stayed hidden until a full dataset was exported.
  */
 export async function downloadFileAsBlob(
   path: string,
@@ -172,5 +176,23 @@ export async function downloadFileAsBlob(
   const match = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
   const filename = match ? match[1].replace(/["']/g, '').trim() : null;
 
-  return { blob: await response.blob(), filename };
+  if (!response.body) {
+    // No streaming support (very old browser): fall back to buffering.
+    return { blob: await response.blob(), filename };
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) chunks.push(value);
+  }
+
+  return {
+    blob: new Blob(chunks as BlobPart[], {
+      type: response.headers.get('content-type') || 'application/octet-stream',
+    }),
+    filename,
+  };
 }
