@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { Download, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient } from '@/core/api/axios-client';
+import { downloadFileAsBlob } from '@/core/api/axios-client';
 
 interface DatasetZipModalProps {
   jobId: string | null;
@@ -28,24 +28,12 @@ export function DatasetZipDownloadModal({ jobId, filename, open, onOpenChange }:
     if (!jobId) return;
     setDownloading(true);
     try {
-      // timeout: 0 disables the client's global 30s cap for this request only.
-      // The server builds the ZIP on demand from every clip in the job, so the
-      // time scales with dataset size: a 4-sentence job finishes in seconds,
-      // but a 253-sentence TVRI job blew past 30s and axios aborted it
-      // mid-stream — the server had answered 200 and was still sending. That
-      // made every real TVRI dataset impossible to export, with the modal left
-      // open and only a generic "Gagal mengunduh" toast to show for it.
-      const response = await apiClient.get(
+      const { blob, filename: served } = await downloadFileAsBlob(
         `/pipeline/jobs/${jobId}/dataset/download?layout=file`,
-        { responseType: 'blob', timeout: 0 },
       );
-      const disposition = (response.headers['content-disposition'] as string) || '';
-      const match = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
-      const downloadName = match
-        ? match[1].replace(/["']/g, '').trim()
-        : `${filename}_dataset.zip`;
+      const downloadName = served || `${filename}_dataset.zip`;
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = downloadName;

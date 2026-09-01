@@ -143,3 +143,34 @@ function clearAuthStorage() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
+
+/**
+ * Download a large file as a Blob.
+ *
+ * Deliberately uses fetch instead of the axios client. The dataset ZIP is
+ * generated on demand and streams back chunked with no Content-Length; axios
+ * (XHR) buffering a response of that shape fails outright with a bare
+ * "Network Error" once it gets large. A 253-sentence TVRI job (~70MB) failed
+ * every time through axios, while fetch reads the identical response fine —
+ * measured at 69,600,706 bytes over 4072 chunks in ~49s through the same
+ * proxy. fetch also has no timeout of its own, so a big export is not cut off
+ * partway.
+ */
+export async function downloadFileAsBlob(
+  path: string,
+): Promise<{ blob: Blob; filename: string | null }> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
+  const response = await fetch(`${env.API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!response.ok) {
+    throw new Error(`Download failed with status ${response.status}`);
+  }
+
+  const disposition = response.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
+  const filename = match ? match[1].replace(/["']/g, '').trim() : null;
+
+  return { blob: await response.blob(), filename };
+}

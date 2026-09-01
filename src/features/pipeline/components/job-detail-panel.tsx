@@ -992,21 +992,14 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                   onClick={async () => {
                     setDownloadingDataset(true);
                     try {
-                      const { apiClient } = await import('@/core/api/axios-client');
-                      // timeout: 0 — same reason as the export modal: ZIP build
-                      // time scales with dataset size and a large job exceeds
-                      // the client's global 30s cap, aborting a download the
-                      // server is still streaming.
-                      const response = await apiClient.get(
+                      const { downloadFileAsBlob } = await import('@/core/api/axios-client');
+                      const { blob, filename } = await downloadFileAsBlob(
                         `/pipeline/jobs/${jobId}/dataset/download`,
-                        { responseType: 'blob', timeout: 0 },
                       );
-                      const url = window.URL.createObjectURL(new Blob([response.data]));
+                      const url = window.URL.createObjectURL(blob);
                       const link = document.createElement('a');
                       link.href = url;
-                      const disposition = response.headers['content-disposition'] || '';
-                      const match = disposition.match(/filename[^;=\n]*=([^;\n]*)/);
-                      link.download = match ? match[1].replace(/["\']/g, '') : `dataset-${jobId}.zip`;
+                      link.download = filename || `dataset-${jobId}.zip`;
                       document.body.appendChild(link);
                       link.click();
                       link.remove();
