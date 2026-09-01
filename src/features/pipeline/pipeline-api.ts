@@ -536,12 +536,45 @@ export async function tusUploadFile(
     }
   }
 
-  // Verify all chunks were actually received by server before polling
-  const finalOffset = await pipelineApi.tusGetOffset(uploadId);
+  // Reconcile with the server instead of trusting our own bookkeeping.
+  //
+  // The proxy in front of the API throws sporadic 502s, and a chunk can go
+  // missing without its request ever rejecting here — observed on a 43-chunk
+  // upload that reported success locally while the server held only 42. The
+  // old code detected the shortfall and gave up, losing the whole upload over
+  // one chunk.
+  //
+  // tusGetOffset returns the CONTIGUOUS offset, so re-sending from there may
+  // repeat chunks the server already holds; that is safe, as it recognises an
+  // already-received chunk and just returns the next offset.
+  const RECONCILE_ROUNDS = 5;
+  let finalOffset = await pipelineApi.tusGetOffset(uploadId);
+
+  for (let round = 0; round < RECONCILE_ROUNDS && finalOffset < totalSize; round++) {
+    if (abortSignal?.aborted) {
+      throw new DOMException('Upload cancelled', 'AbortError');
+    }
+    console.warn(
+      `[TUS] Server has ${finalOffset}/${totalSize} bytes — re-sending the gap ` +
+      `(round ${round + 1}/${RECONCILE_ROUNDS})`
+    );
+
+    for (let offset = finalOffset; offset < totalSize; offset += TUS_CHUNK_SIZE) {
+      if (abortSignal?.aborted) {
+        throw new DOMException('Upload cancelled', 'AbortError');
+      }
+      const end = Math.min(offset + TUS_CHUNK_SIZE, totalSize);
+      const buffer = await file.slice(offset, end).arrayBuffer();
+      await uploadChunkWithRetry(uploadId, buffer, offset, abortSignal);
+    }
+
+    finalOffset = await pipelineApi.tusGetOffset(uploadId);
+  }
+
   if (finalOffset < totalSize) {
     throw new Error(
-      `Upload incomplete: server reports ${finalOffset}/${totalSize} bytes. ` +
-      `Some chunks may have failed to upload.`
+      `Upload incomplete: server reports ${finalOffset}/${totalSize} bytes ` +
+      `after ${RECONCILE_ROUNDS} attempts to re-send the missing chunks.`
     );
   }
 
