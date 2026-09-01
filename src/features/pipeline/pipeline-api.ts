@@ -351,8 +351,29 @@ async function uploadChunkWithRetry(
       const statusMatch = errMsg.match(/HTTP (\d+)/);
       const httpStatus = statusMatch ? parseInt(statusMatch[1], 10) : 0;
 
-      // Don't retry on 4xx client errors (except 409 conflict / 423 locked)
-      if (httpStatus >= 400 && httpStatus < 500 && httpStatus !== 409 && httpStatus !== 423) {
+      // A 409 means the server will never accept this chunk again: either it
+      // already has it, or the upload as a whole already moved to
+      // assembling/complete. Retrying is pointless and actively harmful.
+      //
+      // This is reachable on a perfectly good upload. The proxy sometimes
+      // 502s the RESPONSE of a chunk the server already stored; the client
+      // retries, by which time the remaining chunks have landed and the
+      // upload is complete, so the retry returns
+      // "Upload <id> is already complete". Treating that as an error failed
+      // uploads the server had received in full.
+      //
+      // Report the offset this chunk would have produced and let the
+      // completeness check against the server decide the real outcome.
+      if (httpStatus === 409) {
+        console.warn(
+          `[TUS] Chunk at offset ${offset} reported 409 (server already has it ` +
+          `or the upload is finished) — treating as delivered: ${errMsg.slice(0, 120)}`
+        );
+        return offset + chunk.byteLength;
+      }
+
+      // Don't retry on other 4xx client errors (except 423 locked)
+      if (httpStatus >= 400 && httpStatus < 500 && httpStatus !== 423) {
         throw lastError;
       }
 
