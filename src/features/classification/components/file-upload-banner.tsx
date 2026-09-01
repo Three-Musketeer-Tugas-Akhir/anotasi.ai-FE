@@ -49,7 +49,6 @@ export function FileUploadBanner() {
             const isDone = upload.status === 'completed';
             const isFailed = upload.status === 'failed';
             const isCancelled = upload.status === 'cancelled';
-            const isInterrupted = isAssembling && upload.error?.includes('terputus');
 
             return (
               <div key={upload.uploadId} className="p-3 space-y-2">
@@ -57,7 +56,7 @@ export function FileUploadBanner() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-1.5 min-w-0">
                     {isUploading && <Loader2 size={12} className="animate-spin text-teal-400 flex-shrink-0 mt-0.5" />}
-                    {isAssembling && !isInterrupted && <Loader2 size={12} className="animate-spin text-amber-400 flex-shrink-0 mt-0.5" />}
+                    {isAssembling && <Loader2 size={12} className="animate-spin text-amber-400 flex-shrink-0 mt-0.5" />}
                     {isDone && <CheckCircle2 size={12} className="text-emerald-400 flex-shrink-0 mt-0.5" />}
                     {isFailed && <XCircle size={12} className="text-red-400 flex-shrink-0 mt-0.5" />}
                     {isCancelled && <XCircle size={12} className="text-gray-400 flex-shrink-0 mt-0.5" />}
@@ -77,13 +76,13 @@ export function FileUploadBanner() {
                 {/* Status label */}
                 <span className={`text-xs font-medium ${
                   isUploading ? 'text-teal-400' :
-                  isAssembling && !isInterrupted ? 'text-amber-400' :
+                  isAssembling ? 'text-amber-400' :
                   isDone ? 'text-emerald-400' :
                   isFailed ? 'text-red-400' :
                   'text-gray-400'
                 }`}>
                   {isUploading ? 'Mengunggah...' :
-                   isAssembling && !isInterrupted ? 'Merakit file di server...' :
+                   isAssembling ? 'Merakit file di server...' :
                    isDone ? 'Selesai' :
                    isFailed ? 'Gagal' :
                    isCancelled ? 'Dibatalkan' :
@@ -106,7 +105,7 @@ export function FileUploadBanner() {
                 </div>
 
                 {/* Cancel / Dismiss button */}
-                {(isUploading || (isAssembling && !isInterrupted)) && (
+                {(isUploading || (isAssembling)) && (
                   <button
                     onClick={() => cancelUpload(upload.uploadId)}
                     className="w-full text-[10px] py-1 px-2 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors border border-white/10"
@@ -115,8 +114,8 @@ export function FileUploadBanner() {
                   </button>
                 )}
 
-                {/* Error / Interrupted message */}
-                {(isFailed || isInterrupted) && upload.error && (
+                {/* Error message */}
+                {isFailed && upload.error && (
                   <p className="text-[10px] text-red-400 leading-relaxed">{upload.error}</p>
                 )}
                 {isDone && upload.jobId && (
