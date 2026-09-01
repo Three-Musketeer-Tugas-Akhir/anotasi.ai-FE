@@ -150,7 +150,7 @@ export const pipelineApi = {
   tusCreateUpload: async (
     fileSize: number,
     metadata: { filename: string; filetype: string; category?: string; dataset_id?: string },
-  ): Promise<string> => {
+  ): Promise<{ uploadId: string; chunkSize: number }> => {
     // Safe base64 encode that supports unicode characters
     const toB64 = (str: string) => {
       try {
@@ -188,7 +188,15 @@ export const pipelineApi = {
     if (!uploadId) {
       throw new Error('Server did not return a valid upload ID (Upload-Id / Location header missing)');
     }
-    return uploadId;
+
+    // The server decides the chunk size — it derives chunk_index from
+    // offset // chunk_size, so guessing a different value here produces
+    // offsets it rejects. Falls back to the server's current default only if
+    // the header is missing.
+    const chunkSize =
+      parseInt(response.headers['upload-chunk-size'] || '', 10) || TUS_FALLBACK_CHUNK_SIZE;
+
+    return { uploadId, chunkSize };
   },
 
   /** HEAD /upload/files/:id — get current upload offset */
@@ -282,7 +290,11 @@ export const pipelineApi = {
 
 // ── Robust Tus Chunked Upload Helper ─────────────────────────────────
 
-const TUS_CHUNK_SIZE = 50 * 1024 * 1024; // 50MB per chunk (matches backend)
+// Only used if the server does not send Upload-Chunk-Size. The real value comes
+// from the server on create — 50MB was hardcoded here and every PATCH that size
+// was rejected by the proxy rewrite with a 502 before it ever reached the API,
+// so no local upload could complete.
+const TUS_FALLBACK_CHUNK_SIZE = 4 * 1024 * 1024;
 const MAX_RETRIES = 5;
 const RETRY_BASE_DELAY_MS = 1000;
 const ASSEMBLY_POLL_INTERVAL_MS = 3000;
@@ -383,7 +395,7 @@ export async function tusUploadFile(
 
   // 1. Create upload resource
   console.log(`[TUS] Creating upload for ${file.name} (${file.size} bytes)`);
-  const uploadId = await pipelineApi.tusCreateUpload(file.size, {
+  const { uploadId, chunkSize: TUS_CHUNK_SIZE } = await pipelineApi.tusCreateUpload(file.size, {
     filename: file.name,
     filetype: file.type || 'video/mp4',
     category,
