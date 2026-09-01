@@ -1,5 +1,5 @@
 import { apiClient } from '@/core/api/axios-client';
-import type { CurationSegment } from './types';
+import type { CurationSegment, SlangEntry } from './types';
 
 // ── Backend response shapes ────────────────────────────────────────
 
@@ -78,6 +78,16 @@ export const curationApi = {
       timeout: 300000,
     });
     return data.jobs;
+  },
+
+  /**
+   * Fetch the slang → baku pairs the backend normalizer actually applies.
+   */
+  getSlangDictionary: async (): Promise<SlangEntry[]> => {
+    const { data } = await apiClient.get<{ total: number; entries: SlangEntry[] }>(
+      '/normalization/slang-dictionary',
+    );
+    return data.entries;
   },
 
   /**

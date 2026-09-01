@@ -31,24 +31,11 @@ import { useSelectedDataset } from '@/features/dataset/context/dataset-context';
 import { toast } from 'sonner';
 
 
-// ── Slang Dictionary (visual reference — real normalization is on BE) ──
-
-const SLANG_DICTIONARY: SlangEntry[] = [
-  { slang: 'enggak', standard: 'tidak' },
-  { slang: 'udah', standard: 'sudah' },
-  { slang: 'gak', standard: 'tidak' },
-  { slang: 'kayak', standard: 'seperti' },
-  { slang: 'gimana', standard: 'bagaimana' },
-  { slang: 'emang', standard: 'memang' },
-  { slang: 'aja', standard: 'saja' },
-  { slang: 'banget', standard: 'sangat' },
-  { slang: 'biar', standard: 'agar' },
-  { slang: 'kalo', standard: 'kalau' },
-  { slang: 'trus', standard: 'terus' },
-  { slang: 'nggak', standard: 'tidak' },
-  { slang: 'denger', standard: 'dengar' },
-  { slang: 'ngomong', standard: 'bicara' },
-];
+// ── Slang Dictionary ────────────────────────────────────────────────
+// Fetched from the backend so it is the SAME dictionary the normalizer
+// applies. This used to be 14 hardcoded pairs, which disagreed with the
+// ~1.3k entries actually in use — a curator checking why a word changed
+// would not find it here.
 
 // ── Status Badge Component ──────────────────────────────────────────
 
@@ -98,6 +85,14 @@ export function CurationPage() {
   const itemsPerPage = 10;
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const [dictOpen, setDictOpen] = useState(true);
+  const [slangDict, setSlangDict] = useState<SlangEntry[]>([]);
+  const [slangQuery, setSlangQuery] = useState('');
+  const filteredSlang = slangQuery.trim()
+    ? slangDict.filter((e) => {
+        const q = slangQuery.trim().toLowerCase();
+        return e.slang.includes(q) || e.standard.toLowerCase().includes(q);
+      })
+    : slangDict;
   const [normalizing, setNormalizing] = useState(false);
 
   // ── Fetch curatable jobs from backend ──────────────────────────────
@@ -147,6 +142,16 @@ export function CurationPage() {
     if (!isHydrated) return;
     fetchVideos();
   }, [isHydrated, fetchVideos]);
+
+  // The dictionary is global (not dataset-scoped), so fetch it once. A failure
+  // here must not break curation — the panel is a reference aid, so it just
+  // stays empty and the rest of the page keeps working.
+  useEffect(() => {
+    curationApi
+      .getSlangDictionary()
+      .then(setSlangDict)
+      .catch(() => setSlangDict([]));
+  }, []);
 
   // ── Load segments when opening a video ─────────────────────────────
 
@@ -681,19 +686,45 @@ export function CurationPage() {
 
           {dictOpen && (
             <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-slate-50/50">
+              {/* Search, because the dictionary holds ~1.3k pairs — scrolling
+                  that list to check one word is not workable. */}
+              <div className="relative mb-3">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={slangQuery}
+                  onChange={(e) => setSlangQuery(e.target.value)}
+                  placeholder="Cari kata slang atau baku..."
+                  className="w-full pl-8 pr-3 py-2 text-xs rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                />
+              </div>
+              <p className="text-[10px] text-slate-500 mb-2 font-medium">
+                {slangQuery
+                  ? `${filteredSlang.length} dari ${slangDict.length} kata`
+                  : `${slangDict.length} kata`}
+              </p>
+
               <div className="space-y-1.5">
-                {SLANG_DICTIONARY.map((entry) => (
+                {filteredSlang.map((entry) => (
                   <div key={entry.slang} className="flex items-center justify-between py-2 px-3 rounded-lg bg-white border border-slate-200 text-xs shadow-sm">
                     <span className="text-amber-600 font-mono font-medium line-through decoration-amber-600/40">{entry.slang}</span>
                     <ArrowRight size={12} className="text-slate-300 mx-2 flex-shrink-0" />
                     <span className="text-teal-700 font-mono font-bold">{entry.standard}</span>
                   </div>
                 ))}
+                {slangDict.length > 0 && filteredSlang.length === 0 && (
+                  <p className="text-[11px] text-slate-400 text-center py-4">
+                    Tidak ada kata yang cocok.
+                  </p>
+                )}
+                {slangDict.length === 0 && (
+                  <p className="text-[11px] text-slate-400 text-center py-4">Memuat kamus...</p>
+                )}
               </div>
               <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
                 <p className="text-[10px] text-blue-700 font-medium leading-relaxed">
                   <span className="font-bold block mb-1 text-blue-800">Info:</span>
-                  Normalisasi otomatis dilakukan oleh backend. Kamus ini hanyalah referensi visual.
+                  Kamus ini adalah kamus yang benar-benar dipakai backend saat normalisasi.
                   Aturan tambahan diterapkan untuk kategori SIBI (pemetaan entitas, ejaan jari).
                 </p>
               </div>
