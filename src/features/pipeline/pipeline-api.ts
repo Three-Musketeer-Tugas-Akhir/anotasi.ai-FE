@@ -223,9 +223,11 @@ export const pipelineApi = {
       const xhr = new XMLHttpRequest();
       xhr.open('PATCH', `${env.API_URL}/upload/files/${uploadId}`);
 
-      // Set headers
+      // Set headers.
+      // Content-Length is deliberately not set: it is a forbidden header, so
+      // the browser refuses it and logs "Refused to set unsafe header" on
+      // every single chunk. It sets the real value itself from the body.
       xhr.setRequestHeader('Upload-Offset', String(offset));
-      xhr.setRequestHeader('Content-Length', String(chunk.byteLength));
       xhr.setRequestHeader('Content-Type', 'application/offset+octet-stream');
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
