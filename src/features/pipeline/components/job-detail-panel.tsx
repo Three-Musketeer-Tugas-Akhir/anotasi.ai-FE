@@ -993,9 +993,13 @@ export function JobDetailPanel({ jobId, onJobChanged, listRefreshTrigger }: JobD
                     setDownloadingDataset(true);
                     try {
                       const { apiClient } = await import('@/core/api/axios-client');
+                      // timeout: 0 — same reason as the export modal: ZIP build
+                      // time scales with dataset size and a large job exceeds
+                      // the client's global 30s cap, aborting a download the
+                      // server is still streaming.
                       const response = await apiClient.get(
                         `/pipeline/jobs/${jobId}/dataset/download`,
-                        { responseType: 'blob' },
+                        { responseType: 'blob', timeout: 0 },
                       );
                       const url = window.URL.createObjectURL(new Blob([response.data]));
                       const link = document.createElement('a');
