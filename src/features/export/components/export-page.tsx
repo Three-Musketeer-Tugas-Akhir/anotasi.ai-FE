@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/core/api/axios-client';
+import { useSelectedDataset } from '@/features/dataset/context/dataset-context';
 import { toast } from 'sonner';
 
 
@@ -93,14 +94,23 @@ export function ExportPage() {
   const [zipModalJob, setZipModalJob] = useState<{ id: string; filename: string } | null>(null);
   const [search, setSearch] = useState('');
 
+  const { selectedDataset, isHydrated } = useSelectedDataset();
+
+  // Scoped to the active dataset. This list was unscoped: it fetched every
+  // dataset's jobs, so an admin working in TVRI saw iNews jobs in the export
+  // table and could download the wrong dataset's data. The dataset id is part
+  // of the query key as well, otherwise switching datasets kept serving the
+  // previously cached list.
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['export-jobs'],
+    queryKey: ['export-jobs', selectedDataset?.id],
+    enabled: isHydrated,
     queryFn: async () => {
       const response = await apiClient.get<JobListResponse>('/pipeline/jobs', {
         params: {
           page: 1,
           page_size: 100,
           status: 'READY_FOR_ANNOTATION',
+          dataset_id: selectedDataset?.id,
         },
       });
       return response.data;
