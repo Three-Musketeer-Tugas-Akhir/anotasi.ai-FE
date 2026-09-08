@@ -248,7 +248,10 @@ export function AnnotatorDashboard() {
 
                                     {/* Action Button - Besar dan Jelas */}
                                     <a
-                                        href="/annotation"
+                                        // Bawa job-nya. Tanpa ini tombolnya cuma membuka
+                                        // halaman Anotasi JBI dan annotator harus mencari
+                                        // sendiri job yang barusan diklik.
+                                        href={`/annotation?job=${encodeURIComponent(job.job_id)}`}
                                         className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-4 py-3 rounded-xl transition-colors shadow-sm"
                                     >
                                         {job.queue_status === 'COMPLETED' ? 'Lihat Kembali' : 'Buka & Kerjakan'}

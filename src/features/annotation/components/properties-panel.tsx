@@ -340,6 +340,22 @@ export function PropertiesPanel({
               </p>
             ) : null}
 
+            {/* Finalisasi eksplisit. Sebelumnya submit hanya muncul otomatis
+                setelah SELURUH kalimat selesai, jadi tidak ada cara menyatakan
+                "segmen ini sudah beres" pada saat yang dipilih annotator —
+                padahal export sekarang hanya mengambil segmen yang final. */}
+            {!isEndGame && !actionsDisabled && (
+              <button
+                onClick={onSubmit}
+                disabled={isSaving}
+                title="Tandai segmen ini selesai dan kirim ke kurator. Setelah final, hasilnya ikut terekspor."
+                className="w-full mt-3 py-2.5 rounded-xl font-bold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Send size={16} />
+                Finalkan Segmen
+              </button>
+            )}
+
             {/* Undo ONE trim — separate from the header's "Reset" button,
                 which wipes every kalimat in the whole job. Only offered when
                 the server actually has something to restore to. */}

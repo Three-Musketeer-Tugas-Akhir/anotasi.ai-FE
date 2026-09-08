@@ -13,10 +13,21 @@ import { UtteranceSheet, type SheetFilter } from './utterance-sheet';
 import { annotationApi } from '../annotation-api';
 import type { UtteranceCorrection, TranscriptUtterance } from '../annotation-types';
 
+/**
+ * Glosa tetap bisa disunting di dataset mana pun.
+ *
+ * Sebelumnya glosa ikut terkunci untuk setiap dataset non-iNews. Padahal
+ * pekerjaannya adalah menyelaraskan video JBI dengan video penyiar, dan saat
+ * menyelaraskan itu kadang terlihat glosanya perlu ikut dibetulkan — penguncian
+ * justru menghalangi koreksi yang sudah kelihatan jelas oleh annotator.
+ */
+const GLOSA_LOCKED = false;
+
 export function AnnotationPage() {
   // ── Dataset mode ──────────────────────────────────────────
-  // Dataset non-iNews sudah melewati pengolahan end-to-end: glosa terkunci dan
-  // filmstrip hanya boleh diubah untuk kalimat yang statusnya belum OK.
+  // Dataset non-iNews sudah melewati pengolahan end-to-end: filmstrip hanya
+  // boleh diubah untuk kalimat yang statusnya belum OK. Glosa TIDAK ikut
+  // terkunci — lihat GLOSA_LOCKED di atas.
   const { isProcessed } = useDatasetMode();
 
   // ── Job Selection ─────────────────────────────────────────
@@ -81,6 +92,16 @@ export function AnnotationPage() {
   const [lookaheadDepth, setLookaheadDepth] = useState(1);
   const [lookaheadAvailable, setLookaheadAvailable] = useState(0);
   const [segmentDurations, setSegmentDurations] = useState<number[]>([]);
+
+  // ── Autosave draft ────────────────────────────────────────────
+  // Sebelumnya draft HANYA tersimpan lewat "Simpan & Lanjut". Trim di bagian
+  // akhir masih terlihat bertahan karena tergambar murni dari state lokal,
+  // sedangkan trim di bagian AWAL butuh head_offset dari server untuk
+  // menggambar kepala abu-abunya — jadi begitu pindah kalimat, potongan awal
+  // seolah hilang. Menyimpan otomatis membuat keduanya konsisten.
+  const dirtySegmentsRef = useRef<Set<string>>(new Set());
+  const [autosaveTick, setAutosaveTick] = useState(0);
+  const [autosaveState, setAutosaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   // ── Action State ──────────────────────────────────────────────
   const [isSaving, setIsSaving] = useState(false);
@@ -347,6 +368,24 @@ export function AnnotationPage() {
     window.dispatchEvent(new Event('collapse-main-sidebar'));
   };
 
+  // Buka langsung job yang diklik dari Dashboard ("Buka & Kerjakan" mengirim
+  // ?job=<id>). Tanpa ini halaman cuma terbuka di antrian dan annotator harus
+  // mencari lagi job yang barusan dia pilih. Hanya berlaku sekali saat mount:
+  // setelah itu pemilihan job murni dari antrian.
+  const deepLinkHandledRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandledRef.current) return;
+    deepLinkHandledRef.current = true;
+    const jobId = new URLSearchParams(window.location.search).get('job');
+    if (jobId) {
+      handleSelectJob(jobId);
+      // Bersihkan query supaya refresh atau "kembali ke antrian" tidak
+      // membuka ulang job yang sama terus-menerus.
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleBackToQueue = () => {
     setSelectedJobId(null);
     setJobMetadata(null);
@@ -363,7 +402,15 @@ export function AnnotationPage() {
   // yang sudah OK (yang berarti memaksa potong ulang tanpa alasan).
   const METADATA_ONLY_FIELDS: ReadonlyArray<keyof UtteranceCorrection> = ['note', 'needs_review'];
 
+  /** Tandai segmen sebagai perlu disimpan, lalu jadwalkan autosave. */
+  const markDirty = (segmentId: string | undefined) => {
+    if (!segmentId) return;
+    dirtySegmentsRef.current.add(segmentId);
+    setAutosaveTick((t) => t + 1);
+  };
+
   const handleUtteranceChange = (index: number, updates: Partial<UtteranceCorrection>) => {
+    markDirty(utteranceEdits[index]?.segment_id);
     setUtteranceEdits((prev) => {
       const next = [...prev];
       if (next[index]) {
@@ -385,6 +432,10 @@ export function AnnotationPage() {
     if (activeUtteranceIndex === null) return;
     // Guard kedua di luar UI: kalimat OK pada dataset terproses tidak boleh di-trim.
     if (isProcessed && utteranceEdits[activeUtteranceIndex]?.status === 'OK') return;
+    markDirty(utteranceEdits[activeUtteranceIndex]?.segment_id);
+    // Menggeser handle end bisa mendorong kalimat berikutnya, dan kalimat itu
+    // bisa berada di segmen lain — segmen itu ikut perlu disimpan.
+    markDirty(utteranceEdits[activeUtteranceIndex + 1]?.segment_id);
     setUtteranceEdits((prev) => {
       const next = [...prev];
       const current = next[activeUtteranceIndex];
@@ -578,6 +629,48 @@ export function AnnotationPage() {
       )
     );
   };
+
+  /** Simpan draft untuk SATU segmen saja — dipakai autosave, supaya tidak
+   *  mengirim ulang ratusan kalimat dari seluruh segmen tiap kali handle digeser. */
+  const saveDraftForSegment = async (segmentId: string, edits: UtteranceCorrection[]) => {
+    const utts = edits.filter((u) => u.segment_id === segmentId).map(stripGlobalFields);
+    if (utts.length === 0) return;
+    await annotationApi.saveDraft(segmentId, { utterances: utts });
+  };
+
+  // Autosave: tunggu annotator berhenti menggeser, lalu simpan segmen yang
+  // berubah saja. Tidak memotong video apa pun — "Simpan & Lanjut" tetap satu-
+  // satunya yang memicu crop dan menandai kalimat selesai.
+  useEffect(() => {
+    if (autosaveTick === 0) return;
+    if (isSaving || jobLoading) return;
+    if (dirtySegmentsRef.current.size === 0) return;
+
+    const timer = setTimeout(async () => {
+      // Ambil daftarnya lebih dulu: perubahan yang datang selama request
+      // berjalan harus tetap tercatat untuk putaran berikutnya.
+      const pending = Array.from(dirtySegmentsRef.current);
+      dirtySegmentsRef.current.clear();
+      setAutosaveState('saving');
+      try {
+        for (const sid of pending) {
+          await saveDraftForSegment(sid, utteranceEdits);
+        }
+        setAutosaveState('saved');
+      } catch (err) {
+        console.warn('Autosave draft gagal:', err);
+        // Kembalikan ke antrian supaya percobaan berikutnya tidak kehilangan apa pun.
+        pending.forEach((sid) => dirtySegmentsRef.current.add(sid));
+        setAutosaveState('error');
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+    // utteranceEdits sengaja TIDAK jadi dependency: efek ini dipicu oleh
+    // autosaveTick (yang hanya naik saat ada perubahan nyata), dan membacanya
+    // lewat closure saat timer menyala sudah memberi nilai terkini.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autosaveTick, isSaving, jobLoading]);
 
   const handleSubmitReview = async () => {
     if (!selectedJobId || utteranceEdits.length === 0) return;
@@ -827,33 +920,62 @@ export function AnnotationPage() {
         />
       )}
 
-      {/* 1. TOP NAVBAR & GLOBAL PROGRESS */}
+      {/* 1. WORKSPACE HEADER & GLOBAL PROGRESS
+          Hanya muncul saat sebuah job terbuka. Di tampilan antrian, baris ini
+          tidak membawa kontrol apa pun dan isinya mengulang breadcrumb di header
+          aplikasi tepat di atasnya — dua bar bertumpuk yang mengatakan hal yang
+          sama. Yang tersisa di sini adalah yang memang hanya ada di workspace:
+          tombol kembali, nama file, progres, status simpan. */}
+      {selectedJobId && (
       <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shrink-0 z-10 shadow-sm">
         <div className="flex items-center gap-4">
-          {selectedJobId && (
-            <Button variant="ghost" size="sm" onClick={handleBackToQueue} className="h-10 px-3">
-              <ArrowLeft size={18} />
-            </Button>
-          )}
+          <Button variant="ghost" size="sm" onClick={handleBackToQueue} className="h-10 px-3">
+            <ArrowLeft size={18} />
+          </Button>
           <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-inner shrink-0">
             A
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-bold text-slate-800 leading-tight flex items-center gap-2">
-              {!selectedJobId && <PenTool size={18} className="text-teal-600" />}
-              {selectedJobId && jobMetadata ? jobMetadata.original_filename : 'Antrian Anotasi'}
+              {jobMetadata ? jobMetadata.original_filename : 'Workspace Anotasi'}
             </h1>
             <p className="text-sm text-slate-500 font-medium truncate">
-              {selectedJobId ? 'Workspace Anotasi JBI' : 'Pilih video untuk mulai bekerja'}
+              Workspace Anotasi JBI
             </p>
           </div>
           {isProcessed && (
             <div
               className="bg-amber-50 text-amber-800 border border-amber-200 text-xs px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5"
-              title="Dataset sudah melewati tahap pengolahan end-to-end. Glosa terkunci; filmstrip hanya bisa diubah untuk kalimat yang belum OK."
+              title="Dataset ini sudah melewati tahap pengolahan end-to-end, jadi filmstrip hanya bisa digeser untuk kalimat yang statusnya belum OK. Glosa tetap bisa disunting."
             >
               <Lock size={12} />
-              Glosa terkunci — hanya kalimat belum OK yang bisa di-trim
+              Filmstrip terkunci untuk kalimat yang sudah OK
+            </div>
+          )}
+          {/* Status autosave — tanpa ini annotator tidak punya cara tahu bahwa
+              geseran handle sudah tersimpan, dan itulah yang dulu memaksa mereka
+              menekan "Simpan & Lanjut" setiap kali demi rasa aman. */}
+          {autosaveState !== 'idle' && (
+            <div
+              className={`text-xs px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 border ${
+                autosaveState === 'saving'
+                  ? 'bg-slate-50 text-slate-600 border-slate-200'
+                  : autosaveState === 'saved'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-red-50 text-red-700 border-red-200'
+              }`}
+              title={
+                autosaveState === 'error'
+                  ? 'Perubahan belum tersimpan ke server. Akan dicoba lagi otomatis; tekan "Simpan & Lanjut" kalau ingin memaksa sekarang.'
+                  : 'Perubahan trim & glosa disimpan otomatis sebagai draft.'
+              }
+            >
+              {autosaveState === 'saving' && <Loader2 size={12} className="animate-spin" />}
+              {autosaveState === 'saving'
+                ? 'Menyimpan draft…'
+                : autosaveState === 'saved'
+                ? 'Draft tersimpan'
+                : 'Draft gagal tersimpan'}
             </div>
           )}
           {actionMessage && (
@@ -919,6 +1041,7 @@ export function AnnotationPage() {
           </div>
         )}
       </header>
+      )}
 
       <div className="flex-1 flex overflow-hidden">
         <AnnotationQueue
@@ -1164,7 +1287,7 @@ export function AnnotationPage() {
                     isSaving={isSaving}
                     reviewStatus={reviewStatus}
                     reviewFeedback={reviewFeedback}
-                    glosaLocked={isProcessed}
+                    glosaLocked={GLOSA_LOCKED}
                   />
                 </div>
               </div>

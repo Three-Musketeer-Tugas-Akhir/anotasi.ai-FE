@@ -16,7 +16,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, CheckCircle2, XCircle, Clock, FileText, PlayCircle, AlertCircle } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, Clock, FileText, PlayCircle, AlertCircle, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
@@ -74,6 +74,11 @@ function UtteranceReviewRow({
           <span className="text-xs font-mono text-slate-400">#{utt.utterance_index + 1}</span>
           <p className="text-sm text-slate-800 mt-0.5">{utt.text}</p>
         </div>
+        {utt.needs_review && (
+          <Badge variant="outline" className="text-[10px] bg-amber-100 text-amber-900 border-amber-300 flex-shrink-0">
+            ⚑ MINTA DICEK
+          </Badge>
+        )}
         {utt.status === 'OK' ? (
           <Badge variant="outline" className="text-[10px] bg-teal-50 text-teal-700 border-teal-200 flex-shrink-0">
             OK
@@ -84,6 +89,16 @@ function UtteranceReviewRow({
           </Badge>
         )}
       </div>
+
+      {/* Catatan anotator. Kurator tidak selalu paham bahasa isyarat, jadi ini
+          yang menentukan mana yang benar-benar perlu diperiksa manual dan mana
+          yang cukup dipercayakan pada anotator. */}
+      {utt.note && (
+        <div className="flex items-start gap-2 text-xs bg-amber-50 border border-amber-200 rounded-md px-2.5 py-2">
+          <MessageSquare size={13} className="text-amber-700 mt-0.5 flex-shrink-0" />
+          <p className="text-amber-900 whitespace-pre-wrap">{utt.note}</p>
+        </div>
+      )}
 
       {videoUrl ? (
         <video src={videoUrl} controls preload="metadata" className="w-full max-h-64 rounded-md bg-black" />
@@ -170,6 +185,12 @@ function ReviewDetailPanel({
   const utterances = segment?.current_utterances ?? [];
   const isDecided = item.status !== 'PENDING' && item.status !== 'SUBMITTED';
 
+  // Kalimat yang anotatornya sendiri minta diperiksa. Kurator yang tidak
+  // menguasai bahasa isyarat tidak bisa memvalidasi seluruh anotasi, jadi
+  // inilah dasar pemilahannya: tanpa catatan → percayakan pada anotator dan
+  // setujui; ada catatan → periksa yang itu saja.
+  const flagged = utterances.filter((u) => u.note || u.needs_review);
+
   return (
     <div className="flex-1 flex flex-col h-full bg-white">
       <div className="p-5 border-b border-slate-100 flex-shrink-0">
@@ -192,6 +213,35 @@ function ReviewDetailPanel({
           )}
         </div>
       </div>
+
+      {/* Verdict di depan: apakah segmen ini perlu dibaca satu per satu. */}
+      {!loading && utterances.length > 0 && (
+        <div
+          className={`mx-5 mt-4 rounded-lg border px-3.5 py-2.5 flex items-start gap-2.5 text-sm ${
+            flagged.length > 0
+              ? 'bg-amber-50 border-amber-200 text-amber-900'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+          }`}
+        >
+          {flagged.length > 0 ? (
+            <>
+              <MessageSquare size={16} className="mt-0.5 flex-shrink-0" />
+              <span>
+                <strong>{flagged.length} kalimat</strong> ditandai anotator untuk diperiksa
+                {' '}(dari {utterances.length}). Sisanya tidak ada catatan.
+              </span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" />
+              <span>
+                Tidak ada catatan dari anotator pada {utterances.length} kalimat — tidak ada
+                yang secara khusus minta diperiksa.
+              </span>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-3">
         {loading ? (
