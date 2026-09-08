@@ -17,6 +17,8 @@ import {
   Send,
   History,
   Lock,
+  MessageSquare,
+  Flag,
 } from 'lucide-react';
 import type { TranscriptUtterance, UtteranceCorrection } from '../annotation-types';
 import { EditHistoryDrawer } from './edit-history-drawer';
@@ -248,6 +250,47 @@ export function PropertiesPanel({
                   filmstrip untuk kalimat yang statusnya belum OK.
                 </p>
               )}
+            </div>
+
+            <div className="w-full h-px bg-slate-100" />
+
+            {/* Catatan annotator — jalan keluar untuk kasus yang tidak bisa
+                diselesaikan lewat trim (isyarat ada beberapa baris jauhnya,
+                potongan terlalu pendek, dsb). Ditandai agar bisa direview. */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-sm font-bold uppercase tracking-wider flex items-center gap-2 text-slate-600">
+                  <MessageSquare size={16} /> 3. Catatan
+                </label>
+                <button
+                  type="button"
+                  onClick={() => onUtteranceChange(activeUtteranceIndex!, {
+                    needs_review: !activeEdit.needs_review,
+                  })}
+                  disabled={actionsDisabled}
+                  title="Tandai kalimat ini supaya ditinjau ulang oleh kurator"
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    activeEdit.needs_review
+                      ? 'bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200'
+                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <Flag size={11} />
+                  {activeEdit.needs_review ? 'Ditandai untuk review' : 'Tandai untuk review'}
+                </button>
+              </div>
+              <Textarea
+                value={activeEdit.note ?? ''}
+                onChange={(e) => onUtteranceChange(activeUtteranceIndex!, { note: e.target.value })}
+                placeholder="Contoh: isyarat yang dibutuhkan baru muncul 2 baris setelah ini, tidak terjangkau dari sini."
+                disabled={actionsDisabled}
+                rows={3}
+                className="w-full p-3 text-sm border-2 rounded-xl resize-none outline-none transition-shadow bg-white border-slate-200 focus:border-slate-400 focus:ring-4 focus:ring-slate-400/10 shadow-inner disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+              />
+              <p className="text-[11px] text-slate-400">
+                Dipakai kalau kasusnya tidak bisa diselesaikan dengan menggeser batas —
+                catatan tersimpan bersama anotasi dan bisa dibaca kurator.
+              </p>
             </div>
           </>
         ) : (

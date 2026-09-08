@@ -61,15 +61,31 @@ interface TimelineEditorProps {
   readOnly?: boolean;
   /** Alasan penguncian, dipakai sebagai tooltip & badge. */
   readOnlyReason?: string;
-  // ── Lookback (sisa potongan kalimat N-1) ──
-  /** Detik sisa potongan kalimat N-1 yang sedang disambung di depan tape. */
+  // ── Lookback (materi milik kalimat N-1) ──
+  /** Total detik kalimat N-1 yang sedang disambung di depan tape. */
   lookbackSeconds?: number;
-  /** Detik sisa potongan yang tersedia untuk disambung (0 = tombol non-aktif). */
+  /** Bagian dari lookbackSeconds yang sudah dilepas kalimat N-1 — gratis diambil.
+   *  Sisanya masih milik N-1 dan menariknya akan memendekkan kalimat itu. */
+  lookbackOrphanSeconds?: number;
+  /** Detik sisa potongan yang tersedia untuk disambung tanpa biaya. */
   lookbackAvailable?: number;
+  /** Detik tambahan yang bisa diambil dengan memendekkan kalimat N-1. */
+  lookbackBorrowable?: number;
   /** Apakah lookback sedang menyala. */
   lookbackOn?: boolean;
   /** Nyalakan/matikan lookback. Tombol disembunyikan kalau tidak diberikan. */
   onToggleLookback?: () => void;
+  // ── Lookahead (tape lebih dalam: N+2, N+3) ──
+  /** Berapa klip setelah N yang sedang ada di tape. */
+  lookaheadDepth?: number;
+  /** Berapa klip setelah N yang tersedia untuk disambung. */
+  lookaheadAvailable?: number;
+  /** Durasi tiap klip di tape, mulai dari N — untuk menandai tiap sambungan. */
+  clipDurations?: number[];
+  /** Tambah satu klip berikutnya ke tape. */
+  onExtendLookahead?: () => void;
+  /** Kembalikan tape ke bentuk polos [N | N+1]. */
+  onResetLookahead?: () => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -109,9 +125,16 @@ export function TimelineEditor({
   readOnly = false,
   readOnlyReason,
   lookbackSeconds = 0,
+  lookbackOrphanSeconds = 0,
   lookbackAvailable = 0,
+  lookbackBorrowable = 0,
   lookbackOn = false,
   onToggleLookback,
+  lookaheadDepth = 1,
+  lookaheadAvailable = 0,
+  clipDurations = [],
+  onExtendLookahead,
+  onResetLookahead,
 }: TimelineEditorProps) {
   const outerRef = useRef<HTMLDivElement>(null);   // scrollable outer container
   const innerRef = useRef<HTMLDivElement>(null);    // zoomed inner strip
@@ -394,6 +417,26 @@ export function TimelineEditor({
   const lookbackPx = lookbackSeconds > 0
     ? Math.min(timeToInnerPx(windowStart + lookbackSeconds), regionLeftPx)
     : 0;
+  // Inside that zone, the boundary between what kalimat N-1 already released
+  // (free) and what it still owns (taking it shortens N-1).
+  const lookbackBorrowSeconds = Math.max(0, lookbackSeconds - lookbackOrphanSeconds);
+  const lookbackBorrowPx = lookbackBorrowSeconds > 0
+    ? Math.min(timeToInnerPx(windowStart + lookbackBorrowSeconds), lookbackPx)
+    : 0;
+  // True once the start handle has actually been dragged into N-1's own material.
+  const isBorrowingFromPrev = lookbackBorrowSeconds > 0 && regionLeftPx < lookbackBorrowPx - 0.5;
+
+  // Every joint between clips in the tape, so a deeper lookahead marks N+1|N+2 too.
+  const clipJoints = useMemo(() => {
+    if (!isMergedVideo || clipDurations.length < 2) return [];
+    const joints: number[] = [];
+    let acc = windowStart + lookbackSeconds;
+    for (let i = 0; i < clipDurations.length - 1; i++) {
+      acc += clipDurations[i];
+      joints.push(acc);
+    }
+    return joints;
+  }, [isMergedVideo, clipDurations, windowStart, lookbackSeconds]);
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -427,29 +470,68 @@ export function TimelineEditor({
 
         {/* Right: Lookback toggle, timestamps & zoom controls */}
         <div className="flex items-center gap-3">
-          {/* Lookback — sambung sisa potongan kalimat sebelumnya ke depan tape */}
-          {onToggleLookback && !readOnly && (
-            <button
-              onClick={onToggleLookback}
-              disabled={lookbackAvailable <= 0 && !lookbackOn}
-              title={
-                lookbackAvailable > 0 || lookbackOn
-                  ? 'Sambungkan sisa potongan kalimat sebelumnya agar batas awal bisa ditarik mundur'
-                  : 'Kalimat sebelumnya tidak menyisakan potongan yang bisa disambung'
-              }
-              className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                lookbackOn
-                  ? 'bg-sky-100 border-sky-300 text-sky-700 hover:bg-sky-200'
-                  : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <ChevronLeft size={12} />
-              {lookbackOn
-                ? `Konteks aktif (${lookbackSeconds.toFixed(1)}s)`
-                : lookbackAvailable > 0
-                ? `Konteks sebelumnya (${lookbackAvailable.toFixed(1)}s)`
-                : 'Konteks sebelumnya'}
-            </button>
+          {/* Lookback — sambung materi kalimat sebelumnya ke depan tape */}
+          {onToggleLookback && !readOnly && (() => {
+            const reachable = lookbackAvailable + lookbackBorrowable;
+            return (
+              <button
+                onClick={onToggleLookback}
+                disabled={reachable <= 0 && !lookbackOn}
+                title={
+                  reachable > 0 || lookbackOn
+                    ? `Sambungkan bagian akhir kalimat sebelumnya agar batas awal bisa ditarik mundur.${
+                        lookbackBorrowable > 0
+                          ? ` ${lookbackAvailable.toFixed(1)}s sisa potongan (bebas) + ${lookbackBorrowable.toFixed(1)}s milik kalimat sebelumnya — menarik ke bagian ini akan memendekkan kalimat itu.`
+                          : ''
+                      }`
+                    : 'Tidak ada bagian kalimat sebelumnya yang bisa disambung'
+                }
+                className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                  isBorrowingFromPrev
+                    ? 'bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200'
+                    : lookbackOn
+                    ? 'bg-sky-100 border-sky-300 text-sky-700 hover:bg-sky-200'
+                    : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <ChevronLeft size={12} />
+                {isBorrowingFromPrev
+                  ? `Memendekkan kalimat sebelumnya (${lookbackBorrowSeconds > 0 ? (lookbackBorrowSeconds - Math.max(0, (trimStart - windowStart))).toFixed(1) : '0.0'}s)`
+                  : lookbackOn
+                  ? `Konteks aktif (${lookbackSeconds.toFixed(1)}s)`
+                  : reachable > 0
+                  ? `Konteks sebelumnya (${reachable.toFixed(1)}s)`
+                  : 'Konteks sebelumnya'}
+              </button>
+            );
+          })()}
+
+          {/* Lookahead — tambah klip berikutnya kalau isyarat yang dicari ada di N+2/N+3 */}
+          {onExtendLookahead && !readOnly && (lookaheadAvailable > 1 || lookaheadDepth > 1) && (
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={onExtendLookahead}
+                disabled={lookaheadDepth >= lookaheadAvailable}
+                title="Sambungkan satu kalimat berikutnya lagi ke tape, untuk kasus isyarat yang dibutuhkan baru muncul di baris ke-2 atau ke-3"
+                className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                  lookaheadDepth > 1
+                    ? 'bg-violet-100 border-violet-300 text-violet-700 hover:bg-violet-200'
+                    : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <ChevronRight size={12} />
+                {lookaheadDepth > 1 ? `+${lookaheadDepth} kalimat` : 'Kalimat berikutnya'}
+              </button>
+              {lookaheadDepth > 1 && onResetLookahead && (
+                <button
+                  onClick={onResetLookahead}
+                  title="Kembalikan tape ke dua klip"
+                  className="px-1.5 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-500 text-xs hover:bg-gray-100 transition-colors"
+                >
+                  reset
+                </button>
+              )}
+            </div>
           )}
 
           {/* Timestamps */}
@@ -548,11 +630,24 @@ export function TimelineEditor({
           <div className={`absolute top-0 bottom-0 border-2 pointer-events-none rounded-sm ${readOnly ? 'border-slate-400' : 'border-teal-400'}`}
             style={{ left: `${regionLeftPx}px`, width: `${regionRightPx - regionLeftPx}px` }} />
 
-          {/* Lookback zone — the orphan tail kalimat N-1 released. Sits at the very
-              left of the tape, before this utterance's own recoverable head. */}
-          {lookbackPx > 4 && (
-            <div className="absolute top-0 bottom-0 left-0 z-10 pointer-events-none bg-sky-400/20 border-r border-dashed border-sky-300/70 flex items-center justify-center overflow-hidden"
-              style={{ width: `${lookbackPx}px` }}>
+          {/* Lookback zone, part 1 — material kalimat N-1 STILL OWNS. Dragging the
+              start handle in here shortens that kalimat, so it is marked in red
+              rather than presented as free space. */}
+          {lookbackBorrowPx > 4 && (
+            <div className="absolute top-0 bottom-0 left-0 z-10 pointer-events-none bg-rose-500/25 border-r border-dashed border-rose-300/70 flex items-center justify-center overflow-hidden"
+              style={{ width: `${lookbackBorrowPx}px` }}>
+              <span className="text-[9px] text-rose-50 bg-black/60 px-1 py-0.5 rounded whitespace-nowrap select-none">
+                ⚠ milik kalimat sebelumnya
+              </span>
+            </div>
+          )}
+
+          {/* Lookback zone, part 2 — the orphan tail kalimat N-1 already released.
+              Free to take; sits between the borrow zone and this utterance's own
+              recoverable head. */}
+          {lookbackPx - lookbackBorrowPx > 4 && (
+            <div className="absolute top-0 bottom-0 z-10 pointer-events-none bg-sky-400/20 border-r border-dashed border-sky-300/70 flex items-center justify-center overflow-hidden"
+              style={{ left: `${lookbackBorrowPx}px`, width: `${lookbackPx - lookbackBorrowPx}px` }}>
               <span className="text-[9px] text-sky-100 bg-black/55 px-1 py-0.5 rounded whitespace-nowrap select-none">
                 sisa kalimat sebelumnya
               </span>
@@ -570,18 +665,32 @@ export function TimelineEditor({
             </div>
           )}
 
-          {/* Marker boundary line where the two clips join — sits videoNDuration
-              after utterance N's own head, i.e. past any prepended lookback. */}
-          {videoNDuration > 0 && activeUtterance && (
-            <div className="absolute top-0 bottom-0 w-0.5 bg-yellow-400/70 z-25 pointer-events-none"
-              style={{ left: `${timeToInnerPx(windowStart + lookbackSeconds + videoNDuration)}px` }}
-              title="Batas sambungan video pertama dan kedua">
-              <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-yellow-400 rounded-full" />
-              <div className="absolute top-1 left-2 text-[9px] text-yellow-300 font-semibold whitespace-nowrap bg-black/60 px-1 rounded pointer-events-none select-none">
-                ✂️ Sambungan
-              </div>
-            </div>
-          )}
+          {/* Marker boundary lines where clips join. With a deeper lookahead the
+              tape has more than one seam, so every joint is marked — otherwise the
+              annotator cannot tell which row a piece of footage came from.
+              Falls back to the single videoNDuration seam when per-clip durations
+              are not available (older backend). */}
+          {clipJoints.length > 0 && activeUtterance
+            ? clipJoints.map((jointTime, i) => (
+                <div key={i} className="absolute top-0 bottom-0 w-0.5 bg-yellow-400/70 z-25 pointer-events-none"
+                  style={{ left: `${timeToInnerPx(jointTime)}px` }}
+                  title={`Batas sambungan kalimat ke-${i + 1} dan ke-${i + 2} di tape`}>
+                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-yellow-400 rounded-full" />
+                  <div className="absolute top-1 left-2 text-[9px] text-yellow-300 font-semibold whitespace-nowrap bg-black/60 px-1 rounded pointer-events-none select-none">
+                    ✂️ {clipJoints.length > 1 ? `Sambungan ${i + 1}` : 'Sambungan'}
+                  </div>
+                </div>
+              ))
+            : videoNDuration > 0 && activeUtterance && (
+                <div className="absolute top-0 bottom-0 w-0.5 bg-yellow-400/70 z-25 pointer-events-none"
+                  style={{ left: `${timeToInnerPx(windowStart + lookbackSeconds + videoNDuration)}px` }}
+                  title="Batas sambungan video pertama dan kedua">
+                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-yellow-400 rounded-full" />
+                  <div className="absolute top-1 left-2 text-[9px] text-yellow-300 font-semibold whitespace-nowrap bg-black/60 px-1 rounded pointer-events-none select-none">
+                    ✂️ Sambungan
+                  </div>
+                </div>
+              )}
 
           {/* Drag handle — start (hidden in SIBI style) */}
           {!readOnly && !disableTrimIn && (

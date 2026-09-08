@@ -150,6 +150,8 @@ export function UtteranceSheet({
                         ? 'bg-amber-100 text-amber-700'
                         : u.status === 'FAILED'
                         ? 'bg-red-100 text-red-700'
+                        : u.status === 'MERGED'
+                        ? 'bg-violet-100 text-violet-600'
                         : 'bg-slate-100 text-slate-500'
                     }`}
                   >
@@ -161,7 +163,10 @@ export function UtteranceSheet({
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start mb-1">
                     <span className="text-xs font-mono text-slate-400 font-semibold">
-                      0.0s - {((u.global_end ?? u.end) - (u.global_start ?? u.start)).toFixed(1)}s
+                      {/* A merged row has been consumed by the sentence before it,
+                          so its start now sits past its end — show 0, not a
+                          negative span. */}
+                      0.0s - {Math.max(0, (u.global_end ?? u.end) - (u.global_start ?? u.start)).toFixed(1)}s
                     </span>
                     {u.status === 'DRAFT' && (
                       <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-100 text-amber-700 rounded">
@@ -171,6 +176,22 @@ export function UtteranceSheet({
                     {u.status === 'FAILED' && (
                       <span className="text-[10px] font-bold px-2 py-0.5 bg-red-100 text-red-700 rounded">
                         DILEWATI
+                      </span>
+                    )}
+                    {u.status === 'MERGED' && (
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5 bg-violet-100 text-violet-700 rounded"
+                        title="Kalimat ini sudah diserap oleh kalimat sebelumnya yang diperpanjang melewatinya, jadi tidak punya video sendiri lagi dan tidak ikut diekspor."
+                      >
+                        DIGABUNG
+                      </span>
+                    )}
+                    {u.needs_review && (
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5 bg-amber-200 text-amber-900 rounded"
+                        title={u.note || 'Ditandai annotator untuk ditinjau ulang'}
+                      >
+                        ⚑ REVIEW
                       </span>
                     )}
                     {activeIndex === globalIndex && (

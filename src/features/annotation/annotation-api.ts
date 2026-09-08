@@ -106,7 +106,12 @@ export const annotationApi = {
       .then((r) => r.data),
 
   /** GET /annotations/segments/:segmentId/utterances/:utteranceIndex/merged-video — get merged video (SIBI style) */
-  getMergedVideo: (segmentId: string, utteranceIndex: number, includePrev = false) =>
+  getMergedVideo: (
+    segmentId: string,
+    utteranceIndex: number,
+    includePrev = false,
+    lookahead = 1
+  ) =>
     apiClient
       .get<{
         merged_video_url: string;
@@ -118,16 +123,33 @@ export const annotationApi = {
          *  recoverable gray region (start - floor). The merged video physically
          *  begins at `floor`, so mergedBase = global_start - head_offset. */
         head_offset?: number;
-        /** Seconds of utterance N-1's orphan tail actually prepended to the tape.
-         *  Only non-zero when requested via `includePrev`. Shifts the tape's left
+        /** Total seconds of utterance N-1 actually prepended to the tape. Only
+         *  non-zero when requested via `includePrev`. Shifts the tape's left
          *  edge further left: mergedBase = global_start - head_offset - prev_offset. */
         prev_offset?: number;
+        /** The FREE part of `prev_offset` — utterance N-1's orphan tail. Anything
+         *  in `prev_offset` beyond this is borrowed material that N-1 still owns,
+         *  and dragging into it will shorten N-1. */
+        prev_orphan_offset?: number;
         /** Seconds of orphan tail available to prepend — the stretch utterance N-1
-         *  released by trimming in. Returned on every call so the UI knows whether
-         *  to offer the lookback at all. */
+         *  released by trimming in. Free to take. Returned on every call so the UI
+         *  knows whether to offer the lookback at all. */
         prev_available?: number;
+        /** Extra seconds reachable beyond the orphan, at the cost of shortening
+         *  utterance N-1 and forcing it to be re-cropped. */
+        prev_borrowable?: number;
+        /** Clips after N actually contained in this tape. */
+        lookahead_used?: number;
+        /** Clips after N that exist and could still be appended. */
+        lookahead_available?: number;
+        /** Duration of each clip in tape order, starting at N. Lets the UI mark
+         *  every joint rather than assuming the single [N | N+1] seam. */
+        segment_durations?: number[];
       }>(`/annotations/segments/${segmentId}/utterances/${utteranceIndex}/merged-video`, {
-        params: includePrev ? { include_prev: true } : undefined,
+        params: {
+          ...(includePrev ? { include_prev: true } : {}),
+          ...(lookahead > 1 ? { lookahead } : {}),
+        },
       })
       .then((r) => r.data),
 

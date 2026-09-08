@@ -68,6 +68,19 @@ export function AnnotationPage() {
   const [lookbackOn, setLookbackOn] = useState(false);
   const [prevOffset, setPrevOffset] = useState(0);
   const [prevAvailable, setPrevAvailable] = useState(0);
+  // Bagian dari prevOffset yang sudah dilepas kalimat N-1 (gratis). Sisanya masih
+  // milik N-1: menariknya ke sana akan MEMENDEKKAN kalimat N-1 dan memaksa
+  // kalimat itu dipotong ulang.
+  const [prevOrphanOffset, setPrevOrphanOffset] = useState(0);
+  const [prevBorrowable, setPrevBorrowable] = useState(0);
+
+  // ── Lookahead State (tape lebih dalam: N+2, N+3) ──────────────
+  // Kadang isyarat yang dibutuhkan tidak ada di klip berikutnya, tapi dua atau
+  // tiga baris setelahnya, dan baris di antaranya terlalu pendek untuk dikerjakan.
+  // Menambah kedalaman tape membuat handle end bisa menjangkau ke sana.
+  const [lookaheadDepth, setLookaheadDepth] = useState(1);
+  const [lookaheadAvailable, setLookaheadAvailable] = useState(0);
+  const [segmentDurations, setSegmentDurations] = useState<number[]>([]);
 
   // ── Action State ──────────────────────────────────────────────
   const [isSaving, setIsSaving] = useState(false);
@@ -102,7 +115,10 @@ export function AnnotationPage() {
   }, [activeUtteranceIndex]);
 
   // Pada dataset terproses, hanya kalimat yang belum OK yang filmstrip-nya bisa digeser.
-  const isTrimLocked = isProcessed && activeUtterance?.status === 'OK';
+  // Kalimat MERGED sudah diserap kalimat sebelumnya — tidak punya rentang sendiri lagi,
+  // jadi selalu terkunci sampai perpanjangan itu di-revert.
+  const isMergedAway = activeUtterance?.status === 'MERGED';
+  const isTrimLocked = (isProcessed && activeUtterance?.status === 'OK') || isMergedAway;
 
   const totalCompleted = utteranceEdits.filter(u => u.status === 'OK').length;
   const totalUtterances = utteranceEdits.length;
@@ -114,11 +130,13 @@ export function AnnotationPage() {
     utt: UtteranceCorrection,
     requestId: number,
     includePrev = false,
+    lookahead = 1,
   ) => {
     setMergedVideoUrl(null);
     setVideoNDuration(0);
     setMergedTotalDuration(0);
     setPrevOffset(0);
+    setPrevOrphanOffset(0);
     // Default base = global_start (no gray head); overwritten once head_offset arrives.
     setMergedBase(utt?.global_start ?? utt?.start ?? 0);
     setVideoReady(false);
@@ -127,14 +145,21 @@ export function AnnotationPage() {
 
     if (utt && utt.segment_id) {
       try {
-        const merged = await annotationApi.getMergedVideo(utt.segment_id, utt.utterance_index, includePrev);
+        const merged = await annotationApi.getMergedVideo(
+          utt.segment_id, utt.utterance_index, includePrev, lookahead
+        );
         if (activeUttRequestRef.current === requestId) {
           const prepended = merged.prev_offset ?? 0;
           setMergedVideoUrl(merged.merged_video_url);
           setVideoNDuration(merged.video_n_duration);
           setMergedTotalDuration(merged.total_duration);
           setPrevOffset(prepended);
+          setPrevOrphanOffset(merged.prev_orphan_offset ?? prepended);
           setPrevAvailable(merged.prev_available ?? 0);
+          setPrevBorrowable(merged.prev_borrowable ?? 0);
+          setLookaheadAvailable(merged.lookahead_available ?? 0);
+          setLookaheadDepth(Math.max(1, merged.lookahead_used ?? 1));
+          setSegmentDurations(merged.segment_durations ?? []);
           // Tape begins at the floor; the handle (global_start) sits head_offset in.
           // With lookback the tape starts prev_offset earlier still.
           setMergedBase((utt.global_start ?? utt.start ?? 0) - (merged.head_offset ?? 0) - prepended);
@@ -146,7 +171,11 @@ export function AnnotationPage() {
           setVideoNDuration(0);
           setMergedTotalDuration(0);
           setPrevOffset(0);
+          setPrevOrphanOffset(0);
           setPrevAvailable(0);
+          setPrevBorrowable(0);
+          setLookaheadAvailable(0);
+          setSegmentDurations([]);
           setMergedBase(utt?.global_start ?? utt?.start ?? 0);
         }
       } finally {
@@ -329,13 +358,24 @@ export function AnnotationPage() {
     window.dispatchEvent(new Event('expand-main-sidebar'));
   };
 
+  // Catatan & tanda review adalah metadata, bukan perubahan isi anotasi: keduanya
+  // tidak mengubah video maupun glosa, jadi tidak boleh menurunkan status kalimat
+  // yang sudah OK (yang berarti memaksa potong ulang tanpa alasan).
+  const METADATA_ONLY_FIELDS: ReadonlyArray<keyof UtteranceCorrection> = ['note', 'needs_review'];
+
   const handleUtteranceChange = (index: number, updates: Partial<UtteranceCorrection>) => {
     setUtteranceEdits((prev) => {
       const next = [...prev];
       if (next[index]) {
-        // Revert status to DRAFT whenever any change is made — even if it was OK.
+        const touchedKeys = Object.keys(updates) as Array<keyof UtteranceCorrection>;
+        const metadataOnly =
+          touchedKeys.length > 0 &&
+          touchedKeys.every((k) => METADATA_ONLY_FIELDS.includes(k));
+        // Revert status to DRAFT whenever a real change is made — even if it was OK.
         // This signals to the user that the utterance needs to be re-saved & re-cropped.
-        next[index] = { ...next[index], ...updates, status: 'DRAFT' };
+        next[index] = metadataOnly
+          ? { ...next[index], ...updates }
+          : { ...next[index], ...updates, status: 'DRAFT' };
       }
       return next;
     });
@@ -443,15 +483,19 @@ export function AnnotationPage() {
     if (utt) {
       setCurrentTime(utt.global_start ?? utt.start);
       setIsPlaying(false);
-      // Lookback is a per-kalimat opt-in — every new kalimat starts on the plain tape.
+      // Lookback dan kedalaman tape adalah opt-in per kalimat — tiap kalimat
+      // baru mulai dari tape polos [N | N+1].
       setLookbackOn(false);
       setPrevAvailable(0);
+      setPrevBorrowable(0);
+      setLookaheadDepth(1);
+      setLookaheadAvailable(0);
       activeUttRequestRef.current = index;
-      fetchMergedVideoForUtterance(utt, index, false);
+      fetchMergedVideoForUtterance(utt, index, false, 1);
     }
   };
 
-  /** Rebuild the tape with (or without) the orphan tail of kalimat N-1 prepended. */
+  /** Rebuild the tape with (or without) the material kalimat N-1 holds prepended. */
   const handleToggleLookback = () => {
     if (activeUtteranceIndex === null) return;
     const utt = utteranceEdits[activeUtteranceIndex];
@@ -460,7 +504,34 @@ export function AnnotationPage() {
     setLookbackOn(next);
     setIsPlaying(false);
     activeUttRequestRef.current = activeUtteranceIndex;
-    fetchMergedVideoForUtterance(utt, activeUtteranceIndex, next);
+    fetchMergedVideoForUtterance(utt, activeUtteranceIndex, next, lookaheadDepth);
+  };
+
+  /**
+   * Tambah satu klip berikutnya ke tape, untuk kasus isyarat yang dibutuhkan baru
+   * muncul di baris ke-2/ke-3 dan baris di antaranya terlalu pendek untuk digeser.
+   */
+  const handleExtendLookahead = () => {
+    if (activeUtteranceIndex === null) return;
+    const utt = utteranceEdits[activeUtteranceIndex];
+    if (!utt) return;
+    const next = Math.min(lookaheadDepth + 1, Math.max(1, lookaheadAvailable));
+    if (next === lookaheadDepth) return;
+    setLookaheadDepth(next);
+    setIsPlaying(false);
+    activeUttRequestRef.current = activeUtteranceIndex;
+    fetchMergedVideoForUtterance(utt, activeUtteranceIndex, lookbackOn, next);
+  };
+
+  /** Kembalikan tape ke bentuk polos [N | N+1]. */
+  const handleResetLookahead = () => {
+    if (activeUtteranceIndex === null || lookaheadDepth <= 1) return;
+    const utt = utteranceEdits[activeUtteranceIndex];
+    if (!utt) return;
+    setLookaheadDepth(1);
+    setIsPlaying(false);
+    activeUttRequestRef.current = activeUtteranceIndex;
+    fetchMergedVideoForUtterance(utt, activeUtteranceIndex, lookbackOn, 1);
   };
 
   const handlePrevUtterance = () => {
@@ -1056,11 +1127,22 @@ export function AnnotationPage() {
                   activeUtterancePosition={activeUtterancePosition}
                   onReady={setFilmstripReady}
                   readOnly={isTrimLocked}
-                  readOnlyReason="Kalimat ini sudah berstatus OK pada dataset yang telah diolah — filmstrip tidak dapat diubah"
+                  readOnlyReason={
+                    isMergedAway
+                      ? 'Kalimat ini sudah diserap oleh kalimat sebelumnya yang diperpanjang melewatinya. Batalkan perpanjangan itu lewat Revert pada kalimat tersebut untuk mengembalikannya.'
+                      : 'Kalimat ini sudah berstatus OK pada dataset yang telah diolah — filmstrip tidak dapat diubah'
+                  }
                   lookbackSeconds={prevOffset}
+                  lookbackOrphanSeconds={prevOrphanOffset}
                   lookbackAvailable={prevAvailable}
+                  lookbackBorrowable={prevBorrowable}
                   lookbackOn={lookbackOn}
                   onToggleLookback={handleToggleLookback}
+                  lookaheadDepth={lookaheadDepth}
+                  lookaheadAvailable={lookaheadAvailable}
+                  clipDurations={segmentDurations}
+                  onExtendLookahead={handleExtendLookahead}
+                  onResetLookahead={handleResetLookahead}
                 />
               </div>
             </div>

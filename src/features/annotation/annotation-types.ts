@@ -21,11 +21,19 @@ export interface UtteranceCorrection {
   start: number;           // Local timestamp (relative to segment video)
   end: number;             // Local timestamp (relative to segment video)
   cropped_video_path?: string;
+  /** 'OK' | 'DRAFT' | 'FAILED' | 'MERGED'. MERGED is server-owned: an earlier
+   *  sentence was extended over this row and swallowed it whole, so it has no
+   *  footage of its own left and is skipped on export. */
   status?: string;
   /** Server-computed: true when a pending trim exists that /revert can undo.
    *  Read-only — never send this back on save (stripGlobalFields keeps it out
    *  regardless, but it isn't meaningful from the client anyway). */
   can_revert?: boolean;
+  /** Annotator's free-text note for a case the workspace cannot fix by trimming
+   *  (needed footage several rows away, a sign split across a boundary, …). */
+  note?: string;
+  /** Annotator flag asking a curator to look at this sentence. */
+  needs_review?: boolean;
   segment_id?: string;
   confidence?: number;
   // ── Virtual Continuous Timeline (FE-only, never sent to API) ──
