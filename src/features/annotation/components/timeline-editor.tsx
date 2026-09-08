@@ -262,7 +262,14 @@ export function TimelineEditor({
 
       for (let i = 0; i < frameCount; i++) {
         if (cancelled) return;
-        const seekGlobal = windowStart + i * interval + interval / 2;
+        // Grab the frame at the START of this thumbnail's slot, not its middle.
+        // Each thumbnail is drawn filling its slot from the LEFT edge, so a frame
+        // taken from the midpoint put the imagery half a slot to the left of the
+        // moment it belongs to, while the playhead sat at the true time. With
+        // interval ≈ 1s that is a ~0.5s disagreement between the line and the
+        // hands — enough to make a cut point look wrong and, on longer windows
+        // where the slot grows, worse still.
+        const seekGlobal = windowStart + i * interval;
 
         // Decide which video to use: N's or N+1's segment
         const useNextVideo =
