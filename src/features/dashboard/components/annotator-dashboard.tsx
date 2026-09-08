@@ -108,7 +108,13 @@ export function AnnotatorDashboard() {
     }
 
     const { stats, jobs } = data;
-    const totalSelesai = stats.completed_segments;
+    // Kartu ini bicara soal KALIMAT. Sebelumnya yang ditampilkan adalah hitungan
+    // SEGMEN tapi diberi label "kalimat" — dan sebuah segmen baru dihitung selesai
+    // setelah seluruh kalimat di dalamnya beres, sehingga annotator yang sudah
+    // menyelesaikan ratusan kalimat tetap melihat 0. Fallback ke hitungan segmen
+    // hanya dipakai kalau backend-nya masih versi lama.
+    const totalKalimat = stats.total_utterances ?? stats.total_segments;
+    const totalSelesai = stats.completed_utterances ?? stats.completed_segments;
 
     return (
         <div className="flex-1 overflow-y-auto p-6 lg:p-8 space-y-6">
@@ -134,10 +140,10 @@ export function AnnotatorDashboard() {
                     {/* Stats grid */}
                     <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
                         {[
-                            { label: 'Total Kalimat', value: stats.total_segments, icon: <FileVideo size={20} />, color: 'text-slate-600', bgColor: 'bg-slate-50', ring: 'ring-slate-100' },
-                            { label: 'Sudah Selesai', value: stats.completed_segments, icon: <CheckCircle2 size={20} />, color: 'text-emerald-600', bgColor: 'bg-emerald-50', ring: 'ring-emerald-100' },
-                            { label: 'Sedang Dikerjakan', value: stats.in_progress_segments, icon: <PenTool size={20} />, color: 'text-blue-600', bgColor: 'bg-blue-50', ring: 'ring-blue-100' },
-                            { label: 'Belum Dimulai', value: stats.pending_segments, icon: <Clock size={20} />, color: 'text-amber-600', bgColor: 'bg-amber-50', ring: 'ring-amber-100' },
+                            { label: 'Total Kalimat', value: totalKalimat, icon: <FileVideo size={20} />, color: 'text-slate-600', bgColor: 'bg-slate-50', ring: 'ring-slate-100' },
+                            { label: 'Kalimat Selesai', value: totalSelesai, icon: <CheckCircle2 size={20} />, color: 'text-emerald-600', bgColor: 'bg-emerald-50', ring: 'ring-emerald-100' },
+                            { label: 'Segmen Dikerjakan', value: stats.in_progress_segments, icon: <PenTool size={20} />, color: 'text-blue-600', bgColor: 'bg-blue-50', ring: 'ring-blue-100' },
+                            { label: 'Segmen Belum Mulai', value: stats.pending_segments, icon: <Clock size={20} />, color: 'text-amber-600', bgColor: 'bg-amber-50', ring: 'ring-amber-100' },
                         ].map((s) => (
                             <div key={s.label} className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col items-center text-center group hover:shadow-md transition-all relative overflow-hidden">
                                 <div className={`w-12 h-12 rounded-xl ${s.bgColor} ${s.ring} ring-4 flex items-center justify-center mb-3 relative z-10 transition-transform group-hover:scale-110 duration-300`}>
@@ -157,7 +163,7 @@ export function AnnotatorDashboard() {
                 <div className="px-6 lg:px-8 pb-6 pt-2 border-t border-gray-100 bg-slate-50/50">
                     <div className="flex justify-between text-sm font-medium text-slate-600 mb-2 mt-4">
                         <span>Progres Keseluruhan Anda</span>
-                        <span className="text-teal-600">{totalSelesai} dari {stats.total_segments} kalimat selesai</span>
+                        <span className="text-teal-600">{totalSelesai} dari {totalKalimat} kalimat selesai</span>
                     </div>
                     <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden shadow-inner">
                         <div
@@ -219,7 +225,14 @@ export function AnnotatorDashboard() {
                                         <div className="space-y-2 mb-6">
                                             <div className="flex justify-between text-xs font-medium text-slate-600">
                                                 <span>Progres tugas ini</span>
-                                                <span>{job.completed_segments} / {job.total_segments} kalimat</span>
+                                                <span>
+                                                    {(job.completed_utterances ?? job.completed_segments).toLocaleString('id-ID')}
+                                                    {' / '}
+                                                    {(job.total_utterances ?? job.total_segments).toLocaleString('id-ID')} kalimat
+                                                    <span className="text-slate-400">
+                                                        {' '}({job.completed_segments}/{job.total_segments} segmen)
+                                                    </span>
+                                                </span>
                                             </div>
                                             <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden inset-shadow-sm">
                                                 <div

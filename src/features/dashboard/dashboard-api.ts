@@ -45,6 +45,11 @@ export interface AnnotatorJobSummary {
   completed_segments: number;
   in_progress_segments: number;
   pending_segments: number;
+  /** Sentence counts. A segment only flips to COMPLETED once every sentence in
+   *  it is resolved, so segment counts alone read as 0% for a long time. These
+   *  are what progress_percent is built from. */
+  total_utterances?: number;
+  completed_utterances?: number;
   progress_percent: number;
 }
 
@@ -53,6 +58,10 @@ export interface AnnotatorDashboardStats {
   completed_segments: number;
   in_progress_segments: number;
   pending_segments: number;
+  /** Sentence totals across every assigned segment — the basis of
+   *  overall_progress_percent. See AnnotatorJobSummary. */
+  total_utterances?: number;
+  completed_utterances?: number;
   overall_progress_percent: number;
   total_jobs: number;
 }
